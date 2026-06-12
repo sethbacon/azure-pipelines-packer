@@ -7,7 +7,7 @@ const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 
 tr.setInput('provider', 'vsphere');
 
-process.env['ENDPOINT_URL_vsphere'] = 'vcenter.example.com';
+process.env['ENDPOINT_URL_vsphere'] = 'https://vcenter.example.com/';
 process.env['ENDPOINT_AUTH_PARAMETER_vsphere_USERNAME'] = 'admin@vsphere.local';
 process.env['ENDPOINT_AUTH_PARAMETER_vsphere_PASSWORD'] = 'pw';
 
