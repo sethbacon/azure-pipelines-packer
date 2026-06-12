@@ -1,0 +1,6 @@
+{
+    "id": "pipeline-tasks-packer-dev",
+    "name": "Pipeline Tasks for Packer (Dev)",
+    "public": false,
+    "publisher": "sethbacon"
+}

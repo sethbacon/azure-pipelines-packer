@@ -1,0 +1,121 @@
+{
+    "id": "8cbbcc37-f8d1-4d36-96fb-61e46714d2b8",
+    "name": "PipelinePackerInstaller",
+    "friendlyName": "Pipeline Packer tool installer",
+    "description": "Find in cache or download a specific version of Packer and prepend it to the PATH",
+    "author": "sethbacon",
+    "helpMarkDown": "[Learn more about this task](https://github.com/sethbacon/azure-pipelines-packer)",
+    "category": "Tool",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "demands": [],
+    "version": {
+        "Major": "1",
+        "Minor": "0",
+        "Patch": "0"
+    },
+    "instanceNameFormat": "Install Packer $(packerVersion)",
+    "inputs": [
+        {
+            "name": "packerVersion",
+            "type": "string",
+            "label": "Version",
+            "defaultValue": "latest",
+            "required": true,
+            "helpMarkDown": "The version of Packer to install. Use 'latest' to install the current latest release."
+        },
+        {
+            "name": "downloadSource",
+            "type": "pickList",
+            "label": "Download source",
+            "defaultValue": "hashicorp",
+            "required": true,
+            "helpMarkDown": "Where to download the Packer binary from.",
+            "options": {
+                "hashicorp": "HashiCorp official releases (releases.hashicorp.com)",
+                "registry": "Private registry (terraform-registry-backend)",
+                "mirror": "Custom mirror URL"
+            }
+        },
+        {
+            "name": "registryUrl",
+            "type": "string",
+            "label": "Registry base URL",
+            "defaultValue": "",
+            "required": true,
+            "visibleRule": "downloadSource = registry",
+            "helpMarkDown": "Base URL of your terraform-registry-backend instance. Must use HTTPS. Example: https://registry.example.com"
+        },
+        {
+            "name": "registryMirrorName",
+            "type": "string",
+            "label": "Mirror configuration name",
+            "defaultValue": "packer",
+            "required": true,
+            "visibleRule": "downloadSource = registry",
+            "helpMarkDown": "The mirror configuration name in your registry backend. This is the {name} path segment in /terraform/binaries/{name}/..."
+        },
+        {
+            "name": "mirrorBaseUrl",
+            "type": "string",
+            "label": "Mirror base URL",
+            "defaultValue": "",
+            "required": true,
+            "visibleRule": "downloadSource = mirror",
+            "helpMarkDown": "Base URL of your binary mirror. Must use HTTPS. Must serve files at the same path structure as releases.hashicorp.com/packer. Example: https://artifacts.example.com/hashicorp/packer"
+        },
+        {
+            "name": "requireGpgSignature",
+            "type": "boolean",
+            "label": "Require GPG signature verification",
+            "defaultValue": "true",
+            "required": false,
+            "visibleRule": "downloadSource != registry",
+            "helpMarkDown": "When enabled, fail if the GPG signature file is unavailable. Defaults to true for HashiCorp downloads. Disable for mirrors that do not serve .sig files."
+        },
+        {
+            "name": "requireChecksum",
+            "type": "boolean",
+            "label": "Require checksum verification",
+            "defaultValue": "false",
+            "required": false,
+            "visibleRule": "downloadSource = mirror",
+            "helpMarkDown": "When enabled, fail if the mirror does not serve a SHA256SUMS file for the requested version. When disabled (default), checksum verification is attempted but skipped if the mirror does not publish a SHA256SUMS file."
+        }
+    ],
+    "execution": {
+        "Node20_1": {
+            "target": "src/index.js"
+        },
+        "Node24": {
+            "target": "src/index.js"
+        }
+    },
+    "outputVariables": [
+        {
+            "name": "packerLocation",
+            "description": "The location of the packer binary that was installed on the agent."
+        },
+        {
+            "name": "packerDownloadedFrom",
+            "description": "The source from which packer was downloaded: 'hashicorp', 'registry:<url>', 'mirror:<url>', or 'cache'."
+        }
+    ],
+    "messages": {
+        "VerifyPackerInstallation": "Verifying Packer installation...",
+        "InputVersionNotValidSemanticVersion": "Input version %s is not a valid semantic version",
+        "PackerNotFoundInFolder": "Packer executable not found in path %s",
+        "OperatingSystemNotSupported": "Operating system %s is not supported",
+        "ArchitectureNotSupported": "Architecture %s is not supported",
+        "PackerDownloadFailed": "Failed to download Packer from url %s. Error: %s",
+        "PackerVersionNotFound": "Unable to get latest version from source, using fallback version",
+        "GettingLatestPackerVersion": "Getting latest Packer version.",
+        "InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
+        "RegistryRequestFailed": "Registry request failed for %s. HTTP status: %s",
+        "Sha256VerificationFailed": "SHA256 verification failed. Expected: %s, Got: %s",
+        "ResolvingLatestFromRegistry": "Resolving latest Packer version from registry: %s",
+        "ResolvedVersionFromRegistry": "Resolved latest version from registry: %s"
+    }
+}

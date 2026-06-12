@@ -1,0 +1,8 @@
+{
+  "loc.friendlyName": "Pipeline Packer",
+  "loc.helpMarkDown": "[Learn more about this task](https://github.com/sethbacon/azure-pipelines-packer)",
+  "loc.description": "Run a Packer command to build machine images on Azure, AWS, GCP, OCI, vSphere, and local builders.",
+  "loc.instanceNameFormat": "Packer $(command)",
+  "loc.messages.PackerToolNotFound": "Packer was not found on the agent. Add the Pipeline Packer tool installer task before this task, or ensure packer is on the PATH.",
+  "loc.messages.Error_FederatedTokenAquisitionFailed": "Failed to acquire federated token for the service connection."
+}

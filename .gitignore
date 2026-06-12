@@ -1,0 +1,20 @@
+node_modules
+build
+Tasks/**/*.js
+tsconfig.tsbuildinfo
+.taskkey
+configs/self.json
+*.vsix
+package-lock.json
+
+# Generated credential/key/token files from tests and runtime
+gcp-credentials-*.json
+gcp-wif-credentials-*.json
+oci-keyfile-*.pem
+*.jwt
+output-*.json
+.env
+
+# Code coverage artifacts
+.nyc_output/
+coverage/
