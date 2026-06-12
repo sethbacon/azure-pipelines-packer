@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.0...v1.1.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* vSphere service connection URL fails marketplace validation ([#19](https://github.com/sethbacon/azure-pipelines-packer/issues/19)) ([d414708](https://github.com/sethbacon/azure-pipelines-packer/commit/d414708c60d15b91d79efcee42878a00b366a38c))
+
 ## [1.1.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.0.0...v1.1.0) (2026-06-12)
 
 
