@@ -326,11 +326,11 @@
             "properties": {
                 "name": "PTPvSphereServiceEndpoint",
                 "displayName": "Pipeline vSphere for Packer",
-                "helpMarkDown": "Credentials for the vsphere-iso / vsphere-clone Packer builders. The Server URL is the vCenter hostname or address (without scheme), e.g. vcenter.example.com.",
+                "helpMarkDown": "Credentials for the vsphere-iso / vsphere-clone Packer builders. The Server URL is the vCenter address, e.g. https://vcenter.example.com — the scheme is optional and stripped automatically.",
                 "url": {
                     "displayName": "vCenter server",
-                    "helpText": "vCenter hostname or address, e.g. vcenter.example.com",
-                    "value": "",
+                    "helpText": "vCenter address, e.g. https://vcenter.example.com",
+                    "value": "https://vcenter.example.com",
                     "isVisible": "true"
                 },
                 "authenticationSchemes": [

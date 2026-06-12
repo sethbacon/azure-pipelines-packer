@@ -21,7 +21,11 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
             throw new Error("A vSphere service connection is required for this command. Set environmentServiceNameVSphere.");
         }
 
-        const server = tasks.getEndpointUrl(serviceName, false) || '';
+        // The vsphere builder's vcenter_server expects a bare hostname, but the
+        // service connection URL field may carry a scheme and trailing slash.
+        const server = (tasks.getEndpointUrl(serviceName, false) || '')
+            .replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, '')
+            .replace(/\/+$/, '');
         const username = tasks.getEndpointAuthorizationParameter(serviceName, "username", false) || '';
         const password = tasks.getEndpointAuthorizationParameter(serviceName, "password", false) || '';
         if (password) { tasks.setSecret(password); }
