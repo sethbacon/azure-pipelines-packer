@@ -1,34 +1,34 @@
 {
-    "name": "packer",
-    "version": "1.0.0",
-    "description": "",
-    "scripts": {
-        "clean": "rimraf ./build",
-        "build:release": "npm run clean && npm run deps && npm run compile && npm run deps:prune && npm run copy",
-        "copy": "node scripts/copy-build.js",
-        "package:self": "tfx extension create --rev-version --manifest-globs azure-devops-extension.json task.json --overrides-file ./configs/self.json --root ./build",
-        "package:dev": "tfx extension create --rev-version --manifest-globs azure-devops-extension.json task.json --overrides-file ./configs/dev.json --root ./build",
-        "package:release": "tfx extension create --manifest-globs azure-devops-extension.json --overrides-file ./configs/release.json --root ./build",
-        "deps": "npm run deps:npm:inst && npm run deps:npm:tasks",
-        "deps:npm:inst": "glob-exec --parallel --foreach \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"cd {{file.dir}} && npm install --no-update-notifier --no-progress\"",
-        "deps:npm:tasks": "glob-exec --parallel --foreach \"Tasks/PackerTask/*/tsconfig.json\" -- \"cd {{file.dir}} && npm install --no-update-notifier --no-progress\"",
-        "deps:prune": "npm run deps:prune:inst && npm run deps:prune:tasks",
-        "deps:prune:inst": "glob-exec --parallel --foreach \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"cd {{file.dir}} && npm prune --omit=dev --no-update-notifier --no-progress\"",
-        "deps:prune:tasks": "glob-exec --parallel --foreach \"Tasks/PackerTask/*/tsconfig.json\" -- \"cd {{file.dir}} && npm prune --omit=dev --no-update-notifier --no-progress\"",
-        "compile": "npm run compile:inst && npm run compile:tasks",
-        "compile:inst": "glob-exec \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"tsc -b {{files.join(' ')}}\"",
-        "compile:tasks": "glob-exec \"Tasks/PackerTask/*/tsconfig.json\" -- \"tsc -b {{files.join(' ')}}\"",
-        "test:all": "npm run test:inst && npm run test:task",
-        "test:inst": "cd Tasks/PackerInstaller/PackerInstallerV1 && npm test",
-        "test:task": "cd Tasks/PackerTask/PackerTaskV1 && npm test"
-    },
-    "devDependencies": {
-        "glob-exec": "^0.1.1",
-        "rimraf": "^6.1.3",
-        "tfx-cli": "0.23.1",
-        "typescript": "^6.0.3"
-    },
-    "overrides": {
-        "uuid": "13.0.2"
-    }
+  "name": "packer",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "clean": "rimraf ./build",
+    "build:release": "npm run clean && npm run deps && npm run compile && npm run deps:prune && npm run copy",
+    "copy": "node scripts/copy-build.js",
+    "package:self": "tfx extension create --rev-version --manifest-globs azure-devops-extension.json task.json --overrides-file ./configs/self.json --root ./build",
+    "package:dev": "tfx extension create --rev-version --manifest-globs azure-devops-extension.json task.json --overrides-file ./configs/dev.json --root ./build",
+    "package:release": "tfx extension create --manifest-globs azure-devops-extension.json --overrides-file ./configs/release.json --root ./build",
+    "deps": "npm run deps:npm:inst && npm run deps:npm:tasks",
+    "deps:npm:inst": "glob-exec --parallel --foreach \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"cd {{file.dir}} && npm install --no-update-notifier --no-progress\"",
+    "deps:npm:tasks": "glob-exec --parallel --foreach \"Tasks/PackerTask/*/tsconfig.json\" -- \"cd {{file.dir}} && npm install --no-update-notifier --no-progress\"",
+    "deps:prune": "npm run deps:prune:inst && npm run deps:prune:tasks",
+    "deps:prune:inst": "glob-exec --parallel --foreach \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"cd {{file.dir}} && npm prune --omit=dev --no-update-notifier --no-progress\"",
+    "deps:prune:tasks": "glob-exec --parallel --foreach \"Tasks/PackerTask/*/tsconfig.json\" -- \"cd {{file.dir}} && npm prune --omit=dev --no-update-notifier --no-progress\"",
+    "compile": "npm run compile:inst && npm run compile:tasks",
+    "compile:inst": "glob-exec \"Tasks/PackerInstaller/*/tsconfig.json\" -- \"tsc -b {{files.join(' ')}}\"",
+    "compile:tasks": "glob-exec \"Tasks/PackerTask/*/tsconfig.json\" -- \"tsc -b {{files.join(' ')}}\"",
+    "test:all": "npm run test:inst && npm run test:task",
+    "test:inst": "cd Tasks/PackerInstaller/PackerInstallerV1 && npm test",
+    "test:task": "cd Tasks/PackerTask/PackerTaskV1 && npm test"
+  },
+  "devDependencies": {
+    "glob-exec": "^0.1.1",
+    "rimraf": "^6.1.3",
+    "tfx-cli": "0.23.1",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "uuid": "13.0.2"
+  }
 }

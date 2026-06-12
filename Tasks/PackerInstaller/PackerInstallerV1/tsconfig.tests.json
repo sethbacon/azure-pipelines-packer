@@ -2,7 +2,8 @@
     "compilerOptions": {
         "target": "ES6",
         "module": "commonjs",
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "types": ["node", "mocha"]
     },
     "include": [
         "Tests/**/*",

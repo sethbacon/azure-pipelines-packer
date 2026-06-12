@@ -31,8 +31,8 @@ describe('PackerInstaller Test Suite', function () {
             const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
             await tr.runAsync();
             runValidations(() => {
-                assert(tr.succeeded, 'task should have succeeded');
-                assert(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+                assert.ok(tr.succeeded, 'task should have succeeded');
+                assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
             }, tr);
         });
     }
@@ -43,8 +43,8 @@ describe('PackerInstaller Test Suite', function () {
             const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
             await tr.runAsync();
             runValidations(() => {
-                assert(tr.failed, 'task should have failed');
-                assert(tr.errorIssues.length > 0, 'should have an error issue');
+                assert.ok(tr.failed, 'task should have failed');
+                assert.ok(tr.errorIssues.length > 0, 'should have an error issue');
             }, tr);
         });
     }
