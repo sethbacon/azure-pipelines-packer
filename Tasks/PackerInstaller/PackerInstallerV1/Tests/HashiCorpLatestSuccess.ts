@@ -17,7 +17,7 @@ const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccd
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => {
-        if (url.includes('checkpoint-api.hashicorp.com')) {
+        if (url.startsWith('https://checkpoint-api.hashicorp.com/')) {
             return { current_version: '1.12.0' };
         }
         throw new Error('Unexpected fetchJson URL: ' + url);
