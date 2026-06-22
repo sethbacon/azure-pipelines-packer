@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.0...v1.2.1) (2026-06-22)
+
+
+### Security
+
+* pin tfx-cli to 0.23.2, replace glob-exec in root ([#35](https://github.com/sethbacon/azure-pipelines-packer/issues/35)) ([2db495d](https://github.com/sethbacon/azure-pipelines-packer/commit/2db495dc6b04525f16874870e8696310a6a90c5d))
+
 ## [1.2.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.2...v1.2.0) (2026-06-22)
 
 
