@@ -44,3 +44,7 @@ updates:
     ignore:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # 0.23.2 pinned because >=0.23.3 pulls unmaintained lodash carrying
+      # GHSA-r5fr-rjxr-66jc / GHSA-f23m-r3pf-42rh (no patched release).
+      - dependency-name: "tfx-cli"
+        versions: [">=0.23.3"]
