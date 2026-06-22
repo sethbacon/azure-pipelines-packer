@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.1...v1.1.2) (2026-06-22)
+
+
+### Security
+
+* release installer mock CodeQL fix ([#30](https://github.com/sethbacon/azure-pipelines-packer/issues/30)) ([#31](https://github.com/sethbacon/azure-pipelines-packer/issues/31)) ([55127f3](https://github.com/sethbacon/azure-pipelines-packer/commit/55127f3e662bc26ec7afcea0ee70a6f1fba079a5))
+
 ## [1.1.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.0...v1.1.1) (2026-06-12)
 
 
