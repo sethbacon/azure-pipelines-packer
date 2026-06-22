@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.2...v1.2.0) (2026-06-22)
+
+
+### Features
+
+* require Node 24 agent runtime, pin types ([#33](https://github.com/sethbacon/azure-pipelines-packer/issues/33)) ([7357720](https://github.com/sethbacon/azure-pipelines-packer/commit/73577208b78c367cb8fad03542f30bb8d4aab481))
+
 ## [1.1.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.1.1...v1.1.2) (2026-06-22)
 
 
