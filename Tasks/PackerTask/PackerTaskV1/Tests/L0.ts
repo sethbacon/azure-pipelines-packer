@@ -3,6 +3,7 @@ import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
 import { ParentCommandHandler } from '../src/parent-handler';
 import { EnvironmentVariableHelper } from '../src/environment-variables';
+import './IdTokenGeneratorL0';
 
 describe('PackerTask Test Suite', function () {
 
@@ -49,6 +50,20 @@ describe('PackerTask Test Suite', function () {
         });
     }
 
+    /** Like expectSuccess, but also proves the credential was masked -- not just that it landed in process.env. */
+    function expectSuccessMasksSecret(file: string) {
+        it(file, async () => {
+            const tp = path.join(__dirname, `${file}.js`);
+            const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+            await tr.runAsync();
+            runValidations(() => {
+                assert.ok(tr.succeeded, 'task should have succeeded');
+                assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+                assert.ok(tr.stdOutContained('##vso[task.setsecret]'), 'credential should be masked via tasks.setSecret');
+            }, tr);
+        });
+    }
+
     // --- Command argument assembly (provider = none) ---
     expectSuccess('BuildNoneSuccess');
     expectSuccess('BuildWithOptions');
@@ -66,13 +81,22 @@ describe('PackerTask Test Suite', function () {
     expectFailure('FmtFail');
 
     // --- Provider auth handlers (environment-variable injection) ---
-    expectSuccess('AwsStaticAuth');
-    expectSuccess('AzureServicePrincipalAuth');
-    expectSuccess('AzureWifAuth');
+    // Secret-bearing paths also assert the credential was masked (tasks.setSecret),
+    // not just that it landed in process.env.
+    expectSuccessMasksSecret('AwsStaticAuth');
+    expectSuccessMasksSecret('AzureServicePrincipalAuth');
+    expectSuccessMasksSecret('AzureWifAuth');
     expectSuccess('AzureMsiAuth');
-    expectSuccess('VsphereAuth');
-    expectSuccess('OciAuth');
+    expectSuccessMasksSecret('VsphereAuth');
+    expectSuccessMasksSecret('OciAuth');
+    expectSuccessMasksSecret('GcpAuth');
+    expectSuccessMasksSecret('GcpWifAuth');
+    expectSuccessMasksSecret('AwsWifAuth');
     expectSuccess('NoneAuth');
+
+    // --- Cleanup: the real ParentCommandHandler.execute() path (not a direct
+    // handleProvider() call) actually clears env vars and removes temp files. ---
+    expectSuccess('OciValidateCleanupSuccess');
 
     // --- Fail-closed / hardening regressions ---
     expectFailure('AwsStaticIncompleteCredsReject');

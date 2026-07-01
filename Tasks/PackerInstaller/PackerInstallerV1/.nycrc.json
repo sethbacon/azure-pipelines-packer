@@ -1,0 +1,21 @@
+{
+    "reporter": [
+        "text",
+        "html",
+        "lcov"
+    ],
+    "all": true,
+    "include": [
+        "src/**/*.js"
+    ],
+    "exclude": [
+        "src/**/*.d.ts",
+        "src/**/*.map",
+        "src/index.js",
+        "src/hashicorp-gpg-key.js"
+    ],
+    "check-coverage": true,
+    "lines": 71,
+    "functions": 76,
+    "branches": 56
+}

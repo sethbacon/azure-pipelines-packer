@@ -1,7 +1,9 @@
 import * as assert from 'assert';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
+import * as openpgp from 'openpgp';
 import { fetchWithTimeout } from '../src/http-client';
+import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
 
 describe('PackerInstaller Test Suite', function () {
 
@@ -65,6 +67,15 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryEmptySha256Rejected');
     expectFailure('RegistryInsecureDownloadUrlReject');
     expectFailure('MirrorMissingChecksumFail');
+
+    // --- Real (unmocked) GPG verification ---
+    expectSuccess('GpgRealVerifySuccess');
+    expectFailure('GpgRealVerifyTamperedFail');
+
+    it('the embedded HashiCorp public key still parses with the current openpgp version', async () => {
+        const key = await openpgp.readKey({ armoredKey: HASHICORP_GPG_PUBLIC_KEY });
+        assert.ok(key, 'openpgp.readKey should successfully parse the embedded key');
+    });
 
     it('fetchWithTimeout aborts a hung request instead of hanging indefinitely', async () => {
         const originalFetch = global.fetch;
