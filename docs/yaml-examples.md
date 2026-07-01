@@ -105,6 +105,8 @@ After this task, `$(packerLocation)` holds the binary path and `$(packerDownload
 
 ### build — Azure
 
+`packer-plugin-azure` does not read `ARM_*` environment variables — its auth fields are HCL-only. The Azure connection is exposed to the template as `PKR_VAR_arm_*` variables (`PKR_VAR_arm_client_id`, `PKR_VAR_arm_subscription_id`, and either `PKR_VAR_arm_client_jwt` for Workload Identity Federation or `PKR_VAR_arm_client_secret` for a Service Principal). Declare matching variables in your template and wire them to the `azure-arm` source.
+
 ```yaml
 - task: PipelinePacker@1
   displayName: 'Build Azure managed image'
@@ -118,7 +120,27 @@ After this task, `$(packerLocation)` holds the binary path and `$(packerDownload
     manifestFile: './images/ubuntu/manifest.json'
 ```
 
-The Azure handler maps the service connection's scheme to `ARM_*` environment variables (Workload Identity Federation, Managed Identity, or Service Principal).
+```hcl
+# images/ubuntu/variables.pkr.hcl
+variable "arm_client_id"       { type = string, default = "" }
+variable "arm_subscription_id" { type = string, default = "" }
+variable "arm_tenant_id"       { type = string, default = "" }
+variable "arm_client_jwt"      { type = string, default = "", sensitive = true }
+variable "arm_client_secret"   { type = string, default = "", sensitive = true }
+
+source "azure-arm" "ubuntu" {
+  client_id       = var.arm_client_id
+  subscription_id = var.arm_subscription_id
+  tenant_id       = var.arm_tenant_id
+  client_jwt      = var.arm_client_jwt
+  client_secret   = var.arm_client_secret
+  # ... image/build settings
+}
+```
+
+For **Managed Identity**, the task injects only `PKR_VAR_arm_subscription_id`; leave `arm_tenant_id`/`arm_client_jwt`/`arm_client_secret` unset in the template (or defaulted to `""`) so `packer-plugin-azure` falls back to the VM's managed identity automatically. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported.
+
+WIF requires a recent `packer-plugin-azure` version — older releases reject Azure DevOps-issued OIDC tokens with an "x5t header" error ([hashicorp/packer-plugin-azure#451](https://github.com/hashicorp/packer-plugin-azure/issues/451), fixed upstream).
 
 ### build — AWS (static keys)
 

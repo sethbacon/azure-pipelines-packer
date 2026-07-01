@@ -77,7 +77,7 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `base-packer-command-handler.ts` | Abstract base with all command implementations |
 | `packer.ts` | `PackerToolHandler` — locates `packer` binary, builds `ToolRunner` |
 | `packer-commands.ts` | `PackerBaseCommandInitializer`, `PackerAuthorizationCommandInitializer` |
-| `azure-packer-command-handler.ts` | AzureRM auth (WIF / MSI / Service Principal) → `ARM_*` env |
+| `azure-packer-command-handler.ts` | AzureRM auth (WIF / MSI / Service Principal) → `PKR_VAR_arm_*` |
 | `aws-packer-command-handler.ts` | AWS auth (static keys / WIF web-identity) → `AWS_*` env |
 | `gcp-packer-command-handler.ts` | GCP auth (SA key / WIF) → `GOOGLE_APPLICATION_CREDENTIALS` |
 | `oci-packer-command-handler.ts` | OCI auth → `PKR_VAR_oci_*` env + temp key file |
@@ -96,9 +96,9 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 
 ### Provider auth env conventions
 
-`oci` and `vsphere` follow the `PKR_VAR_*` convention: the handler injects connection fields as Packer variables (`PKR_VAR_oci_*`, `PKR_VAR_vsphere_*`); templates declare matching `variable` blocks and wire them to the builder source. This mirrors the Terraform extension's OCI `TF_VAR_` approach.
+`azurerm`, `oci`, and `vsphere` follow the `PKR_VAR_*` convention: the handler injects connection fields as Packer variables (`PKR_VAR_arm_*`, `PKR_VAR_oci_*`, `PKR_VAR_vsphere_*`); templates declare matching `variable` blocks and wire them to the builder source. This mirrors the Terraform extension's OCI `TF_VAR_` approach. AWS and GCP are the exception: their SDKs read well-known environment variables natively (`AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`), so no template wiring is required for those two.
 
-> **Spike (resolve before locking auth):** confirm the exact env/field names the `packer-plugin-azure` reads for OIDC (`ARM_OIDC_TOKEN` / `client_jwt`). The Azure handler currently injects `ARM_*` mirroring the Terraform extension.
+> **Resolved (was: Spike S1).** `packer-plugin-azure` does **not** read `ARM_*` environment variables — auth fields (`client_id`/`client_secret`/`client_jwt`/`tenant_id`/`subscription_id`/`use_azure_cli_auth`) are HCL-only (confirmed against `builder/azure/common/client/config.go`). The Azure handler injects `PKR_VAR_arm_client_id`/`PKR_VAR_arm_subscription_id`/`PKR_VAR_arm_tenant_id` plus either `PKR_VAR_arm_client_jwt` (WIF) or `PKR_VAR_arm_client_secret` (Service Principal); the template's `azure-arm` source block must reference them (see `docs/yaml-examples.md`). For Managed Identity, the handler deliberately injects **only** `subscription_id` — `packer-plugin-azure` falls back to MSI automatically when `tenant_id`/`client_secret`/`client_jwt`/`client_cert_path`/the OIDC fields are all unset, so the template must not set those either. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported. The historical `client_jwt` "x5t header" rejection of Azure DevOps-issued OIDC tokens (`hashicorp/packer-plugin-azure#451`) is fixed upstream; use a recent plugin version.
 
 ## Testing
 
