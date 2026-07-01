@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "3",
+        "Minor": "4",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -85,6 +85,18 @@
             "helpMarkDown": "When enabled (default), fail if the mirror or registry does not provide a SHA256 checksum for the requested version. Disable only if your mirror/registry cannot publish checksums and you trust it to verify server-side."
         }
     ],
+    "restrictions": {
+        "commands": {
+            "mode": "restricted"
+        },
+        "settableVariables": {
+            "allowed": [
+                "packerLocation",
+                "packerDownloadedFrom",
+                "PATH"
+            ]
+        }
+    },
     "execution": {
         "Node24": {
             "target": "src/index.js"
