@@ -33,15 +33,31 @@ export abstract class BasePackerCommandHandler {
         return tasks.getInput("templatePath") || '.';
     }
 
-    protected getCommandOptions(): string | undefined {
-        return tasks.getInput("commandOptions") || undefined;
+    /** True when `resolvedPath` is workingDirectory itself or a descendant of it. */
+    protected isWithinWorkingDirectory(resolvedPath: string, workingDirectory: string): boolean {
+        const base = path.resolve(workingDirectory || '.');
+        const target = path.resolve(resolvedPath);
+        return target === base || target.startsWith(base + path.sep);
     }
 
-    /** Reads a boolean input, returning `defaultValue` when the input is unset. */
+    /**
+     * Reads a boolean input, returning `defaultValue` when the input is unset.
+     * Use this for inputs that default to `true`; `tasks.getBoolInput(name, false)`
+     * always defaults to `false` and is fine for false-defaulting inputs.
+     */
     protected getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
         const value = tasks.getInput(name, false);
         if (value === undefined || value === '') return defaultValue;
         return value === 'true';
+    }
+
+    /** Auth schemes shared by the AWS and GCP handlers (both support static-credential and WIF service connections). */
+    protected static readonly VALID_AUTH_SCHEMES = ["ServiceConnection", "WorkloadIdentityFederation"] as const;
+
+    protected validateAuthScheme(scheme: string, inputName: string): void {
+        if (!(BasePackerCommandHandler.VALID_AUTH_SCHEMES as readonly string[]).includes(scheme)) {
+            throw new Error(`Unrecognized authorization scheme '${scheme}' for input '${inputName}'. Valid values: ${BasePackerCommandHandler.VALID_AUTH_SCHEMES.join(", ")}`);
+        }
     }
 
     protected getProviderSuffix(): string {
@@ -61,24 +77,27 @@ export abstract class BasePackerCommandHandler {
         return suffix ? `environmentServiceName${suffix}` : '';
     }
 
-    protected createAuthCommand(commandName: string, additionalArgs?: string): PackerAuthorizationCommandInitializer {
+    protected createAuthCommand(commandName: string): PackerAuthorizationCommandInitializer {
         const serviceName = this.getServiceName();
         const serviceConnection = serviceName ? (tasks.getInput(serviceName, false) || '') : '';
         return new PackerAuthorizationCommandInitializer(
             commandName,
             this.getWorkingDirectory(),
-            serviceConnection,
-            additionalArgs
+            serviceConnection
         );
     }
 
-    protected createBaseCommand(commandName: string, additionalArgs?: string): PackerBaseCommandInitializer {
+    protected createBaseCommand(commandName: string): PackerBaseCommandInitializer {
         return new PackerBaseCommandInitializer(
             commandName,
-            this.getWorkingDirectory(),
-            additionalArgs
+            this.getWorkingDirectory()
         );
     }
+
+    /** Prefixes/names this task manages itself; a passthrough value here would shadow a real credential. */
+    private static readonly MANAGED_ENV_PATTERNS = [
+        /^AWS_/, /^ARM_/, /^GOOGLE_/, /^PKR_VAR_oci_/, /^PKR_VAR_vsphere_/, /^PKR_VAR_arm_/, /PROXY$/i
+    ];
 
     /** Sets any user-provided passthrough environment variables (tracked for cleanup). */
     protected applyEnvironmentVariables(): void {
@@ -94,6 +113,9 @@ export abstract class BasePackerCommandHandler {
             }
             const key = trimmed.substring(0, idx).trim();
             const value = trimmed.substring(idx + 1).trim();
+            if (BasePackerCommandHandler.MANAGED_ENV_PATTERNS.some((p) => p.test(key))) {
+                tasks.warning(`'environmentVariables' sets '${key}', which this task also manages for cloud credentials. This value will be overwritten by the provider handler for build/validate/console/custom, or persist unmasked for commands that don't authenticate. Use 'environmentVariables' for non-secret builder settings only.`);
+            }
             EnvironmentVariableHelper.setEnvironmentVariable(key, value);
         }
     }
@@ -330,6 +352,9 @@ export abstract class BasePackerCommandHandler {
         const outputFile = tasks.getInput("fixOutputFile", false);
         if (outputFile) {
             const resolved = path.resolve(command.workingDirectory, outputFile);
+            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+                throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
+            }
             const result = await this.execWithStdoutCapture(tool, { cwd: command.workingDirectory });
             tasks.writeFile(resolved, result.stdout);
             tasks.setVariable('fixFilePath', resolved, false, true);
@@ -405,6 +430,10 @@ export abstract class BasePackerCommandHandler {
         if (!manifestFile) return;
 
         const resolved = path.resolve(this.getWorkingDirectory(), manifestFile);
+        if (!this.isWithinWorkingDirectory(resolved, this.getWorkingDirectory())) {
+            tasks.warning(`manifestFile '${manifestFile}' resolves outside the working directory (${resolved}); skipping build output variables.`);
+            return;
+        }
         if (!fs.existsSync(resolved)) {
             tasks.debug(`Manifest file not found at ${resolved}; skipping build output variables.`);
             return;
@@ -416,9 +445,12 @@ export abstract class BasePackerCommandHandler {
             const builds = manifest.builds;
             if (Array.isArray(builds) && builds.length > 0) {
                 const last = builds[builds.length - 1];
-                if (last && last.artifact_id) {
-                    tasks.setVariable('artifactId', String(last.artifact_id), false, true);
-                    tasks.debug(`Set artifactId output variable: ${last.artifact_id}`);
+                const artifactId = last?.artifact_id;
+                if (typeof artifactId === 'string' || typeof artifactId === 'number') {
+                    tasks.setVariable('artifactId', String(artifactId), false, true);
+                    tasks.debug(`Set artifactId output variable: ${artifactId}`);
+                } else if (artifactId !== undefined) {
+                    tasks.debug(`Manifest artifact_id is not a string or number (${typeof artifactId}); skipping artifactId output variable.`);
                 }
             }
         } catch (err) {

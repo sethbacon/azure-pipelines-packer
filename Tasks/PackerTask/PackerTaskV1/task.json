@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "5",
+        "Minor": "6",
         "Patch": "0"
     },
     "instanceNameFormat": "Packer $(command)",
@@ -277,7 +277,7 @@
             "required": false,
             "groupName": "variables",
             "visibleRule": "command = build || command = validate || command = custom",
-            "helpMarkDown": "One key=value per line, passed as -var arguments."
+            "helpMarkDown": "One key=value per line, passed as -var arguments. These values are echoed in cleartext in the build log — do not put secrets here. For sensitive values use secureVarsFile, or a PKR_VAR_* Packer variable sourced from a secret pipeline variable."
         },
         {
             "name": "secureVarsFile",
@@ -314,7 +314,7 @@
             "defaultValue": "",
             "required": false,
             "visibleRule": "command = init",
-            "helpMarkDown": "Optional. Set PACKER_GITHUB_API_TOKEN to avoid GitHub rate limits when downloading plugins. Use a pipeline secret variable."
+            "helpMarkDown": "Optional. Set PACKER_GITHUB_API_TOKEN to avoid GitHub rate limits when downloading plugins. This field is plain text, not a secret input type: reference a pipeline secret variable, e.g. `$(myGithubTokenSecret)`. Pasting a raw token directly into this field stores it in plaintext in the pipeline definition, visible to anyone with read access."
         },
         {
             "name": "syntaxOnly",
@@ -516,7 +516,7 @@
             "defaultValue": "",
             "required": false,
             "groupName": "advanced",
-            "helpMarkDown": "Free-form additional arguments appended to the Packer command."
+            "helpMarkDown": "Free-form additional arguments appended to the Packer command. These are echoed in cleartext in the build log — do not put secrets here."
         }
     ],
     "restrictions": {

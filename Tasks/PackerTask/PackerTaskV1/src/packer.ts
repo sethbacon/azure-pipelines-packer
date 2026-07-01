@@ -25,9 +25,6 @@ export class PackerToolHandler implements IPackerToolHandler {
             // The command name may be a multi-word sub-command (e.g. "plugins install");
             // line() splits on whitespace into discrete argv entries.
             toolRunner.line(command.name);
-            if (command.additionalArgs) {
-                toolRunner.line(command.additionalArgs);
-            }
         }
 
         return toolRunner;

@@ -67,6 +67,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryEmptySha256Rejected');
     expectFailure('RegistryInsecureDownloadUrlReject');
     expectFailure('MirrorMissingChecksumFail');
+    expectFailure('RegistryMirrorNameInvalidReject');
 
     // --- Real (unmocked) GPG verification ---
     expectSuccess('GpgRealVerifySuccess');
@@ -88,6 +89,37 @@ describe('PackerInstaller Test Suite', function () {
             await assert.rejects(
                 () => fetchWithTimeout('https://example.com/hangs', 50, async () => 'unreachable'),
                 /timed out after 50ms/
+            );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchWithTimeout follows an https-to-https redirect', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = (async (url: string) => {
+            if (url === 'https://example.com/start') {
+                return new Response(null, { status: 302, headers: { Location: 'https://example.com/final' } });
+            }
+            return new Response('ok', { status: 200 });
+        }) as typeof fetch;
+        try {
+            const result = await fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text());
+            assert.strictEqual(result, 'ok');
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchWithTimeout rejects a redirect that downgrades to http://', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = (async () =>
+            new Response(null, { status: 302, headers: { Location: 'http://attacker.example.com/payload' } })
+        ) as typeof fetch;
+        try {
+            await assert.rejects(
+                () => fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text()),
+                /InsecureUrlRejected/
             );
         } finally {
             global.fetch = originalFetch;
