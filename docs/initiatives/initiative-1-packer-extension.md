@@ -116,7 +116,7 @@ Same architecture as `TerraformTaskV5`: `index.ts` → `ParentCommandHandler` (p
 
 | Handler | Connection | Env injection | WIF/OIDC |
 | --- | --- | --- | --- |
-| `azurerm` | Built-in AzureRM | `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID` (+`ARM_CLIENT_SECRET` for ServicePrincipal) | WIF via ADO OIDC ID token passed as client assertion (`client_jwt`); reuse `id-token-generator.ts` pattern. **Spike S1** confirms the exact plugin env/field names |
+| `azurerm` | Built-in AzureRM | ~~`ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`, `ARM_CLIENT_ID`/`ARM_CLIENT_SECRET`~~ — **superseded, see Spike S1 resolution below**: `PKR_VAR_arm_subscription_id`, `PKR_VAR_arm_tenant_id`, `PKR_VAR_arm_client_id`/`PKR_VAR_arm_client_jwt`/`PKR_VAR_arm_client_secret` | WIF via ADO OIDC ID token passed as `client_jwt`; reuses `id-token-generator.ts` |
 | `aws` | `PTPAWSServiceEndpoint` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | SDK-native WIF: write ID token to file, set `AWS_WEB_IDENTITY_TOKEN_FILE` + `AWS_ROLE_ARN` (same mechanism as Terraform extension initiative 3) |
 | `gcp` | `PTPGoogleCloudServiceEndpoint` | `GOOGLE_APPLICATION_CREDENTIALS` → temp SA-key JSON | WIF: write external_account credential-config JSON referencing the ADO ID token file (same as Terraform extension) |
 | `oci` | `PTPOCIServiceEndpoint` | Write temp OCI SDK config + key file; expose path as `PKR_VAR_oci_config_file` (documented template convention: `access_cfg_file = var.oci_config_file`) | Stretch — not in v1 (mirrors that OCI WIF landed late in the Terraform extension) |
@@ -135,7 +135,7 @@ Mock-runner L0 pattern copied from TerraformTaskV5: test pairs (`<Name>.ts` + `<
 
 ## Verification Spikes (resolve during Phase 2, before locking task.json)
 
-- **S1 — Azure plugin auth surface:** confirm whether `packer-plugin-azure` reads `ARM_*` env vars directly and which field/env carries an OIDC client assertion (`client_jwt`). Decide env-injection vs `PKR_VAR_*` convention accordingly.
+- **[RESOLVED] S1 — Azure plugin auth surface:** `packer-plugin-azure` does **not** read `ARM_*` env vars at all (confirmed against upstream `builder/azure/common/client/config.go` — only `ARM_METADATA_URL` is env-backed; every credential field is HCL-only). The Azure handler was shipped with `ARM_*` injection anyway (mirroring the Terraform extension's own env-var convention) and it silently failed to authenticate until fixed to use the `PKR_VAR_arm_*` convention below. See `CLAUDE.md`'s "Provider auth env conventions" section and `docs/yaml-examples.md` for the corrected design and a worked template.
 - **S2 — checkpoint API:** confirm `v1/check/packer` response shape matches the Terraform checkpoint handling.
 - **S3 — fmt/validate exit codes:** confirm `packer fmt -check` and `validate` non-zero exit codes for correct pass/fail mapping.
 - **S4 — machine-readable artifact parsing:** confirm `,artifact,0,id` line format across builders for the `artifactId` output variable.
