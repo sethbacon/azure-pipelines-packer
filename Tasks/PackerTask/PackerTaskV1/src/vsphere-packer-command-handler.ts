@@ -35,6 +35,7 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true);
 
         if (tasks.getBoolInput("vsphereInsecureConnection", false)) {
+            tasks.warning("Disabling vCenter TLS verification exposes the vSphere credentials to man-in-the-middle interception; use only on trusted networks with self-signed certificates, never in production.");
             EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_insecure_connection", "true");
         }
     }

@@ -43,10 +43,17 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
 
         const accessKeyId = tasks.getEndpointAuthorizationParameter(serviceName, "username", false);
         const secretAccessKey = tasks.getEndpointAuthorizationParameter(serviceName, "password", false);
-        if (secretAccessKey) { tasks.setSecret(secretAccessKey); }
+        if (!accessKeyId || !secretAccessKey) {
+            // Fail closed rather than injecting an empty credential: the AWS SDK
+            // treats a missing AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY as "not set"
+            // and silently falls back to instance-profile/ambient credentials,
+            // authenticating as an unintended (possibly more-privileged) identity.
+            throw new Error(`AWS static credentials are incomplete for service connection '${serviceName}'. Both an access key ID and a secret access key are required.`);
+        }
+        tasks.setSecret(secretAccessKey);
 
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ACCESS_KEY_ID", accessKeyId ?? '');
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_SECRET_ACCESS_KEY", secretAccessKey ?? '', true);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ACCESS_KEY_ID", accessKeyId);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_SECRET_ACCESS_KEY", secretAccessKey, true);
 
         // Region: prefer the explicit task input, fall back to the service connection.
         const region = tasks.getInput("awsRegion", false)

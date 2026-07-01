@@ -1,6 +1,8 @@
 import * as assert from 'assert';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
+import { ParentCommandHandler } from '../src/parent-handler';
+import { EnvironmentVariableHelper } from '../src/environment-variables';
 
 describe('PackerTask Test Suite', function () {
 
@@ -71,4 +73,31 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('VsphereAuth');
     expectSuccess('OciAuth');
     expectSuccess('NoneAuth');
+
+    // --- Fail-closed / hardening regressions ---
+    expectFailure('AwsStaticIncompleteCredsReject');
+    expectFailure('OciTenancyInvalidReject');
+
+    it('VsphereInsecureConnectionWarns', async () => {
+        const tp = path.join(__dirname, 'VsphereInsecureConnectionWarns.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('man-in-the-middle')),
+                'should warn that vCenter TLS verification is disabled. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('emergencyCleanup clears tracked env vars even before a handler is assigned', () => {
+        EnvironmentVariableHelper.setEnvironmentVariable('PACKER_TEST_EMERGENCY_CLEANUP', 'value');
+        assert.strictEqual(process.env['PACKER_TEST_EMERGENCY_CLEANUP'], 'value');
+
+        new ParentCommandHandler().emergencyCleanup();
+
+        assert.strictEqual(process.env['PACKER_TEST_EMERGENCY_CLEANUP'], undefined,
+            'emergencyCleanup() must clear tracked env vars regardless of whether execute() ever ran');
+    });
 });
