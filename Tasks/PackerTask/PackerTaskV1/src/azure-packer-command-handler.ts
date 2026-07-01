@@ -5,10 +5,19 @@ import { EnvironmentVariableHelper } from './environment-variables';
 import { generateIdToken } from './id-token-generator';
 
 /**
- * Injects Azure credentials for the packer-plugin-azure builders via ARM_* env
- * vars, matching the authorization scheme of the Azure Resource Manager service
- * connection: Workload Identity Federation (OIDC), Managed Identity, or Service
- * Principal.
+ * Injects Azure credentials for the packer-plugin-azure builders as
+ * PKR_VAR_arm_* Packer variables, matching the authorization scheme of the
+ * Azure Resource Manager service connection: Workload Identity Federation
+ * (OIDC), Managed Identity, or Service Principal.
+ *
+ * packer-plugin-azure does NOT read ARM_* environment variables (unlike the
+ * Terraform azurerm provider this handler was originally modeled on) — its
+ * auth fields (client_id/client_secret/client_jwt/tenant_id/subscription_id/
+ * use_azure_cli_auth) are HCL-only. Credentials are therefore injected as
+ * Packer variables, following the same PKR_VAR_* convention already used for
+ * OCI and vSphere: the template must declare matching `variable` blocks and
+ * wire them into the `azure-arm` source block. See docs/yaml-examples.md for
+ * a worked example.
  */
 export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
     constructor() {
@@ -29,27 +38,32 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
             subscriptionId = tasks.getEndpointDataParameter(serviceConnectionID, "subscriptionid", true);
         }
         if (subscriptionId) {
-            EnvironmentVariableHelper.setEnvironmentVariable("ARM_SUBSCRIPTION_ID", subscriptionId);
+            EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_subscription_id", subscriptionId);
         }
-
-        EnvironmentVariableHelper.setEnvironmentVariable(
-            "ARM_TENANT_ID",
-            tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false) ?? ''
-        );
 
         switch (authorizationScheme) {
             case AuthorizationScheme.ManagedServiceIdentity:
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_USE_MSI", "true");
+                // packer-plugin-azure falls back to Managed Identity only when
+                // client_secret, client_jwt, client_cert_path, tenant_id, and the
+                // OIDC request fields are ALL unset (its UseMSI() check) — so
+                // tenant_id must NOT be injected on this path. subscription_id
+                // (above) may still be set alongside MSI. ADO's MSI-scheme service
+                // connection does not expose a distinct client-id for a specific
+                // user-assigned identity, so only the VM's default (system-assigned,
+                // or its sole user-assigned) identity is supported by this task.
                 break;
 
             case AuthorizationScheme.WorkloadIdentityFederation: {
                 const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true)!;
+                const tenantId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false);
                 const oidcToken = await generateIdToken(serviceConnectionID);
                 tasks.setSecret(oidcToken);
 
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_CLIENT_ID", servicePrincipalId);
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_USE_OIDC", "true");
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_OIDC_TOKEN", oidcToken, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
+                if (tenantId) {
+                    EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
+                }
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_jwt", oidcToken, true);
                 break;
             }
 
@@ -57,9 +71,13 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 tasks.warning("Client secret authentication is less secure than Workload Identity Federation. Prefer a WIF-configured service connection where possible.");
                 const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true)!;
                 const servicePrincipalKey = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalkey", true)!;
+                const tenantId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false);
                 if (servicePrincipalKey) { tasks.setSecret(servicePrincipalKey); }
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_CLIENT_ID", servicePrincipalId);
-                EnvironmentVariableHelper.setEnvironmentVariable("ARM_CLIENT_SECRET", servicePrincipalKey, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
+                if (tenantId) {
+                    EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
+                }
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_secret", servicePrincipalKey, true);
                 break;
             }
         }

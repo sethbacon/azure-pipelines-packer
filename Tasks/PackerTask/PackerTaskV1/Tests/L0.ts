@@ -66,6 +66,8 @@ describe('PackerTask Test Suite', function () {
     // --- Provider auth handlers (environment-variable injection) ---
     expectSuccess('AwsStaticAuth');
     expectSuccess('AzureServicePrincipalAuth');
+    expectSuccess('AzureWifAuth');
+    expectSuccess('AzureMsiAuth');
     expectSuccess('VsphereAuth');
     expectSuccess('OciAuth');
     expectSuccess('NoneAuth');

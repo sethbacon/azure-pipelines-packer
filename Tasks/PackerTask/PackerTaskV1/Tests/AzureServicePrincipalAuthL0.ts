@@ -8,17 +8,17 @@ async function run() {
         const cmd = new PackerAuthorizationCommandInitializer('build', '', 'AzureRM');
         await handler.handleProvider(cmd);
 
-        const ok = process.env['ARM_CLIENT_ID'] === 'spid'
-            && process.env['ARM_CLIENT_SECRET'] === 'spkey'
-            && process.env['ARM_TENANT_ID'] === 'tenant'
-            && process.env['ARM_SUBSCRIPTION_ID'] === 'sub-123';
+        const ok = process.env['PKR_VAR_arm_client_id'] === 'spid'
+            && process.env['PKR_VAR_arm_client_secret'] === 'spkey'
+            && process.env['PKR_VAR_arm_tenant_id'] === 'tenant'
+            && process.env['PKR_VAR_arm_subscription_id'] === 'sub-123';
         if (ok) {
-            tl.setResult(tl.TaskResult.Succeeded, 'Azure SP env injected.');
+            tl.setResult(tl.TaskResult.Succeeded, 'Azure SP Packer variables injected.');
         } else {
-            tl.setResult(tl.TaskResult.Failed, 'Azure SP env not injected: ' + JSON.stringify({
-                clientId: process.env['ARM_CLIENT_ID'],
-                tenant: process.env['ARM_TENANT_ID'],
-                sub: process.env['ARM_SUBSCRIPTION_ID']
+            tl.setResult(tl.TaskResult.Failed, 'Azure SP Packer variables not injected: ' + JSON.stringify({
+                clientId: process.env['PKR_VAR_arm_client_id'],
+                tenant: process.env['PKR_VAR_arm_tenant_id'],
+                sub: process.env['PKR_VAR_arm_subscription_id']
             }));
         }
     } catch (error) {
