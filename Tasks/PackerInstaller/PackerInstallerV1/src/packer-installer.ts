@@ -24,6 +24,17 @@ function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
     return value === 'true';
 }
 
+const MIRROR_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+/** Reads and validates registryMirrorName against a conservative charset, rejecting path separators/traversal shapes. */
+function getValidatedMirrorName(): string {
+    const mirrorName = tasks.getInput("registryMirrorName", true)! || "packer";
+    if (!MIRROR_NAME_PATTERN.test(mirrorName)) {
+        throw new Error(`registryMirrorName '${mirrorName}' contains characters other than letters, digits, '.', '_', '-'.`);
+    }
+    return mirrorName;
+}
+
 export async function downloadPacker(inputVersion: string): Promise<string> {
     const downloadSource = tasks.getInput("downloadSource") || "hashicorp";
 
@@ -32,7 +43,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
     switch (downloadSource) {
         case "registry": {
             const registryUrl = tasks.getInput("registryUrl", true)!;
-            const mirrorName = tasks.getInput("registryMirrorName", true)! || "packer";
+            const mirrorName = getValidatedMirrorName();
             resolvedVersion = await resolveVersionFromRegistry(inputVersion, registryUrl, mirrorName);
             break;
         }
@@ -54,7 +65,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
         switch (downloadSource) {
             case "registry": {
                 const registryUrl = tasks.getInput("registryUrl", true)!;
-                const mirrorName = tasks.getInput("registryMirrorName", true)! || "packer";
+                const mirrorName = getValidatedMirrorName();
                 zipPath = await downloadZipFromRegistry(version, registryUrl, mirrorName);
                 tasks.setVariable('packerDownloadedFrom', `registry:${registryUrl}`);
                 break;
@@ -103,8 +114,9 @@ async function resolveVersionFromHashiCorp(inputVersion: string): Promise<string
             throw new Error("HashiCorp checkpoint API returned invalid response: missing current_version");
         }
         return data.current_version;
-    } catch {
-        tasks.warning(tasks.loc("PackerVersionNotFound"));
+    } catch (err) {
+        tasks.debug(`HashiCorp checkpoint API request failed: ${err}`);
+        tasks.warning(`${tasks.loc("PackerVersionNotFound")} (falling back to ${FALLBACK_PACKER_VERSION})`);
         return FALLBACK_PACKER_VERSION;
     }
 }

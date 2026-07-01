@@ -115,6 +115,37 @@ describe('PackerTask Test Suite', function () {
         }, tr);
     });
 
+    it('BuildManifestTraversalSkipped', async () => {
+        const tp = path.join(__dirname, 'BuildManifestTraversalSkipped.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build itself should still succeed');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('resolves outside the working directory')),
+                'should warn that manifestFile escapes the working directory. warnings: ' + tr.warningIssues
+            );
+            assert.ok(!tr.stdout.includes('variable=artifactId'), 'artifactId must not be set from an out-of-bounds manifest');
+        }, tr);
+    });
+
+    it('EnvironmentVariablesCollisionWarns', async () => {
+        const tp = path.join(__dirname, 'EnvironmentVariablesCollisionWarns.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes("sets 'AWS_ACCESS_KEY_ID'")),
+                'should warn about a managed-name collision. warnings: ' + tr.warningIssues
+            );
+            assert.ok(
+                !tr.warningIssues.some((w) => w.includes('MY_CUSTOM_BUILD_VAR')),
+                'should not warn about a non-colliding custom variable. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
     it('emergencyCleanup clears tracked env vars even before a handler is assigned', () => {
         EnvironmentVariableHelper.setEnvironmentVariable('PACKER_TEST_EMERGENCY_CLEANUP', 'value');
         assert.strictEqual(process.env['PACKER_TEST_EMERGENCY_CLEANUP'], 'value');

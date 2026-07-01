@@ -88,7 +88,10 @@ jobs:
           persist-credentials: false
       - name: Install actionlint
         shell: bash
-        run: bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+        # Installer script pinned to a release tag (not `main`) and given an
+        # explicit version, so both the fetched script and the resulting
+        # binary are deterministic rather than tracking a mutable branch.
+        run: bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
       - name: Run actionlint
         run: ./actionlint -color
 

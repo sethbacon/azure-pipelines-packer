@@ -8,8 +8,6 @@ import path = require('path');
 import os = require('os');
 import { randomUUID as uuidV4 } from 'crypto';
 
-const VALID_AUTH_SCHEMES = ["ServiceConnection", "WorkloadIdentityFederation"] as const;
-
 /**
  * Injects GCP credentials for the packer-plugin-googlecompute builders. Both
  * service-account-key and Workload Identity Federation paths write a credentials
@@ -19,12 +17,6 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
     constructor() {
         super();
         this.providerName = "gcp";
-    }
-
-    private validateAuthScheme(scheme: string, inputName: string): void {
-        if (!(VALID_AUTH_SCHEMES as readonly string[]).includes(scheme)) {
-            throw new Error(`Unrecognized authorization scheme '${scheme}' for input '${inputName}'. Valid values: ${VALID_AUTH_SCHEMES.join(", ")}`);
-        }
     }
 
     private writeServiceAccountKey(serviceName: string): string {

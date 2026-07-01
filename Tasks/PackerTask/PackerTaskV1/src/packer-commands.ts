@@ -1,16 +1,13 @@
 export class PackerBaseCommandInitializer {
     public readonly name: string;
     public readonly workingDirectory: string;
-    public readonly additionalArgs: string | undefined;
 
     constructor(
         name: string,
-        workingDirectory: string,
-        additionalArgs?: string | undefined
+        workingDirectory: string
     ) {
         this.name = name;
         this.workingDirectory = workingDirectory;
-        this.additionalArgs = additionalArgs;
     }
 }
 
@@ -20,10 +17,9 @@ export class PackerAuthorizationCommandInitializer extends PackerBaseCommandInit
     constructor(
         name: string,
         workingDirectory: string,
-        serviceProviderName: string,
-        additionalArgs?: string | undefined
+        serviceProviderName: string
     ) {
-        super(name, workingDirectory, additionalArgs);
+        super(name, workingDirectory);
         this.serviceProviderName = serviceProviderName;
     }
 }

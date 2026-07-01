@@ -8,8 +8,6 @@ import path = require('path');
 import os = require('os');
 import { randomUUID as uuidV4 } from 'crypto';
 
-const VALID_AUTH_SCHEMES = ["ServiceConnection", "WorkloadIdentityFederation"] as const;
-
 /**
  * Injects AWS credentials for the packer-plugin-amazon builders. Static
  * credentials set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY; Workload Identity
@@ -19,12 +17,6 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
     constructor() {
         super();
         this.providerName = "aws";
-    }
-
-    private validateAuthScheme(scheme: string, inputName: string): void {
-        if (!(VALID_AUTH_SCHEMES as readonly string[]).includes(scheme)) {
-            throw new Error(`Unrecognized authorization scheme '${scheme}' for input '${inputName}'. Valid values: ${VALID_AUTH_SCHEMES.join(", ")}`);
-        }
     }
 
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
