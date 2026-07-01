@@ -48,8 +48,8 @@ jobs:
         run: npx eslint src/
       - name: Compile TypeScript
         run: npm run compile
-      - name: Run unit tests
-        run: npm test
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
 
   build-and-test-installer-v1:
     name: Build and Test Packer Installer V1 (${{ matrix.os }})
@@ -76,8 +76,8 @@ jobs:
         run: npx eslint src/
       - name: Compile TypeScript
         run: npm run compile
-      - name: Run unit tests
-        run: npm test
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
 
   actionlint:
     name: Lint GitHub Actions
