@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
+import { fetchWithTimeout } from '../src/http-client';
 
 describe('PackerInstaller Test Suite', function () {
 
@@ -64,4 +65,21 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryEmptySha256Rejected');
     expectFailure('RegistryInsecureDownloadUrlReject');
     expectFailure('MirrorMissingChecksumFail');
+
+    it('fetchWithTimeout aborts a hung request instead of hanging indefinitely', async () => {
+        const originalFetch = global.fetch;
+        // Simulate a connection that never resolves on its own, but — like real
+        // fetch — rejects when its AbortSignal fires.
+        global.fetch = ((_url: string, options?: RequestInit) => new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')));
+        })) as typeof fetch;
+        try {
+            await assert.rejects(
+                () => fetchWithTimeout('https://example.com/hangs', 50, async () => 'unreachable'),
+                /timed out after 50ms/
+            );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
 });
