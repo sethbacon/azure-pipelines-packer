@@ -8,6 +8,10 @@ import path = require('path');
 import os = require('os');
 import { randomUUID as uuidV4 } from 'crypto';
 
+const OCID_PATTERN = /^ocid1\.[a-z0-9_]+\.[a-z0-9._-]*$/;
+const REGION_PATTERN = /^[a-z0-9-]+$/;
+const FINGERPRINT_PATTERN = /^([0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}$/;
+
 /**
  * Injects OCI credentials for the packer-plugin-oracle (oracle-oci) builder
  * using the PKR_VAR_* convention: the API-key fields from the OCI service
@@ -19,6 +23,15 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
     constructor() {
         super();
         this.providerName = "oci";
+    }
+
+    /** Rejects missing/newline-bearing/malformed service-connection fields before they reach a PKR_VAR_* environment variable. */
+    private requireField(serviceName: string, dataKey: string, pattern: RegExp, description: string): string {
+        const value = tasks.getEndpointDataParameter(serviceName, dataKey, false) || '';
+        if (!pattern.test(value)) {
+            throw new Error(`OCI service connection '${serviceName}' field '${dataKey}' is missing or not a valid ${description}.`);
+        }
+        return value;
     }
 
     private writeKeyFile(privateKey: string): string {
@@ -42,10 +55,15 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         }
         const keyFilePath = this.writeKeyFile(rawPrivateKey);
 
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tasks.getEndpointDataParameter(serviceName, "tenancy", false) || '');
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", tasks.getEndpointDataParameter(serviceName, "user", false) || '');
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", tasks.getEndpointDataParameter(serviceName, "region", false) || '');
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_fingerprint", tasks.getEndpointDataParameter(serviceName, "fingerprint", false) || '');
+        const tenancyOcid = this.requireField(serviceName, "tenancy", OCID_PATTERN, "OCID");
+        const userOcid = this.requireField(serviceName, "user", OCID_PATTERN, "OCID");
+        const region = this.requireField(serviceName, "region", REGION_PATTERN, "region identifier");
+        const fingerprint = this.requireField(serviceName, "fingerprint", FINGERPRINT_PATTERN, "key fingerprint");
+
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_fingerprint", fingerprint);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_key_file", keyFilePath);
     }
 }

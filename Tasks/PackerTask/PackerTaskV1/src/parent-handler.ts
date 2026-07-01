@@ -28,9 +28,12 @@ export class ParentCommandHandler implements IParentCommandHandler {
     }
 
     public emergencyCleanup(): void {
+        // clearTrackedVariables() is keyed on global tracked-variable state, not
+        // the active handler, so it is always safe to call. Only temp-file
+        // cleanup needs a handler instance.
+        EnvironmentVariableHelper.clearTrackedVariables();
         if (this.activeHandler) {
             this.activeHandler.cleanupTempFiles();
-            EnvironmentVariableHelper.clearTrackedVariables();
         }
     }
 
