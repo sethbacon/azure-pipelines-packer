@@ -96,11 +96,14 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 
 **Required secrets/variables:**
 
-| Name                       | Type     | Purpose                                               |
-| -------------------------- | -------- | ----------------------------------------------------- |
-| `TFX_PAT`                  | Secret   | VS Marketplace PAT with `Marketplace (publish)` scope |
-| `RELEASE_DISPATCH_APP_ID`  | Variable | GitHub App client ID for release-please               |
-| `RELEASE_DISPATCH_APP_KEY` | Secret   | GitHub App private key for release-please             |
+| Name                       | Type     | Purpose                                                                            |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `AZDO_PUBLISH_CLIENT_ID`   | Variable | Client ID of the Entra app whose federated credential publishes to the Marketplace |
+| `AZDO_PUBLISH_TENANT_ID`   | Variable | Entra tenant ID for the publish login                                              |
+| `RELEASE_DISPATCH_APP_ID`  | Variable | GitHub App client ID for release-please                                            |
+| `RELEASE_DISPATCH_APP_KEY` | Secret   | GitHub App private key for release-please                                          |
+
+The Marketplace publish uses **GitHub OIDC federated to Microsoft Entra** — there is no stored Marketplace PAT. The `release.yml` publish job runs under the `marketplace` environment with `id-token: write`, signs in via `azure/login` using `AZDO_PUBLISH_CLIENT_ID`/`AZDO_PUBLISH_TENANT_ID`, exchanges the OIDC token for a short-lived Entra access token, and passes it to `tfx extension publish`. The Entra app must have a federated credential whose subject is `repo:sethbacon/azure-pipelines-packer:environment:marketplace`.
 
 The `marketplace` environment (Settings → Environments) must have at least one required reviewer so every publish gets human approval.
 

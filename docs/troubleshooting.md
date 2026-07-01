@@ -32,19 +32,19 @@ Confirm the **provider** input matches the service connection you supplied and t
 
 | Provider  | Env injected | Common cause of failure |
 | --------- | ------------ | ----------------------- |
-| `azurerm` | `ARM_*` | Service connection scheme/permissions; for WIF, the federated credential subject must match the pipeline |
+| `azurerm` | `PKR_VAR_arm_*` | Template does not declare/wire the `arm_*` variables (see below); for WIF, the federated credential subject must match the pipeline |
 | `aws`     | `AWS_*` | Wrong region, missing role trust policy (WIF), or expired keys |
 | `gcp`     | `GOOGLE_APPLICATION_CREDENTIALS` | Service account lacks Compute permissions; WIF pool/provider IDs incorrect |
 | `oci`     | `PKR_VAR_oci_*` | Template does not declare/use the `oci_*` variables (see below) |
 | `vsphere` | `PKR_VAR_vsphere_*` | Template does not declare/use the `vsphere_*` variables, or TLS verification fails |
 
-## OCI / vSphere: credentials seem to be ignored
+## Azure / OCI / vSphere: credentials seem to be ignored
 
-The OCI and vSphere handlers expose the connection as **Packer variables** (`PKR_VAR_oci_*`, `PKR_VAR_vsphere_*`), not as plugin-native environment variables. Your template must declare matching `variable` blocks and wire them to the builder `source`. See the [YAML examples](yaml-examples.md#build--oracle-cloud-oci) for the exact variable names and a sample source block.
+`packer-plugin-azure`, `packer-plugin-oracle`, and `packer-plugin-vsphere` do not read plugin-native environment variables for credentials — all three handlers expose the connection as **Packer variables** (`PKR_VAR_arm_*`, `PKR_VAR_oci_*`, `PKR_VAR_vsphere_*`) instead. Your template must declare matching `variable` blocks and wire them to the builder `source`. See the [YAML examples](yaml-examples.md#build--azure) for the exact variable names and a sample source block for each provider.
 
 ## Azure Workload Identity Federation token issues
 
-WIF token generation requires the pipeline to allow OAuth token access and the service connection to be configured for federation. The Azure handler injects `ARM_CLIENT_ID`, `ARM_USE_OIDC`, and `ARM_OIDC_TOKEN`. If `packer-plugin-azure` reports an authentication error, verify the federated credential on the app registration trusts your pipeline's subject, and that the plugin version supports OIDC.
+WIF token generation requires the pipeline to allow OAuth token access and the service connection to be configured for federation. The Azure handler injects `PKR_VAR_arm_client_id`, `PKR_VAR_arm_tenant_id`, and `PKR_VAR_arm_client_jwt` — your template's `azure-arm` source block must reference `var.arm_client_jwt` as `client_jwt` (see [YAML examples](yaml-examples.md#build--azure)). If `packer-plugin-azure` reports an authentication error: verify the federated credential on the app registration trusts your pipeline's subject; verify the template actually references the injected variables (a template written for the Terraform extension's `ARM_*` env-var convention will NOT pick up Azure credentials here); and use a plugin version that includes the fix for [hashicorp/packer-plugin-azure#451](https://github.com/hashicorp/packer-plugin-azure/issues/451) (older versions reject Azure DevOps-issued OIDC tokens with an "x5t header" error). See [docs/wif-setup.md](wif-setup.md) for least-privilege federated-credential setup across all three WIF-capable providers (Azure/AWS/GCP).
 
 ## `artifactId` output variable is empty
 
