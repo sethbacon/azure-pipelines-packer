@@ -15,6 +15,15 @@ const isWindows = os.type().match(/^Win/);
 /** Fallback version used when the HashiCorp checkpoint API is unreachable. Update periodically. */
 const FALLBACK_PACKER_VERSION = '1.12.0';
 
+const SHA256_HEX_PATTERN = /^[a-fA-F0-9]{64}$/;
+
+/** Reads a boolean input that must fail closed even if task.json's default is not injected (e.g. headless/mock invocations). */
+function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
+    const value = tasks.getInput(name, false);
+    if (value === undefined || value === '') return defaultValue;
+    return value === 'true';
+}
+
 export async function downloadPacker(inputVersion: string): Promise<string> {
     const downloadSource = tasks.getInput("downloadSource") || "hashicorp";
 
@@ -133,7 +142,7 @@ async function downloadZipFromHashiCorp(version: string): Promise<string> {
     const sha256SumsSigUrl = `${sha256SumsUrl}.sig`;
 
     const sha256SumsContent = await fetchText(sha256SumsUrl);
-    const requireGpg = tasks.getBoolInput("requireGpgSignature", false);
+    const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
     await verifyGpgSignature(sha256SumsContent, sha256SumsSigUrl, requireGpg);
 
     const expectedHash = parseSha256(sha256SumsContent, zipFileName);
@@ -153,6 +162,14 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     }
     // data.download_url = pre-signed storage URL (time-limited)
     // data.sha256       = hex SHA256 of the zip (may be empty if registry verified server-side)
+    // The download URL is registry-controlled and fetched outside fetchJson's HTTPS
+    // guard, so pin it to HTTPS before downloading — as the mirror path already does.
+    if (!data.download_url.startsWith('https://')) {
+        throw new Error(tasks.loc("InsecureUrlRejected", data.download_url));
+    }
+    if (data.sha256 && !SHA256_HEX_PATTERN.test(data.sha256)) {
+        throw new Error(`Registry API returned a malformed sha256 for ${infoUrl}: expected 64 hex characters.`);
+    }
 
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
@@ -162,10 +179,13 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
         throw new Error(tasks.loc("PackerDownloadFailed", data.download_url, exception));
     }
 
+    const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
     if (data.sha256) {
         await verifySha256(zipPath, data.sha256);
+    } else if (requireChecksum) {
+        throw new Error(`Checksum verification is required but the registry did not provide a sha256 for ${infoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
     } else {
-        tasks.debug(`SHA256 not provided by registry for ${infoUrl}; skipping local verification (registry performed server-side verification)`);
+        tasks.warning(`SHA256 not provided by registry for ${infoUrl}; skipping local verification (trusting the registry's server-side verification only). Set 'requireChecksum' to enforce a local check.`);
     }
     return zipPath;
 }
@@ -190,7 +210,7 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     // Attempt SHA256 verification from mirror — fail if SHA256SUMS is available but hash doesn't match
     const zipFileName = `packer_${version}_${osPlatform}_${arch}.zip`;
     const sha256SumsUrl = `${mirrorBaseUrl}/${version}/packer_${version}_SHA256SUMS`;
-    const requireChecksum = tasks.getBoolInput("requireChecksum", false);
+    const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
     try {
         const expectedHash = await fetchExpectedSha256(sha256SumsUrl, zipFileName);
         await verifySha256(zipPath, expectedHash);

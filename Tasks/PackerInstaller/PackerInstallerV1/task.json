@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "1",
+        "Minor": "2",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -79,10 +79,10 @@
             "name": "requireChecksum",
             "type": "boolean",
             "label": "Require checksum verification",
-            "defaultValue": "false",
+            "defaultValue": "true",
             "required": false,
-            "visibleRule": "downloadSource = mirror",
-            "helpMarkDown": "When enabled, fail if the mirror does not serve a SHA256SUMS file for the requested version. When disabled (default), checksum verification is attempted but skipped if the mirror does not publish a SHA256SUMS file."
+            "visibleRule": "downloadSource != hashicorp",
+            "helpMarkDown": "When enabled (default), fail if the mirror or registry does not provide a SHA256 checksum for the requested version. Disable only if your mirror/registry cannot publish checksums and you trust it to verify server-side."
         }
     ],
     "execution": {
