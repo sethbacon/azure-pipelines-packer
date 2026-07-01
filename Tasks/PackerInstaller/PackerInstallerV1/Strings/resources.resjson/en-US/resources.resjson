@@ -16,7 +16,7 @@
   "loc.input.label.requireGpgSignature": "Require GPG signature verification",
   "loc.input.help.requireGpgSignature": "When enabled, fail if the GPG signature file is unavailable. Defaults to true for HashiCorp downloads. Disable for mirrors that do not serve .sig files.",
   "loc.input.label.requireChecksum": "Require checksum verification",
-  "loc.input.help.requireChecksum": "When enabled, fail if the mirror does not serve a SHA256SUMS file for the requested version.",
+  "loc.input.help.requireChecksum": "When enabled (default), fail if the mirror or registry does not provide a SHA256 checksum for the requested version. Disable only if your mirror/registry cannot publish checksums and you trust it to verify server-side.",
   "loc.messages.VerifyPackerInstallation": "Verifying Packer installation...",
   "loc.messages.InputVersionNotValidSemanticVersion": "Input version %s is not a valid semantic version",
   "loc.messages.PackerNotFoundInFolder": "Packer executable not found in path %s",

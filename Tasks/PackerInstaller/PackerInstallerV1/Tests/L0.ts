@@ -61,4 +61,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('Sha256VerificationFail');
     expectFailure('InvalidVersionFail');
     expectFailure('GpgSignatureRequiredButMissing');
+    expectFailure('RegistryEmptySha256Rejected');
+    expectFailure('RegistryInsecureDownloadUrlReject');
+    expectFailure('MirrorMissingChecksumFail');
 });
