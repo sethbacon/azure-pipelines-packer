@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.2...v1.2.3) (2026-07-02)
+
+
+### Security
+
+* harden command-task credential handling and containment ([#83](https://github.com/sethbacon/azure-pipelines-packer/issues/83)) ([838c9ad](https://github.com/sethbacon/azure-pipelines-packer/commit/838c9ad5e3668ce38921548f768fbcc069a90267))
+* harden installer download integrity and error handling ([#81](https://github.com/sethbacon/azure-pipelines-packer/issues/81)) ([f42c3c9](https://github.com/sethbacon/azure-pipelines-packer/commit/f42c3c9221ba77668da730d1561ba8e540a75558))
+
 ## [1.2.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.1...v1.2.2) (2026-07-01)
 
 
