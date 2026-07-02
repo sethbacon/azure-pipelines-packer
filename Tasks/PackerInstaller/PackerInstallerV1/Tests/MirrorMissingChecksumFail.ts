@@ -17,8 +17,8 @@ tr.registerMock('os', {
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Mirror path should not call fetchJson: ' + url); },
-    // Mirror does not publish a SHA256SUMS file for this version.
-    fetchText: async (url: string) => { throw new Error('Failed to fetch ' + url + ': HTTP 404'); }
+    // Mirror does not publish a SHA256SUMS file for this version (HTTP 404 -> null).
+    fetchTextAllow404: async (_url: string) => null
 });
 
 tr.registerMock('undici', { ProxyAgent: class { } });

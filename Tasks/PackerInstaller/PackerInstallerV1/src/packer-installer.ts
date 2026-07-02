@@ -6,7 +6,7 @@ import fs = require('fs');
 import crypto = require('crypto');
 
 import { randomUUID as uuidV4 } from 'crypto';
-import { fetchJson, fetchText } from './http-client';
+import { fetchJson, fetchText, fetchTextAllow404 } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
 
 const packerToolName = "packer";
@@ -16,6 +16,25 @@ const isWindows = os.type().match(/^Win/);
 const FALLBACK_PACKER_VERSION = '1.12.0';
 
 const SHA256_HEX_PATTERN = /^[a-fA-F0-9]{64}$/;
+
+/** A downloaded artifact's hash did not match the expected checksum. Always fatal — never downgradable. */
+class ChecksumMismatchError extends Error {
+    constructor(message: string) { super(message); this.name = 'ChecksumMismatchError'; }
+}
+/** No usable checksum was published for the artifact (SUMS file absent, or the file not listed in it). Downgradable when requireChecksum is off. */
+class ChecksumUnavailableError extends Error {
+    constructor(message: string) { super(message); this.name = 'ChecksumUnavailableError'; }
+}
+
+/** Strips the query string (which can carry a pre-signed signature/token) from a URL for safe logging. */
+function redactUrl(url: string): string {
+    try {
+        const u = new URL(url);
+        return u.origin + u.pathname + (u.search ? '?<redacted>' : '');
+    } catch {
+        return url.split('?')[0];
+    }
+}
 
 /** Reads a boolean input that must fail closed even if task.json's default is not injected (e.g. headless/mock invocations). */
 function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
@@ -188,7 +207,12 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     try {
         zipPath = await tools.downloadTool(data.download_url, fileName);
     } catch (exception) {
-        throw new Error(tasks.loc("PackerDownloadFailed", data.download_url, exception));
+        // download_url is a pre-signed URL whose query string carries the signing
+        // token; redact it (and scrub it from the tool-lib exception text) so the
+        // live credential never reaches the build log via the failure message.
+        const safeUrl = redactUrl(data.download_url);
+        const safeMsg = String(exception instanceof Error ? exception.message : exception).split(data.download_url).join(safeUrl);
+        throw new Error(tasks.loc("PackerDownloadFailed", safeUrl, safeMsg));
     }
 
     const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
@@ -197,7 +221,7 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     } else if (requireChecksum) {
         throw new Error(`Checksum verification is required but the registry did not provide a sha256 for ${infoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
     } else {
-        tasks.warning(`SHA256 not provided by registry for ${infoUrl}; skipping local verification (trusting the registry's server-side verification only). Set 'requireChecksum' to enforce a local check.`);
+        tasks.warning(`The registry returned no sha256 for ${infoUrl}; the binary is installed WITHOUT any local integrity verification (no checksum and the registry source performs no GPG check) — you are trusting the registry's server-side verification and TLS alone. Set 'requireChecksum' to true to require a local check.`);
     }
     return zipPath;
 }
@@ -219,22 +243,38 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
         throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
     }
 
-    // Attempt SHA256 verification from mirror — fail if SHA256SUMS is available but hash doesn't match
     const zipFileName = `packer_${version}_${osPlatform}_${arch}.zip`;
     const sha256SumsUrl = `${mirrorBaseUrl}/${version}/packer_${version}_SHA256SUMS`;
     const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
+    const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
+
+    // A missing SHA256SUMS (HTTP 404) means the mirror published no checksum; any
+    // other fetch error (5xx / network) is transient and left to throw (fatal).
+    const sha256SumsContent = await fetchTextAllow404(sha256SumsUrl);
+    if (sha256SumsContent === null) {
+        if (requireChecksum) {
+            throw new Error(`Checksum verification is required but the mirror did not publish a SHA256SUMS file (${sha256SumsUrl}). Set 'requireChecksum' to false to install without it.`);
+        }
+        tasks.warning(`The mirror published no SHA256SUMS file (${sha256SumsUrl}); the binary is installed WITHOUT any local integrity verification. Set 'requireChecksum' to true to require it.`);
+        return zipPath;
+    }
+
+    // SUMS is present: honor requireGpgSignature on the mirror path too (previously
+    // GPG was only enforced on the hashicorp source — the toggle was inert here).
+    await verifyGpgSignature(sha256SumsContent, `${sha256SumsUrl}.sig`, requireGpg);
+
     try {
-        const expectedHash = await fetchExpectedSha256(sha256SumsUrl, zipFileName);
+        const expectedHash = parseSha256(sha256SumsContent, zipFileName);
         await verifySha256(zipPath, expectedHash);
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const checksumUnavailable = errorMessage.includes('SHA256 checksum not found') || errorMessage.includes('Failed to fetch');
-        // A genuine hash mismatch is always fatal. An unavailable SHA256SUMS file is
-        // fatal only when the user requires checksum verification; otherwise warn.
-        if (checksumUnavailable && !requireChecksum) {
-            tasks.warning(`SHA256 verification skipped for mirror download: ${errorMessage}`);
-        } else if (checksumUnavailable) {
-            throw new Error(`Checksum verification is required but the mirror did not provide a usable SHA256SUMS file (${sha256SumsUrl}): ${errorMessage}`);
+        // A genuine hash MISMATCH is always fatal, regardless of requireChecksum.
+        if (error instanceof ChecksumMismatchError) throw error;
+        // The SUMS file did not list our artifact — treat as "unavailable".
+        if (error instanceof ChecksumUnavailableError) {
+            if (requireChecksum) {
+                throw new Error(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${sha256SumsUrl}).`);
+            }
+            tasks.warning(`${zipFileName} is not listed in the mirror's SHA256SUMS (${sha256SumsUrl}); skipping checksum verification. Set 'requireChecksum' to true to require it.`);
         } else {
             throw error;
         }
@@ -255,20 +295,14 @@ function parseSha256(sha256SumsContent: string, zipFileName: string): string {
             return match[1];
         }
     }
-    throw new Error(`SHA256 checksum not found for ${zipFileName}`);
-}
-
-async function fetchExpectedSha256(sha256SumsUrl: string, zipFileName: string): Promise<string> {
-    tasks.debug(`Fetching SHA256SUMS from ${sha256SumsUrl}`);
-    const body = await fetchText(sha256SumsUrl);
-    return parseSha256(body, zipFileName);
+    throw new ChecksumUnavailableError(`SHA256 checksum not found for ${zipFileName}`);
 }
 
 async function verifySha256(filePath: string, expectedHash: string): Promise<void> {
     const fileBuffer = fs.readFileSync(filePath);
     const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
     if (actualHash.toLowerCase() !== expectedHash.toLowerCase()) {
-        throw new Error(tasks.loc("Sha256VerificationFailed", expectedHash, actualHash));
+        throw new ChecksumMismatchError(tasks.loc("Sha256VerificationFailed", expectedHash, actualHash));
     }
     tasks.debug(`SHA256 verification passed: ${actualHash}`);
 }
