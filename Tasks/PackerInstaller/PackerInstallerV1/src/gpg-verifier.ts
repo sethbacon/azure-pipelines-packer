@@ -1,3 +1,8 @@
+// @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/gpg-verifier.ts)
+// @shared-module-policy: This is a copy of the sibling extension's SHA256SUMS.sig verifier.
+//   Apply verification-logic fixes to both copies. Enforced by scripts/check-shared-modules.js.
+// @shared-module-status: IN-SYNC — verification logic is byte-identical with upstream (only the
+//   terraform-internal parity header, which references that repo's own task families, differs).
 import tasks = require('azure-pipelines-task-lib/task');
 import * as openpgp from 'openpgp';
 
