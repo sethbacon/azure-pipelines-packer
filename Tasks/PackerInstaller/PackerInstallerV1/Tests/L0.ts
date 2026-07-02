@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
 import * as openpgp from 'openpgp';
-import { fetchWithTimeout } from '../src/http-client';
+import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
 
 describe('PackerInstaller Test Suite', function () {
@@ -69,6 +69,32 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('MirrorMissingChecksumFail');
     expectFailure('RegistryMirrorNameInvalidReject');
 
+    // --- Mirror GPG (now honored) + typed-error classification ---
+    expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail
+    expectFailure('MirrorSha256MismatchFail');       // genuine mismatch is fatal even with requireChecksum=false
+
+    // --- Verification opt-out toggles: must skip-and-install WITH a warning ---
+    it('MirrorChecksumOptOutSuccess', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorChecksumOptOutSuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('WITHOUT any local integrity verification')),
+                'must warn that no integrity verification occurred. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('HashiCorpGpgOptOutSuccess', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'HashiCorpGpgOptOutSuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded (SHA256 still enforced)');
+            assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+        }, tr);
+    });
+
     // --- Real (unmocked) GPG verification ---
     expectSuccess('GpgRealVerifySuccess');
     expectFailure('GpgRealVerifyTamperedFail');
@@ -121,6 +147,120 @@ describe('PackerInstaller Test Suite', function () {
                 () => fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text()),
                 /InsecureUrlRejected/
             );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchWithTimeout refuses an off-host redirect even when it stays https', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = (async () =>
+            new Response(null, { status: 302, headers: { Location: 'https://evil.example.net/payload' } })
+        ) as typeof fetch;
+        try {
+            await assert.rejects(
+                () => fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text()),
+                /off-host redirect/
+            );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchWithTimeout aborts a redirect loop after the hop limit', async () => {
+        const originalFetch = global.fetch;
+        // Always redirect to a same-host URL -> exceeds MAX_REDIRECTS.
+        global.fetch = (async () =>
+            new Response(null, { status: 302, headers: { Location: 'https://example.com/loop' } })
+        ) as typeof fetch;
+        try {
+            await assert.rejects(
+                () => fetchWithTimeout('https://example.com/loop', 1000, async (r) => r.text()),
+                /Too many redirects/
+            );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchJson parses a 200 body and rejects a 4xx without retrying', async () => {
+        const originalFetch = global.fetch;
+        let calls = 0;
+        global.fetch = (async () => {
+            calls++;
+            return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }) as typeof fetch;
+        try {
+            const body = await fetchJson<{ ok: boolean }>('https://example.com/meta');
+            assert.deepStrictEqual(body, { ok: true });
+            assert.strictEqual(calls, 1);
+        } finally {
+            global.fetch = originalFetch;
+        }
+
+        calls = 0;
+        global.fetch = (async () => { calls++; return new Response('nope', { status: 404 }); }) as typeof fetch;
+        try {
+            await assert.rejects(() => fetchJson('https://example.com/meta'));
+            assert.strictEqual(calls, 1, '4xx must not be retried');
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchText retries a transient 5xx and then succeeds', async () => {
+        const originalFetch = global.fetch;
+        let calls = 0;
+        global.fetch = (async () => {
+            calls++;
+            return calls === 1
+                ? new Response('busy', { status: 503 })
+                : new Response('payload', { status: 200 });
+        }) as typeof fetch;
+        try {
+            const text = await fetchText('https://example.com/sums');
+            assert.strictEqual(text, 'payload');
+            assert.strictEqual(calls, 2, '5xx should trigger exactly one retry here');
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchText retries a network error and then gives up after the attempt limit', async () => {
+        const originalFetch = global.fetch;
+        let calls = 0;
+        global.fetch = (async () => { calls++; throw new TypeError('network down'); }) as typeof fetch;
+        try {
+            await assert.rejects(() => fetchText('https://example.com/sums'), /network down/);
+            assert.strictEqual(calls, 3, 'network errors are retried up to the attempt limit');
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchTextAllow404 returns null on 404 but text on 200', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = (async () => new Response(null, { status: 404 })) as typeof fetch;
+        try {
+            assert.strictEqual(await fetchTextAllow404('https://example.com/SHA256SUMS'), null);
+        } finally {
+            global.fetch = originalFetch;
+        }
+
+        global.fetch = (async () => new Response('sums-body', { status: 200 })) as typeof fetch;
+        try {
+            assert.strictEqual(await fetchTextAllow404('https://example.com/SHA256SUMS'), 'sums-body');
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('fetchBuffer returns the response bytes', async () => {
+        const originalFetch = global.fetch;
+        global.fetch = (async () => new Response(new Uint8Array([1, 2, 3]), { status: 200 })) as typeof fetch;
+        try {
+            const buf = await fetchBuffer('https://example.com/file.sig');
+            assert.deepStrictEqual(Array.from(buf), [1, 2, 3]);
         } finally {
             global.fetch = originalFetch;
         }

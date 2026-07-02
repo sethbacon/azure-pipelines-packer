@@ -18,11 +18,11 @@ const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccd
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Mirror path should not call fetchJson: ' + url); },
-    fetchText: async (url: string) => {
+    fetchTextAllow404: async (url: string) => {
         if (url.includes('SHA256SUMS')) {
             return `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`;
         }
-        throw new Error('Unexpected fetchText URL: ' + url);
+        throw new Error('Unexpected fetchTextAllow404 URL: ' + url);
     }
 });
 

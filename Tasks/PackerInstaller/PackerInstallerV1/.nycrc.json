@@ -15,7 +15,7 @@
         "src/hashicorp-gpg-key.js"
     ],
     "check-coverage": true,
-    "lines": 71,
-    "functions": 76,
-    "branches": 56
+    "lines": 82,
+    "functions": 90,
+    "branches": 69
 }
