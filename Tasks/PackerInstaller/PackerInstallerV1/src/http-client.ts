@@ -1,7 +1,11 @@
-// Currently duplicated from the sibling azure-pipelines-terraform extension's
-// http-client.ts (no CI parity check on this repo, unlike the terraform side).
-// Extracting a shared cross-extension package is tracked as follow-up work; a
-// fix or key rotation here should be mirrored there.
+// @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/http-client.ts)
+// @shared-module-policy: This is a copy of the sibling extension's HTTP client. Until a
+//   shared cross-extension package is extracted, apply fixes to both copies and keep the
+//   provenance header current. Enforced by scripts/check-shared-modules.js.
+// @shared-module-status: DIVERGED — this copy is intentionally ahead of upstream: it adds
+//   per-hop redirect host/scheme re-validation + MAX_REDIRECTS, a typed HttpError with a
+//   withRetry backoff wrapper, and fetchTextAllow404 (2026-07 installer hardening, #75/#78).
+//   Backport to azure-pipelines-terraform is pending; do not "reconcile" by reverting these.
 import tasks = require('azure-pipelines-task-lib/task');
 import { ProxyAgent } from 'undici';
 
