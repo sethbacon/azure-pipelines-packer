@@ -28,7 +28,13 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
             .replace(/\/+$/, '');
         const username = tasks.getEndpointAuthorizationParameter(serviceName, "username", false) || '';
         const password = tasks.getEndpointAuthorizationParameter(serviceName, "password", false) || '';
-        if (password) { tasks.setSecret(password); }
+        if (!password) {
+            // Fail closed like AWS/GCP/OCI: an empty password would otherwise be
+            // silently skipped by the env helper (warning only), leaving the build
+            // to attempt vCenter auth with no credential instead of failing clearly.
+            throw new Error(`vSphere password not found in service connection '${serviceName}'. Ensure the service connection includes a password.`);
+        }
+        tasks.setSecret(password);
 
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username);

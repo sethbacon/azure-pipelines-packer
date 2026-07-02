@@ -5,9 +5,16 @@ import fs = require('fs');
  * Write sensitive content to a file with restrictive permissions.
  * Uses mode 0o600 on Unix; on Windows, falls back gracefully since
  * chmod is not supported and NTFS ACLs apply instead.
+ *
+ * The `wx` flag (O_CREAT | O_EXCL | O_WRONLY) makes the create fail if the
+ * path already exists, defeating a pre-planted symlink in a shared, world-
+ * writable tmpdir: without O_EXCL an attacker-owned symlink at the target
+ * would redirect the write (and the 0600 would land on the symlink's target).
+ * Callers embed a randomUUID in every filename, so a legitimate collision is
+ * effectively impossible.
  */
 export function writeSecretFile(filePath: string, content: string): void {
-    fs.writeFileSync(filePath, content, { mode: 0o600 });
+    fs.writeFileSync(filePath, content, { mode: 0o600, flag: 'wx' });
     try {
         fs.chmodSync(filePath, 0o600);
     } catch (err) {

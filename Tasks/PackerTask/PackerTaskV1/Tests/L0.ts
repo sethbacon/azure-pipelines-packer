@@ -4,6 +4,9 @@ import * as path from 'path';
 import { ParentCommandHandler } from '../src/parent-handler';
 import { EnvironmentVariableHelper } from '../src/environment-variables';
 import './IdTokenGeneratorL0';
+import './PemNormalizerL0';
+import './SecureTempL0';
+import './SecureFileLoaderL0';
 
 describe('PackerTask Test Suite', function () {
 
@@ -101,6 +104,9 @@ describe('PackerTask Test Suite', function () {
     // --- Fail-closed / hardening regressions ---
     expectFailure('AwsStaticIncompleteCredsReject');
     expectFailure('OciTenancyInvalidReject');
+    expectFailure('AwsWifMissingServiceConnReject');   // #73
+    expectFailure('GcpWifMissingServiceConnReject');   // #73
+    expectFailure('VsphereEmptyPasswordReject');       // #74
 
     it('VsphereInsecureConnectionWarns', async () => {
         const tp = path.join(__dirname, 'VsphereInsecureConnectionWarns.js');
@@ -126,6 +132,30 @@ describe('PackerTask Test Suite', function () {
                 'should warn that manifestFile escapes the working directory. warnings: ' + tr.warningIssues
             );
             assert.ok(!tr.stdout.includes('variable=artifactId'), 'artifactId must not be set from an out-of-bounds manifest');
+        }, tr);
+    });
+
+    it('BuildManifestParsed', async () => {
+        const tp = path.join(__dirname, 'BuildManifestParsed.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build should succeed');
+            assert.ok(tr.stdout.includes('variable=manifestFilePath'), 'manifestFilePath output variable should be set');
+            assert.ok(tr.stdout.includes('variable=artifactId'), 'artifactId output variable should be set');
+            // The last build's artifact_id wins.
+            assert.ok(tr.stdout.includes('ami-0123456789'), 'artifactId should be the last build\'s artifact_id');
+        }, tr);
+    });
+
+    it('BuildManifestNonStringArtifact', async () => {
+        const tp = path.join(__dirname, 'BuildManifestNonStringArtifact.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build should succeed');
+            assert.ok(tr.stdout.includes('variable=manifestFilePath'), 'manifestFilePath should still be set');
+            assert.ok(!tr.stdout.includes('variable=artifactId'), 'artifactId must be skipped for a non-string/number artifact_id');
         }, tr);
     });
 

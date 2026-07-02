@@ -2,11 +2,6 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
-import { generateIdToken } from './id-token-generator';
-import { writeSecretFile } from './secure-temp';
-import path = require('path');
-import os = require('os');
-import { randomUUID as uuidV4 } from 'crypto';
 
 /**
  * Injects AWS credentials for the packer-plugin-amazon builders. Static
@@ -57,12 +52,13 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
     }
 
     private async handleProviderWIF(command: PackerAuthorizationCommandInitializer): Promise<void> {
-        const oidcToken = await generateIdToken(command.serviceProviderName);
-        tasks.setSecret(oidcToken);
-
-        const tokenFilePath = path.join(os.tmpdir(), `aws-oidc-token-${uuidV4()}.jwt`);
-        writeSecretFile(tokenFilePath, oidcToken);
-        this.tempFiles.push(tokenFilePath);
+        if (!command.serviceProviderName) {
+            // Fail closed like the static path: an empty service connection would
+            // otherwise POST to the ADO OIDC endpoint with an empty id and surface
+            // a cryptic downstream error instead of a clear misconfiguration.
+            throw new Error("An AWS service connection is required for Workload Identity Federation. Set environmentServiceNameAWS.");
+        }
+        const tokenFilePath = await this.writeOidcTokenFile(command.serviceProviderName, 'aws-oidc-token');
 
         EnvironmentVariableHelper.setEnvironmentVariable("AWS_ROLE_ARN", tasks.getInput("awsRoleArn", true)!);
         EnvironmentVariableHelper.setEnvironmentVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenFilePath);

@@ -2,11 +2,6 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
-import { generateIdToken } from './id-token-generator';
-import { writeSecretFile } from './secure-temp';
-import path = require('path');
-import os = require('os');
-import { randomUUID as uuidV4 } from 'crypto';
 
 /**
  * Injects GCP credentials for the packer-plugin-googlecompute builders. Both
@@ -38,19 +33,11 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
             token_uri: tokenUri
         });
 
-        const keyFilePath = path.join(os.tmpdir(), `gcp-credentials-${uuidV4()}.json`);
-        writeSecretFile(keyFilePath, jsonCredsString);
-        this.tempFiles.push(keyFilePath);
-        return keyFilePath;
+        return this.writeTrackedSecretFile('gcp-credentials', 'json', jsonCredsString);
     }
 
     private async writeWifCredentials(serviceConnection: string): Promise<string> {
-        const oidcToken = await generateIdToken(serviceConnection);
-        tasks.setSecret(oidcToken);
-
-        const tokenFilePath = path.join(os.tmpdir(), `gcp-oidc-token-${uuidV4()}.jwt`);
-        writeSecretFile(tokenFilePath, oidcToken);
-        this.tempFiles.push(tokenFilePath);
+        const tokenFilePath = await this.writeOidcTokenFile(serviceConnection, 'gcp-oidc-token');
 
         const projectNumber = tasks.getInput("gcpProjectNumber", true)!;
         const poolId = tasks.getInput("gcpWorkloadIdentityPoolId", true)!;
@@ -67,10 +54,7 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
             service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`
         };
 
-        const credentialsFilePath = path.join(os.tmpdir(), `gcp-wif-credentials-${uuidV4()}.json`);
-        writeSecretFile(credentialsFilePath, JSON.stringify(credentials));
-        this.tempFiles.push(credentialsFilePath);
-        return credentialsFilePath;
+        return this.writeTrackedSecretFile('gcp-wif-credentials', 'json', JSON.stringify(credentials));
     }
 
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
@@ -78,9 +62,13 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
         this.validateAuthScheme(authScheme, "environmentAuthSchemeGCP");
 
         if (authScheme === "WorkloadIdentityFederation") {
+            if (!command.serviceProviderName) {
+                // Fail closed like the service-connection path rather than requesting
+                // an OIDC token for an empty service connection id.
+                throw new Error("A GCP service connection is required for Workload Identity Federation. Set environmentServiceNameGCP.");
+            }
             const credentialsFilePath = await this.writeWifCredentials(command.serviceProviderName);
             EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsFilePath);
-            EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_PROJECT_ID", tasks.getInput("gcpProjectNumber", true)!);
             return;
         }
 
@@ -90,10 +78,9 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
         }
         const keyFilePath = this.writeServiceAccountKey(serviceName);
         EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", keyFilePath);
-
-        const project = tasks.getEndpointDataParameter(serviceName, "project", false);
-        if (project) {
-            EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_PROJECT_ID", project);
-        }
+        // GOOGLE_PROJECT_ID is intentionally NOT injected: packer-plugin-googlecompute
+        // reads the project only from the required HCL `project_id` field, never from
+        // the environment, so setting it here was dead and misleading (and on the WIF
+        // path it was the project NUMBER, not the id).
     }
 }
