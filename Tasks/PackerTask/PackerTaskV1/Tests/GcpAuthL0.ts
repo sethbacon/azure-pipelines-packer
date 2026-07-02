@@ -17,7 +17,8 @@ async function run() {
             && creds.type === 'service_account'
             && creds.client_email === 'builder@my-project.iam.gserviceaccount.com'
             && creds.private_key.includes('BEGIN PRIVATE KEY')
-            && process.env['GOOGLE_PROJECT_ID'] === 'my-project';
+            // #72: GOOGLE_PROJECT_ID is dead for packer-plugin-googlecompute and must NOT be set.
+            && process.env['GOOGLE_PROJECT_ID'] === undefined;
         if (ok) {
             tl.setResult(tl.TaskResult.Succeeded, 'GCP service-account credentials written and injected.');
         } else {

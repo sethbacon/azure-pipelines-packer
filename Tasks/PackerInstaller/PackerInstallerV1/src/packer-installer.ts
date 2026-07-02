@@ -36,7 +36,12 @@ function redactUrl(url: string): string {
     }
 }
 
-/** Reads a boolean input that must fail closed even if task.json's default is not injected (e.g. headless/mock invocations). */
+/**
+ * Reads a boolean input that must fail closed even if task.json's default is not injected (e.g. headless/mock invocations).
+ * Intentionally duplicated as a protected method in the PackerTask handler
+ * (base-packer-command-handler.ts): the two tasks are bundled separately and
+ * share no module, mirroring the annotated http-client.ts duplication.
+ */
 function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
     const value = tasks.getInput(name, false);
     if (value === undefined || value === '') return defaultValue;

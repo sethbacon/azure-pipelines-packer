@@ -3,9 +3,13 @@ import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
 import { getSecureVarFileArgs, SecureFileLoader } from './secure-file-loader';
 import { EnvironmentVariableHelper } from './environment-variables';
+import { writeSecretFile } from './secure-temp';
+import { generateIdToken } from './id-token-generator';
 import tasks = require('azure-pipelines-task-lib/task');
 import path = require('path');
 import fs = require('fs');
+import os = require('os');
+import { randomUUID as uuidV4 } from 'crypto';
 
 export abstract class BasePackerCommandHandler {
     providerName: string;
@@ -33,17 +37,42 @@ export abstract class BasePackerCommandHandler {
         return tasks.getInput("templatePath") || '.';
     }
 
-    /** True when `resolvedPath` is workingDirectory itself or a descendant of it. */
+    /**
+     * True when `resolvedPath` is workingDirectory itself or a descendant of it,
+     * with symlinks resolved on both sides. A purely lexical check (path.resolve +
+     * startsWith) is blind to an in-tree symlink (e.g. one left by a checkout or a
+     * prior build step) whose lexical path stays under base but which points
+     * outside — so a manifest read / fix-output write could escape the working
+     * directory. Because a write target may not exist yet, the deepest EXISTING
+     * ancestor is realpath'd and the not-yet-existent tail (which cannot itself be
+     * a symlink) is re-appended.
+     */
     protected isWithinWorkingDirectory(resolvedPath: string, workingDirectory: string): boolean {
-        const base = path.resolve(workingDirectory || '.');
-        const target = path.resolve(resolvedPath);
+        const base = this.realpathOfExistingPrefix(path.resolve(workingDirectory || '.'));
+        const target = this.realpathOfExistingPrefix(path.resolve(resolvedPath));
         return target === base || target.startsWith(base + path.sep);
+    }
+
+    /** realpath the deepest existing ancestor of `p`, re-appending any non-existent tail. */
+    private realpathOfExistingPrefix(p: string): string {
+        let existing = p;
+        const tail: string[] = [];
+        while (!fs.existsSync(existing)) {
+            const parent = path.dirname(existing);
+            if (parent === existing) return p; // hit the root with no existing ancestor
+            tail.unshift(path.basename(existing));
+            existing = parent;
+        }
+        return tail.length ? path.join(fs.realpathSync(existing), ...tail) : fs.realpathSync(existing);
     }
 
     /**
      * Reads a boolean input, returning `defaultValue` when the input is unset.
      * Use this for inputs that default to `true`; `tasks.getBoolInput(name, false)`
      * always defaults to `false` and is fine for false-defaulting inputs.
+     * Intentionally duplicated as a free function in the PackerInstaller task
+     * (packer-installer.ts): the two tasks are bundled separately and share no
+     * module, mirroring the annotated http-client.ts duplication.
      */
     protected getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
         const value = tasks.getInput(name, false);
@@ -60,16 +89,21 @@ export abstract class BasePackerCommandHandler {
         }
     }
 
+    /** Maps a provider id (this.providerName) to its input-name suffix (environmentServiceName<Suffix>). */
+    private static readonly PROVIDER_SUFFIX: Record<string, string> = {
+        azurerm: "AzureRM",
+        aws: "AWS",
+        gcp: "GCP",
+        oci: "OCI",
+        vsphere: "VSphere",
+    };
+
     protected getProviderSuffix(): string {
-        const provider = tasks.getInput("provider") || "none";
-        switch (provider) {
-            case "azurerm": return "AzureRM";
-            case "aws": return "AWS";
-            case "gcp": return "GCP";
-            case "oci": return "OCI";
-            case "vsphere": return "VSphere";
-            default: return ""; // none
-        }
+        // Derive from the instance's own providerName (set in each subclass
+        // constructor) rather than re-reading the global 'provider' input — the
+        // handler already knows which provider it is, and this keeps a single
+        // provider→class mapping in parent-handler.ts.
+        return BasePackerCommandHandler.PROVIDER_SUFFIX[this.providerName] ?? ""; // none
     }
 
     protected getServiceName(): string {
@@ -160,6 +194,29 @@ export abstract class BasePackerCommandHandler {
         });
         const code = await tool.execAsync(options);
         return { code, stdout };
+    }
+
+    /**
+     * Writes `content` to a uniquely-named 0600 temp file (`<prefix>-<uuid>.<ext>`
+     * in the OS tmpdir), tracks it for cleanup, and returns the path. Centralizes
+     * the temp-secret convention shared by the AWS/GCP/OCI handlers.
+     */
+    protected writeTrackedSecretFile(prefix: string, ext: string, content: string): string {
+        const filePath = path.join(os.tmpdir(), `${prefix}-${uuidV4()}.${ext}`);
+        writeSecretFile(filePath, content);
+        this.tempFiles.push(filePath);
+        return filePath;
+    }
+
+    /**
+     * Requests an ADO OIDC token for `serviceConnection`, masks it, and writes it
+     * to a tracked `.jwt` temp file (the shared AWS/GCP Workload Identity Federation
+     * idiom). Returns the token file path.
+     */
+    protected async writeOidcTokenFile(serviceConnection: string, prefix: string): Promise<string> {
+        const oidcToken = await generateIdToken(serviceConnection);
+        tasks.setSecret(oidcToken);
+        return this.writeTrackedSecretFile(prefix, 'jwt', oidcToken);
     }
 
     public cleanupTempFiles(): void {

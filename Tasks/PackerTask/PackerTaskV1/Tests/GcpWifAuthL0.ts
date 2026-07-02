@@ -21,7 +21,8 @@ async function run() {
             && creds.service_account_impersonation_url.includes('builder@my-project.iam.gserviceaccount.com')
             && tokenFileExists
             && tokenFileContents === 'mock-gcp-oidc-jwt-12345'
-            && process.env['GOOGLE_PROJECT_ID'] === '123456789012';
+            // #72: GOOGLE_PROJECT_ID is dead for packer-plugin-googlecompute and must NOT be set.
+            && process.env['GOOGLE_PROJECT_ID'] === undefined;
         if (ok) {
             tl.setResult(tl.TaskResult.Succeeded, 'GCP WIF external_account credentials written and injected.');
         } else {

@@ -2,11 +2,7 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
-import { writeSecretFile } from './secure-temp';
 import { normalizePem } from './pem-normalizer';
-import path = require('path');
-import os = require('os');
-import { randomUUID as uuidV4 } from 'crypto';
 
 const OCID_PATTERN = /^ocid1\.[a-z0-9_]+\.[a-z0-9._-]*$/;
 const REGION_PATTERN = /^[a-z0-9-]+$/;
@@ -37,10 +33,18 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
     private writeKeyFile(privateKey: string): string {
         tasks.setSecret(privateKey);
         const normalized = normalizePem(privateKey);
-        const keyFilePath = path.join(os.tmpdir(), `oci-keyfile-${uuidV4()}.pem`);
-        writeSecretFile(keyFilePath, normalized);
-        this.tempFiles.push(keyFilePath);
-        return keyFilePath;
+        // setSecret masks exact substrings within a single log line. normalizePem
+        // rewrites the key to a byte-different LF-wrapped form — the form actually
+        // written to disk and referenced by PKR_VAR_oci_key_file — so also register
+        // each base64 body line of that on-disk form. setSecret rejects multi-line
+        // input, hence per line rather than the whole PEM.
+        for (const line of normalized.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('-----')) {
+                tasks.setSecret(trimmed);
+            }
+        }
+        return this.writeTrackedSecretFile('oci-keyfile', 'pem', normalized);
     }
 
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
