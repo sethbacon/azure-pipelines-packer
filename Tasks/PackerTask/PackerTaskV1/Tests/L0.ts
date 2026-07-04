@@ -297,7 +297,14 @@ describe('PackerTask Test Suite', function () {
             assert.ok(tr.succeeded, 'the build should succeed with the secure var-file wired into -var-file');
             assert.ok(tr.stdout.includes('SECUREFILE_DOWNLOADED:secure-file-id-e2e'), 'the secure file should be downloaded');
             assert.ok(tr.stdout.includes('SECUREFILE_DELETED:secure-file-id-e2e'), 'the secure file should be deleted during finally-block cleanup');
-            assert.ok(tr.stdout.includes('mode=600'), 'the downloaded secure file should be chmod 0600 before cleanup (#103)');
+            // Windows' filesystem only tracks a read-only attribute, not POSIX
+            // mode bits: chmod(0o600) succeeds but stat() reports back 0o666
+            // (writable) rather than 0o600. The exact-mode assertion only holds
+            // on platforms with real POSIX permissions; tightenFilePermissions's
+            // own platform-branching behavior is covered directly in SecureTempL0.ts.
+            if (process.platform !== 'win32') {
+                assert.ok(tr.stdout.includes('mode=600'), 'the downloaded secure file should be chmod 0600 before cleanup (#103)');
+            }
         }, tr);
     });
 });
