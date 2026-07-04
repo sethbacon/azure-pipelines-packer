@@ -2,11 +2,10 @@
 // @shared-module-policy: This is a copy of the sibling extension's HTTP client. Until a
 //   shared cross-extension package is extracted, apply fixes to both copies and keep the
 //   provenance header current. Enforced by scripts/check-shared-modules.js.
-// @shared-module-status: DIVERGED — this copy is intentionally ahead of upstream: it adds
-//   per-hop redirect host/scheme re-validation + MAX_REDIRECTS, a typed HttpError with a
-//   withRetry backoff wrapper, fetchTextAllow404 (2026-07 installer hardening, #75/#78), and
-//   fetchBufferAllow404 (#106). Backport to azure-pipelines-terraform is pending; do not
-//   "reconcile" by reverting these.
+// @shared-module-status: IN-SYNC — functionally identical to azure-pipelines-terraform's
+//   copy as of 2026-07-04 (redirect re-validation + MAX_REDIRECTS, typed HttpError +
+//   withRetry backoff, fetchTextAllow404/fetchBufferAllow404, and proxy-password masking
+//   were backported there). Only comment wording differs. Apply future fixes to both.
 import tasks = require('azure-pipelines-task-lib/task');
 import { ProxyAgent } from 'undici';
 
