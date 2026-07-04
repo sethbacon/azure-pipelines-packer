@@ -21,6 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check tag reachable from main
@@ -55,6 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -77,6 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -108,21 +111,26 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '24'
+      # --ignore-scripts: this job holds id-token/attestations:write. tfx-cli and
+      # @cyclonedx/cyclonedx-npm are pure-JS and need no lifecycle scripts to run
+      # (verified); skipping scripts denies a compromised transitive dependency
+      # (e.g. a routine lockfile bump) code execution in this privileged context (#102).
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Generate SBOM for PackerTaskV1
         run: |
           cd Tasks/PackerTask/PackerTaskV1
-          npm ci --omit=dev
+          npm ci --omit=dev --ignore-scripts
           npx --no-install cyclonedx-npm --output-file ../../../sbom-packer-task-v1.cdx.json --omit dev
       - name: Generate SBOM for PackerInstallerV1
         run: |
           cd Tasks/PackerInstaller/PackerInstallerV1
-          npm ci --omit=dev
+          npm ci --omit=dev --ignore-scripts
           npx --no-install cyclonedx-npm --output-file ../../../sbom-packer-installer-v1.cdx.json --omit dev
       - name: Download vsix artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -170,6 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0
           persist-credentials: false
       - name: Download vsix artifact
@@ -203,12 +212,17 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '24'
+      # --ignore-scripts: this job holds id-token:write for the Entra federated
+      # credential. tfx-cli is pure-JS and needs no lifecycle scripts to run
+      # (verified); skipping scripts denies a compromised transitive dependency
+      # code execution alongside the token-minting step below (#102).
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Download vsix artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -232,6 +246,12 @@ jobs:
             --query accessToken -o tsv)
           # Mask the runtime-minted token so it is redacted from any log output.
           echo "::add-mask::$ENTRA_TOKEN"
+          # tfx-cli 0.23.2 offers no non-argv way to supply --token (no token-file
+          # or stdin-prompt option), so this is visible in /proc/<pid>/cmdline for
+          # the process lifetime. The only observers on this ephemeral runner would
+          # be other code in the same job; --ignore-scripts above (#102) is the
+          # actual mitigation. The token itself is a short-lived (~1h) Entra access
+          # token scoped only to the Azure DevOps resource (#109, documented residual risk).
           ./node_modules/.bin/tfx extension publish --vsix "$VSIX_FILE" --auth-type pat --token "$ENTRA_TOKEN"
         env:
           VARS_AZDO_PUBLISH_TENANT_ID: ${{ vars.AZDO_PUBLISH_TENANT_ID }}
