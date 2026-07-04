@@ -33,7 +33,7 @@ class ChecksumUnavailableError extends Error {
  * query is dropped rather than redacting known parameter names one at a time, so an
  * unforeseen token parameter can never leak through the error path.
  */
-function redactUrl(url: string): string {
+export function redactUrl(url: string): string {
     try {
         const u = new URL(url);
         return u.origin + u.pathname + (u.search ? '?<redacted>' : '');

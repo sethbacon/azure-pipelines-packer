@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as openpgp from 'openpgp';
 import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
-import { downloadToolWithTimeout } from '../src/packer-installer';
+import { downloadToolWithTimeout, redactUrl } from '../src/packer-installer';
 import tools = require('azure-pipelines-tool-lib/tool');
 
 describe('PackerInstaller Test Suite', function () {
@@ -70,6 +70,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryInsecureDownloadUrlReject');
     expectFailure('MirrorMissingChecksumFail');
     expectFailure('RegistryMirrorNameInvalidReject');
+    expectFailure('MirrorSumsMissingEntryFail');       // #111: SUMS published but our artifact isn't listed in it
 
     // --- Mirror GPG (now honored) + typed-error classification ---
     expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail
@@ -87,6 +88,30 @@ describe('PackerInstaller Test Suite', function () {
     // --- Verification opt-out toggles: must skip-and-install WITH a warning ---
     it('MirrorChecksumOptOutSuccess', async () => {
         const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorChecksumOptOutSuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('WITHOUT any local integrity verification')),
+                'must warn that no integrity verification occurred. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('MirrorSumsMissingEntryOptOutWarns', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorSumsMissingEntryOptOutWarns.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('is not listed in the mirror\'s SHA256SUMS')),
+                'must warn that the artifact was not listed. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('RegistryChecksumOptOutWarns', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryChecksumOptOutWarns.js'));
         await tr.runAsync();
         runValidations(() => {
             assert.ok(tr.succeeded, 'task should have succeeded');
@@ -135,6 +160,25 @@ describe('PackerInstaller Test Suite', function () {
                 'benign X-Amz-Date must not be registered as a secret');
             assert.ok(!tr.stdout.includes('##vso[task.setsecret]host'),
                 'benign X-Amz-SignedHeaders must not be registered as a secret');
+        }, tr);
+    });
+
+    // --- Registry download-failure URL/message redaction (#111) ---
+    // On a failed download, tool-lib's own exception can embed the full pre-signed
+    // URL. redactUrl() plus the exception-message scrub must strip it from the
+    // task's final error output before it ever reaches the build log.
+    it('RegistryDownloadFailRedacted', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryDownloadFailRedacted.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'task should have failed');
+            assert.ok(tr.errorIssues.length > 0, 'should have an error issue');
+            const SIG_TOKEN = 'SUPERSECRETSIGNATUREtoken9999';
+            const PRESIGNED_URL = `https://storage.example.com/signed/packer_1.12.0_linux_amd64.zip?sig=${SIG_TOKEN}`;
+            for (const issue of tr.errorIssues) {
+                assert.ok(!issue.includes(SIG_TOKEN), `error issue must not contain the raw sig token: ${issue}`);
+                assert.ok(!issue.includes(PRESIGNED_URL), `error issue must not contain the raw pre-signed URL: ${issue}`);
+            }
         }, tr);
     });
 
@@ -322,5 +366,25 @@ describe('PackerInstaller Test Suite', function () {
         } finally {
             (tools as unknown as { downloadTool: typeof originalDownloadTool }).downloadTool = originalDownloadTool;
         }
+    });
+
+    // --- redactUrl (#111): the sole control preventing a pre-signed registry
+    // download credential from reaching the build log on a failed download. ---
+    it('redactUrl strips the entire query string from a well-formed URL', () => {
+        assert.strictEqual(
+            redactUrl('https://storage.example.com/signed/packer.zip?sig=abc123&X-Amz-Signature=def456'),
+            'https://storage.example.com/signed/packer.zip?<redacted>'
+        );
+    });
+
+    it('redactUrl returns the URL unchanged when it has no query string', () => {
+        assert.strictEqual(
+            redactUrl('https://storage.example.com/signed/packer.zip'),
+            'https://storage.example.com/signed/packer.zip'
+        );
+    });
+
+    it('redactUrl falls back to a plain split on an unparseable URL', () => {
+        assert.strictEqual(redactUrl('not-a-valid-url?sig=abc123'), 'not-a-valid-url');
     });
 });
