@@ -53,8 +53,15 @@ describe('PackerTask Test Suite', function () {
         });
     }
 
-    /** Like expectSuccess, but also proves the credential was masked -- not just that it landed in process.env. */
-    function expectSuccessMasksSecret(file: string) {
+    /**
+     * Like expectSuccess, but also proves the credential was masked -- not just
+     * that it landed in process.env. When `expectedSecrets` is given, asserts
+     * that EACH exact value was registered via tasks.setSecret (not just that
+     * some setSecret call happened somewhere), so a regression to a single or
+     * wrong-value registration on a multi-mask path (e.g. Azure WIF's token
+     * masked twice) is caught (#111).
+     */
+    function expectSuccessMasksSecret(file: string, expectedSecrets?: string[]) {
         it(file, async () => {
             const tp = path.join(__dirname, `${file}.js`);
             const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
@@ -63,6 +70,12 @@ describe('PackerTask Test Suite', function () {
                 assert.ok(tr.succeeded, 'task should have succeeded');
                 assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
                 assert.ok(tr.stdOutContained('##vso[task.setsecret]'), 'credential should be masked via tasks.setSecret');
+                for (const secret of expectedSecrets ?? []) {
+                    assert.ok(
+                        tr.stdOutContained(`##vso[task.setsecret]${secret}`),
+                        `expected the specific credential '${secret}' to be masked via tasks.setSecret`
+                    );
+                }
             }, tr);
         });
     }
@@ -86,16 +99,47 @@ describe('PackerTask Test Suite', function () {
     // --- Provider auth handlers (environment-variable injection) ---
     // Secret-bearing paths also assert the credential was masked (tasks.setSecret),
     // not just that it landed in process.env.
-    expectSuccessMasksSecret('AwsStaticAuth');
-    expectSuccessMasksSecret('AzureServicePrincipalAuth');
-    expectSuccessMasksSecret('AzureWifAuth');
+    expectSuccessMasksSecret('AwsStaticAuth', ['secretkey']);
+    expectSuccessMasksSecret('AzureServicePrincipalAuth', ['spkey']);
+    expectSuccessMasksSecret('AzureWifAuth', ['mock-oidc-jwt-12345']);
     expectSuccess('AzureMsiAuth');
-    expectSuccessMasksSecret('VsphereAuth');
+    expectSuccessMasksSecret('VsphereAuth', ['pw']);
     expectSuccessMasksSecret('OciAuth');
     expectSuccessMasksSecret('GcpAuth');
-    expectSuccessMasksSecret('GcpWifAuth');
-    expectSuccessMasksSecret('AwsWifAuth');
+    expectSuccessMasksSecret('GcpWifAuth', ['mock-gcp-oidc-jwt-12345']);
+    expectSuccessMasksSecret('AwsWifAuth', ['mock-aws-oidc-jwt-12345']);
     expectSuccess('NoneAuth');
+    expectSuccess('GcpMultilinePemAuth');   // #108: genuine multi-line PEM must not throw
+
+    it('OciAuthPerLineMasking', async () => {
+        const tp = path.join(__dirname, 'OciAuth.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const setSecretCount = (tr.stdout.match(/##vso\[task\.setsecret\]/g) || []).length;
+            // The normalized PEM body is re-wrapped at 64 chars/line
+            // (pem-normalizer.ts); a 2048-bit RSA PKCS8 key's base64 body spans
+            // well over 5 lines, so per-line masking must register far more than
+            // a single secret. A regression to whole-key-only masking would drop
+            // this to 1.
+            assert.ok(setSecretCount > 5, `expected multiple per-line secret registrations for the normalized PEM; got ${setSecretCount}`);
+        }, tr);
+    });
+
+    it('GcpAuthPerLineMasking', async () => {
+        const tp = path.join(__dirname, 'GcpAuth.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const setSecretCount = (tr.stdout.match(/##vso\[task\.setsecret\]/g) || []).length;
+            // #108: before the fix, GCP registered exactly one setSecret call (the
+            // raw key); this pins the new per-line masking of the normalized
+            // on-disk form.
+            assert.ok(setSecretCount > 5, `expected multiple per-line secret registrations for the normalized PEM; got ${setSecretCount}`);
+        }, tr);
+    });
 
     // --- Cleanup: the real ParentCommandHandler.execute() path (not a direct
     // handleProvider() call) actually clears env vars and removes temp files. ---
@@ -107,6 +151,14 @@ describe('PackerTask Test Suite', function () {
     expectFailure('AwsWifMissingServiceConnReject');   // #73
     expectFailure('GcpWifMissingServiceConnReject');   // #73
     expectFailure('VsphereEmptyPasswordReject');       // #74
+    expectFailure('AzureUndefinedSchemeReject');               // #97
+    expectFailure('AzureMissingServicePrincipalSecretReject'); // #97
+    expectFailure('AzureUnknownSchemeRejects');                // #111
+    expectFailure('Hcl2UpgradeTraversalReject');               // #100
+    expectFailure('FixOutputTraversalReject');                 // #111
+    expectSuccess('ConsoleExpressionSuccess');                 // #111
+    expectSuccess('VsphereServerUserinfoStripped');            // #110
+    expectFailure('VsphereServerInvalidCharsetReject');        // #110
 
     it('VsphereInsecureConnectionWarns', async () => {
         const tp = path.join(__dirname, 'VsphereInsecureConnectionWarns.js');
@@ -159,6 +211,47 @@ describe('PackerTask Test Suite', function () {
         }, tr);
     });
 
+    it('BuildManifestArtifactIdControlCharsRejected', async () => {
+        const tp = path.join(__dirname, 'BuildManifestArtifactIdControlCharsRejected.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build should still succeed');
+            assert.ok(tr.stdout.includes('variable=manifestFilePath'), 'manifestFilePath should still be set');
+            assert.ok(!tr.stdout.includes('variable=artifactId'), 'artifactId with an embedded newline must be rejected, not exported');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('failed output-variable validation')),
+                'should warn that artifact_id failed validation. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('BuildManifestNotFoundWarns', async () => {
+        const tp = path.join(__dirname, 'BuildManifestNotFoundWarns.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build itself should still succeed');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('Manifest file not found')),
+                'a missing, explicitly-configured manifestFile should warn (not just debug-log). warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('BuildManifestUnparseableWarns', async () => {
+        const tp = path.join(__dirname, 'BuildManifestUnparseableWarns.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build itself should still succeed');
+            assert.ok(
+                tr.warningIssues.some((w) => w.includes('Could not parse Packer manifest')),
+                'an unparseable, explicitly-configured manifestFile should warn (not just debug-log). warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
     it('EnvironmentVariablesCollisionWarns', async () => {
         const tp = path.join(__dirname, 'EnvironmentVariablesCollisionWarns.js');
         const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
@@ -184,5 +277,27 @@ describe('PackerTask Test Suite', function () {
 
         assert.strictEqual(process.env['PACKER_TEST_EMERGENCY_CLEANUP'], undefined,
             'emergencyCleanup() must clear tracked env vars regardless of whether execute() ever ran');
+    });
+
+    it('FixOutputWritten', async () => {
+        const tp = path.join(__dirname, 'FixOutputWritten.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the fix command should succeed');
+            assert.ok(tr.stdout.includes('variable=fixFilePath'), 'fixFilePath output variable should be set');
+        }, tr);
+    });
+
+    it('BuildSecureVarsFileCleanup', async () => {
+        const tp = path.join(__dirname, 'BuildSecureVarsFileCleanup.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'the build should succeed with the secure var-file wired into -var-file');
+            assert.ok(tr.stdout.includes('SECUREFILE_DOWNLOADED:secure-file-id-e2e'), 'the secure file should be downloaded');
+            assert.ok(tr.stdout.includes('SECUREFILE_DELETED:secure-file-id-e2e'), 'the secure file should be deleted during finally-block cleanup');
+            assert.ok(tr.stdout.includes('mode=600'), 'the downloaded secure file should be chmod 0600 before cleanup (#103)');
+        }, tr);
     });
 });

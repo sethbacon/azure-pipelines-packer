@@ -120,7 +120,7 @@ describe('OIDC ID token generator — retry, timeout & secret handling', functio
     it('throws the localized error when the response omits oidcToken', async () => {
         globalThis.fetch = (async () =>
             new Response(JSON.stringify({ somethingElse: true }), { status: 200 })) as unknown as typeof globalThis.fetch;
-        await assert.rejects(new TokenGenerator().generate('sc-123'), /Error_FederatedTokenAquisitionFailed/);
+        await assert.rejects(new TokenGenerator().generate('sc-123'), /Error_FederatedTokenAcquisitionFailed/);
     });
 
     it('maps an abort/timeout to a clear timeout error', async () => {

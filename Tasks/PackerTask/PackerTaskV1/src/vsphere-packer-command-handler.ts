@@ -15,17 +15,30 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         this.providerName = "vsphere";
     }
 
+    private static readonly HOST_PATTERN = /^[A-Za-z0-9.-]+(:[0-9]+)?$/;
+
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
         const serviceName = command.serviceProviderName;
         if (!serviceName) {
             throw new Error("A vSphere service connection is required for this command. Set environmentServiceNameVSphere.");
         }
 
-        // The vsphere builder's vcenter_server expects a bare hostname, but the
-        // service connection URL field may carry a scheme and trailing slash.
-        const server = (tasks.getEndpointUrl(serviceName, false) || '')
-            .replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, '')
-            .replace(/\/+$/, '');
+        // The vsphere builder's vcenter_server expects a bare hostname[:port]. A
+        // lexical scheme-strip left userinfo and any path/query segment intact
+        // (e.g. 'https://user:secret@vcenter.example.com/sdk' -> a credential
+        // riding into this unmasked PKR_VAR_*), so parse properly and take only
+        // url.host, then validate its charset like the OCI fields (#110).
+        const endpointUrl = tasks.getEndpointUrl(serviceName, false) || '';
+        let server: string;
+        try {
+            const withScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(endpointUrl) ? endpointUrl : `https://${endpointUrl}`;
+            server = new URL(withScheme).host;
+        } catch {
+            throw new Error(`vSphere service connection '${serviceName}' has an invalid server URL: '${endpointUrl}'.`);
+        }
+        if (!PackerCommandHandlerVSphere.HOST_PATTERN.test(server)) {
+            throw new Error(`vSphere service connection '${serviceName}' server '${server}' contains characters outside the allowed hostname[:port] charset.`);
+        }
         const username = tasks.getEndpointAuthorizationParameter(serviceName, "username", false) || '';
         const password = tasks.getEndpointAuthorizationParameter(serviceName, "password", false) || '';
         if (!password) {

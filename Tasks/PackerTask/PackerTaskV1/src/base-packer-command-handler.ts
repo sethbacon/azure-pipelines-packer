@@ -197,12 +197,19 @@ export abstract class BasePackerCommandHandler {
     }
 
     /**
-     * Writes `content` to a uniquely-named 0600 temp file (`<prefix>-<uuid>.<ext>`
-     * in the OS tmpdir), tracks it for cleanup, and returns the path. Centralizes
-     * the temp-secret convention shared by the AWS/GCP/OCI handlers.
+     * Writes `content` to a uniquely-named 0600 temp file (`<prefix>-<uuid>.<ext>`),
+     * tracks it for cleanup, and returns the path. Centralizes the temp-secret
+     * convention shared by the AWS/GCP/OCI handlers.
      */
     protected writeTrackedSecretFile(prefix: string, ext: string, content: string): string {
-        const filePath = path.join(os.tmpdir(), `${prefix}-${uuidV4()}.${ext}`);
+        // Prefer Agent.TempDirectory (purged between jobs) over the shared OS
+        // tmpdir so an abnormal termination (SIGKILL, hard crash) that skips the
+        // finally-block/signal-handler cleanup still gets an agent-provided
+        // backstop for these long-lived credential files (#104). Falls back to
+        // os.tmpdir() for headless/mock runs (and any run where the variable is
+        // unset), which is every existing test -- no behavior change there.
+        const baseDir = tasks.getVariable('Agent.TempDirectory') || os.tmpdir();
+        const filePath = path.join(baseDir, `${prefix}-${uuidV4()}.${ext}`);
         writeSecretFile(filePath, content);
         this.tempFiles.push(filePath);
         return filePath;
@@ -227,7 +234,9 @@ export abstract class BasePackerCommandHandler {
                     tasks.debug(`Cleaned up temp file: ${filePath}`);
                 }
             } catch (err) {
-                tasks.debug(`Failed to clean up temp file ${filePath}: ${err}`);
+                // A leftover credential temp file (OIDC token / GCP or OCI key) is
+                // a real exposure on a self-hosted agent -- surface it above debug (#104).
+                tasks.warning(`Failed to clean up temp file ${filePath}: ${err}`);
             }
         }
         this.tempFiles = [];
@@ -236,7 +245,7 @@ export abstract class BasePackerCommandHandler {
             try {
                 new SecureFileLoader().deleteSecureFile(this.secureFileId);
             } catch (err) {
-                tasks.debug(`Failed to clean up secure file: ${err}`);
+                tasks.warning(`Failed to clean up secure file: ${err}`);
             }
             this.secureFileId = null;
         }
@@ -413,8 +422,20 @@ export abstract class BasePackerCommandHandler {
                 throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
             }
             const result = await this.execWithStdoutCapture(tool, { cwd: command.workingDirectory });
+            // Re-validate immediately before writing (TOCTOU guard, #110): packer
+            // fix's run is an arbitrarily long window during which a symlink could
+            // be planted at `resolved`, which the lexical write below cannot
+            // itself detect.
+            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+                throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}) after packer fix ran. Refusing to write.`);
+            }
             tasks.writeFile(resolved, result.stdout);
-            tasks.setVariable('fixFilePath', resolved, false, true);
+            const safeFixFilePath = this.sanitizeOutputVariableValue(resolved);
+            if (safeFixFilePath) {
+                tasks.setVariable('fixFilePath', safeFixFilePath, false, true);
+            } else {
+                tasks.warning(`fixFilePath '${resolved}' failed output-variable validation (length/printable-ASCII); skipping fixFilePath output variable.`);
+            }
             return result.code;
         }
 
@@ -426,7 +447,17 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         const outputFile = tasks.getInput("hclOutputFile", false);
-        if (outputFile) tool.arg(`-output-file=${outputFile}`);
+        if (outputFile) {
+            // Same containment guard as fixOutputFile/manifestFile (#100): packer
+            // resolves a relative -output-file against its cwd (workingDirectory),
+            // so validate before handing it through; the CLI arg itself stays
+            // relative (packer does the actual resolution against the same cwd).
+            const resolved = path.resolve(command.workingDirectory, outputFile);
+            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+                throw new Error(`hclOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
+            }
+            tool.arg(`-output-file=${outputFile}`);
+        }
         if (tasks.getBoolInput("withAnnotations", false)) tool.arg('-with-annotations');
 
         this.applyCommandOptions(tool);
@@ -482,6 +513,24 @@ export abstract class BasePackerCommandHandler {
      * output and exposes the last build's artifact id and the manifest path as
      * pipeline output variables. No-op when the manifest is absent or unparseable.
      */
+    /** Upper bound on a template-controlled value before it becomes a pipeline output variable. */
+    private static readonly OUTPUT_VAR_MAX_LENGTH = 1024;
+
+    /**
+     * Caps length and requires printable-ASCII content before a template- or
+     * build-influenced value becomes a pipeline output variable. The manifest
+     * JSON (artifactId in particular) is written by the Packer manifest
+     * post-processor -- i.e. build-template-controlled, possibly from a less
+     * trusted repo than the pipeline definition -- and later steps commonly
+     * macro-expand $(artifactId) into a script, so embedded newlines/NUL/
+     * control bytes are command/argument injection, not just log noise (#101).
+     * Returns null (caller should skip the variable) when validation fails.
+     */
+    private sanitizeOutputVariableValue(value: string): string | null {
+        if (!value || value.length > BasePackerCommandHandler.OUTPUT_VAR_MAX_LENGTH) return null;
+        return /^[\x20-\x7E]+$/.test(value) ? value : null;
+    }
+
     private setBuildOutputs(): void {
         const manifestFile = tasks.getInput("manifestFile", false);
         if (!manifestFile) return;
@@ -492,26 +541,42 @@ export abstract class BasePackerCommandHandler {
             return;
         }
         if (!fs.existsSync(resolved)) {
-            tasks.debug(`Manifest file not found at ${resolved}; skipping build output variables.`);
+            // Explicitly configured by the user -- a missing manifest usually means
+            // the template's manifest post-processor block is missing/misconfigured,
+            // which should be diagnosable from this step's own log, not debug-only (#106).
+            tasks.warning(`Manifest file not found at ${resolved}; skipping build output variables.`);
             return;
         }
         try {
             const manifest = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-            tasks.setVariable('manifestFilePath', resolved, false, true);
+            const safeManifestPath = this.sanitizeOutputVariableValue(resolved);
+            if (safeManifestPath) {
+                tasks.setVariable('manifestFilePath', safeManifestPath, false, true);
+            } else {
+                tasks.warning(`manifestFilePath '${resolved}' failed output-variable validation (length/printable-ASCII); skipping manifestFilePath output variable.`);
+            }
 
             const builds = manifest.builds;
             if (Array.isArray(builds) && builds.length > 0) {
                 const last = builds[builds.length - 1];
                 const artifactId = last?.artifact_id;
                 if (typeof artifactId === 'string' || typeof artifactId === 'number') {
-                    tasks.setVariable('artifactId', String(artifactId), false, true);
-                    tasks.debug(`Set artifactId output variable: ${artifactId}`);
+                    const safeArtifactId = this.sanitizeOutputVariableValue(String(artifactId));
+                    if (safeArtifactId) {
+                        tasks.setVariable('artifactId', safeArtifactId, false, true);
+                        tasks.debug(`Set artifactId output variable: ${safeArtifactId}`);
+                    } else {
+                        tasks.warning(`Manifest artifact_id failed output-variable validation (length/printable-ASCII); skipping artifactId output variable.`);
+                    }
                 } else if (artifactId !== undefined) {
                     tasks.debug(`Manifest artifact_id is not a string or number (${typeof artifactId}); skipping artifactId output variable.`);
                 }
             }
         } catch (err) {
-            tasks.debug(`Could not parse Packer manifest for build outputs: ${err}`);
+            // Explicitly configured by the user -- a parse failure means the
+            // manifest post-processor produced corrupt/unexpected JSON, which
+            // should be diagnosable from this step's own log, not debug-only (#106).
+            tasks.warning(`Could not parse Packer manifest for build outputs: ${err}`);
         }
     }
 }

@@ -28,7 +28,8 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
     public async handleProvider(_command: PackerAuthorizationCommandInitializer): Promise<void> {
         const serviceConnectionID = tasks.getInput("environmentServiceNameAzureRM", true)!;
         const authorizationScheme = this.mapAuthorizationScheme(
-            tasks.getEndpointAuthorizationScheme(serviceConnectionID, true)!
+            tasks.getEndpointAuthorizationScheme(serviceConnectionID, true),
+            serviceConnectionID
         );
 
         tasks.debug("Setting up Azure provider for authorization scheme: " + authorizationScheme + ".");
@@ -69,10 +70,18 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
 
             case AuthorizationScheme.ServicePrincipal: {
                 tasks.warning("Client secret authentication is less secure than Workload Identity Federation. Prefer a WIF-configured service connection where possible.");
-                const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true)!;
-                const servicePrincipalKey = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalkey", true)!;
+                const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true);
+                const servicePrincipalKey = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalkey", true);
+                if (!servicePrincipalId || !servicePrincipalKey) {
+                    // Fail closed like AWS/GCP/vSphere/OCI: a missing client id or
+                    // secret would otherwise be silently skipped by the env helper
+                    // (warning only), leaving packer-plugin-azure to fall back to the
+                    // agent VM's ambient managed identity (its MSI path) and
+                    // authenticate as an unintended, possibly more-privileged identity.
+                    throw new Error(`Azure service principal credentials are incomplete for service connection '${serviceConnectionID}'. Both a service principal id and key are required.`);
+                }
+                tasks.setSecret(servicePrincipalKey);
                 const tenantId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false);
-                if (servicePrincipalKey) { tasks.setSecret(servicePrincipalKey); }
                 EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
                 if (tenantId) {
                     EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
@@ -85,10 +94,14 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
         tasks.debug("Finished setting up Azure provider for authorization scheme: " + authorizationScheme + ".");
     }
 
-    private mapAuthorizationScheme(authorizationScheme: string): AuthorizationScheme {
-        if (authorizationScheme === undefined) {
-            tasks.warning("The authorization scheme could not be found for your Service Connection, using Workload Identity Federation by default.");
-            return AuthorizationScheme.WorkloadIdentityFederation;
+    private mapAuthorizationScheme(authorizationScheme: string | undefined, serviceConnectionID: string): AuthorizationScheme {
+        if (!authorizationScheme) {
+            // Fail closed like AWS/GCP/vSphere/OCI: a service connection with no
+            // authorization scheme must not silently default to Workload Identity
+            // Federation. Combined with packer-plugin-azure's MSI fallback, a silent
+            // default could authenticate as the agent VM's ambient managed identity
+            // instead of the intended service connection.
+            throw new Error(`Service connection '${serviceConnectionID}' has no authorization scheme. Expected one of: WorkloadIdentityFederation, ManagedServiceIdentity, ServicePrincipal.`);
         }
         const scheme = authorizationScheme.toLowerCase();
         if (scheme === AuthorizationScheme.ServicePrincipal) return AuthorizationScheme.ServicePrincipal;

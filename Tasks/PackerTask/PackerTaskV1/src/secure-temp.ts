@@ -24,3 +24,21 @@ export function writeSecretFile(filePath: string, content: string): void {
         tasks.debug('Skipping chmod on Windows platform (ACLs apply instead).');
     }
 }
+
+/**
+ * Tightens permissions on an already-existing file to 0o600 -- for content
+ * written by a third-party library (e.g. securefiles-common's download) that
+ * cannot be routed through writeSecretFile's own create-with-mode path (#103).
+ * Same Windows fallback: chmod is a no-op on NTFS, so a platform-specific
+ * failure there is swallowed rather than treated as fatal.
+ */
+export function tightenFilePermissions(filePath: string): void {
+    try {
+        fs.chmodSync(filePath, 0o600);
+    } catch (err) {
+        if (process.platform !== 'win32') {
+            throw new Error(`Failed to set restrictive permissions on ${filePath}: ${err instanceof Error ? err.message : err}`);
+        }
+        tasks.debug('Skipping chmod on Windows platform (ACLs apply instead).');
+    }
+}

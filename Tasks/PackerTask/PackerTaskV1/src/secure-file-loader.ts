@@ -1,4 +1,5 @@
 import tasks = require('azure-pipelines-task-lib/task');
+import { tightenFilePermissions } from './secure-temp';
 
 export interface ISecureFileLoader {
     downloadSecureFile(secureFileId: string): Promise<string>;
@@ -21,6 +22,11 @@ export class SecureFileLoader implements ISecureFileLoader {
     public async downloadSecureFile(secureFileId: string): Promise<string> {
         tasks.debug(`Downloading secure file: ${secureFileId}`);
         const filePath = await this.helpers.downloadSecureFile(secureFileId);
+        // The secure file (which may carry secrets in a .pkrvars file) is
+        // downloaded by the upstream library with default (typically 0644)
+        // permissions and never tightened, unlike this task's own secret temp
+        // files (secure-temp.ts). Chmod it to 0600 before packer ever sees it (#103).
+        tightenFilePermissions(filePath);
         tasks.debug(`Secure file downloaded to: ${filePath}`);
         return filePath;
     }
@@ -30,7 +36,9 @@ export class SecureFileLoader implements ISecureFileLoader {
             this.helpers.deleteSecureFile(secureFileId);
             tasks.debug(`Deleted secure file: ${secureFileId}`);
         } catch (err) {
-            tasks.debug(`Failed to delete secure file ${secureFileId}: ${err}`);
+            // The downloaded file carries user secrets; a failed cleanup leaves it
+            // on disk, so surface this above debug (#104).
+            tasks.warning(`Failed to delete secure file ${secureFileId}: ${err}`);
         }
     }
 }

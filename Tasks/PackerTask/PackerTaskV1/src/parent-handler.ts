@@ -7,12 +7,7 @@ import { PackerCommandHandlerVSphere } from './vsphere-packer-command-handler';
 import { PackerCommandHandlerNone } from './none-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
 
-export interface IParentCommandHandler {
-    execute(providerName: string, command: string): Promise<number>;
-    emergencyCleanup(): void;
-}
-
-export class ParentCommandHandler implements IParentCommandHandler {
+export class ParentCommandHandler {
     private activeHandler: BasePackerCommandHandler | null = null;
 
     public async execute(providerName: string, command: string): Promise<number> {
