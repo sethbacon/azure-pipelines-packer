@@ -98,10 +98,10 @@ jobs:
           persist-credentials: false
       - name: Install actionlint
         shell: bash
-        # Installer script pinned to a release tag (not `main`) and given an
-        # explicit version, so both the fetched script and the resulting
-        # binary are deterministic rather than tracking a mutable branch.
-        run: bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+        # Installer script pinned to a commit SHA (not the mutable `v1.7.12`
+        # tag, and not `main`) and given an explicit version, so both the
+        # fetched script and the resulting binary are deterministic.
+        run: bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash) 1.7.12
       - name: Run actionlint
         run: ./actionlint -color
 
