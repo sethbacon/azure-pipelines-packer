@@ -8,7 +8,6 @@ Azure DevOps extension providing HashiCorp Packer integration for Azure Pipeline
 - **PackerTaskV1** — run any Packer CLI command with per-provider service-connection auth (Azure, AWS, GCP, OCI, vSphere, none).
 
 **Repo:** `https://github.com/sethbacon/azure-pipelines-packer`
-Local path: `C:\dev\gh\azure-pipelines-packer`
 
 **VS Marketplace publisher:** `sethbacon`
 **Extension ID:** `pipeline-tasks-packer`
@@ -26,7 +25,7 @@ Local path: `C:\dev\gh\azure-pipelines-packer`
 1. Branch from `main`.
 2. Make changes.
 3. Local quality gate: `npm run compile` and `npm test` in the affected task directory.
-4. PR to `main` with a conventional-commit title; CI runs version check → build/test (Ubuntu + Windows) → actionlint.
+4. PR to `main` with a conventional-commit title; CI runs version check → shared-module provenance check → build/test (Ubuntu + Windows) → actionlint → zizmor, plus PR-title/dependency-review checks and CodeQL.
 5. Squash-merge when green.
 
 Before tagging a release, bump the `Minor` field in `task.json` for every task whose code changed since the last release (ADO caches tasks by `Major.Minor`).
@@ -44,8 +43,18 @@ azure-pipelines-packer/
 │   └── PackerTask/PackerTaskV1/             # Command task (active development target)
 ├── configs/{dev,release,self}.json          # Manifest publisher overrides (self.json gitignored)
 ├── docs/initiatives/                        # Initiative plans
-├── scripts/{check-versions,copy-build}.js   # CI version check + build copy
-└── .github/workflows/unit-test.yml          # CI
+├── scripts/
+│   ├── check-versions.js                    # CI: fails if a changed task's Minor wasn't bumped
+│   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
+│   │                                         #     on files copied from azure-pipelines-terraform
+│   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
+└── .github/workflows/
+    ├── unit-test.yml         # CI: version/provenance checks, build/test, actionlint, zizmor
+    ├── pr-checks.yml         # PR title convention, dependency review
+    ├── release.yml           # Tag-triggered: build, sign, attest, publish, draft/undraft release
+    ├── release-please.yml    # main-triggered: version-bump PR automation
+    ├── codeql.yml            # CodeQL analysis (PR, push to main, weekly)
+    └── weekly-security.yml   # OSV scan, GPG key freshness, stale-Dependabot check
 ```
 
 ## PackerInstallerV1
@@ -85,12 +94,14 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `none-packer-command-handler.ts` | No cloud creds (local/hypervisor builders) |
 | `environment-variables.ts` | Tracked env var helper with `finally`-block cleanup |
 | `secure-file-loader.ts`, `secure-temp.ts`, `id-token-generator.ts` | Secure file download, restrictive temp writes, OIDC token generation |
+| `pem-normalizer.ts` | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping |
 
 ### Commands
 
 `init`, `validate`, `build`, `fmt`, `inspect`, `console`, `fix`, `hcl2_upgrade`, `plugins`, `version`, `custom`. Commands that need cloud credentials (`build`, optionally `validate`/`console`/`custom`) call `handleProvider()`; the rest skip auth.
 
 - `build` injects provider auth, supports `-only`/`-except`/`-parallel-builds`/`-on-error`/`-force`, and (when `manifestFile` is set) reads the Packer `manifest` post-processor output to set the `artifactId` and `manifestFilePath` output variables.
+- `fix` only writes a file and sets the `fixFilePath` output variable when `fixOutputFile` is explicitly set; otherwise the fixed template goes to stdout only.
 - `fmt` defaults to check mode (`-check -diff`); a formatting diff fails the task.
 - Credentials are injected as environment variables (never CLI args) and cleared via `EnvironmentVariableHelper.clearTrackedVariables()` in the `finally` block after every command.
 
