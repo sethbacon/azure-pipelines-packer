@@ -35,9 +35,14 @@ Three inputs deliberately weaken integrity/transport verification and default to
 
 ## Release pipeline residual risk: Entra token visible via process arguments
 
-The `publish-marketplace` job in `release.yml` mints a short-lived (~1 hour) Microsoft Entra access token, scoped only to the Azure DevOps resource app, and passes it to `tfx extension publish --token "$ENTRA_TOKEN"` to authenticate the Marketplace publish. The token is registered with `::add-mask::` so it never appears in the GitHub Actions log, but it is still visible in `/proc/<pid>/cmdline` for the lifetime of the `tfx` process — GitHub Actions runners do not hide process arguments from other processes in the same job.
+The `publish-marketplace` job in `release.yml` mints a Microsoft Entra access token, scoped only to the Azure DevOps resource app, and passes it to `tfx extension publish --token "$ENTRA_TOKEN"` to authenticate the Marketplace publish. The token is registered with `::add-mask::` so it never appears in the GitHub Actions log, but it is still visible in `/proc/<pid>/cmdline` for the lifetime of the `tfx` process — GitHub Actions runners do not hide process arguments from other processes in the same job.
 
-This was not fixed in code because `tfx-cli` 0.23.2 (the current pinned version) has no non-argv way to supply `--token`: no token-file option and no interactive stdin prompt. The realistic exposure is narrow — the only thing that could read `/proc/<pid>/cmdline` is other code already running in that same job, on a runner that is torn down immediately after — so the actual mitigation is denying that other code a foothold in the first place: the job runs `npm ci --ignore-scripts`, which stops a compromised transitive dependency (e.g. one accepted via a routine version bump) from ever executing in this job. If a future `tfx-cli` release adds a non-argv token option, this job should switch to it.
+This was not fixed in code because `tfx-cli` 0.23.2 (the current pinned version) has no non-argv way to supply `--token`: no token-file option and no interactive stdin prompt. Two mitigations are in place instead:
+
+- **Token lifetime is capped at 10 minutes** via a Microsoft Graph `tokenLifetimePolicy` assigned to the publishing service principal (`tsm-azdo-marketplace-publisher`, shared with the `azure-pipelines-terraform` extension's identical publish flow), down from the platform default of ~60-90 minutes. The `tfx extension publish` step completes in seconds, so this costs nothing operationally while sharply narrowing the window in which an exfiltrated token would still be valid.
+- **The realistic exposure is narrow to begin with**: the only thing that could read `/proc/<pid>/cmdline` is other code already running in that same job, on a runner that is torn down immediately after. `npm ci --ignore-scripts` denies that other code a foothold in the first place, stopping a compromised transitive dependency (e.g. one accepted via a routine version bump) from ever executing in this job.
+
+If a future `tfx-cli` release adds a non-argv token option, this job should switch to it and the token-lifetime policy can be relaxed back toward the platform default if useful.
 
 ## Verifying a release artifact
 
