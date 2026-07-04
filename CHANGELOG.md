@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.3...v1.2.4) (2026-07-04)
+
+
+### Documentation
+
+* fix invalid HCL samples, correct security-toggle inventory, rewrite THIRD_PARTY_NOTICES, document WIF token lifetime ([#120](https://github.com/sethbacon/azure-pipelines-packer/issues/120)) ([8177514](https://github.com/sethbacon/azure-pipelines-packer/commit/8177514cac48f82f745d59e90f1844714ac70553))
+* mark http-client.ts IN-SYNC now that terraform has the backport ([#122](https://github.com/sethbacon/azure-pipelines-packer/issues/122)) ([1681128](https://github.com/sethbacon/azure-pipelines-packer/commit/16811282c3de282eb318cc13038fe77cf12a8069))
+* surface the Entra token argv-exposure residual risk in SECURITY.md ([#121](https://github.com/sethbacon/azure-pipelines-packer/issues/121)) ([710d9aa](https://github.com/sethbacon/azure-pipelines-packer/commit/710d9aa67b032d7747c085809124e34f9927ca60))
+
+
+### Security
+
+* fail-closed Azure auth, path traversal guards, and OIDC hardening for PackerTaskV1 ([#117](https://github.com/sethbacon/azure-pipelines-packer/issues/117)) ([d3d4e4e](https://github.com/sethbacon/azure-pipelines-packer/commit/d3d4e4eca5efa9b611833a898f6b7332e7aff047))
+* harden release pipeline against supply-chain and tag-mismatch risks ([#119](https://github.com/sethbacon/azure-pipelines-packer/issues/119)) ([767c6ba](https://github.com/sethbacon/azure-pipelines-packer/commit/767c6ba90dc7f3c78f5a37e9b425d3a5eafeefc4))
+* installer supply-chain hardening (P0 token leak + fail-open fixes) ([#115](https://github.com/sethbacon/azure-pipelines-packer/issues/115)) ([e06dda4](https://github.com/sethbacon/azure-pipelines-packer/commit/e06dda48d0453949369c29099eb10970f6ea380e))
+
 ## [1.2.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.2...v1.2.3) (2026-07-02)
 
 
