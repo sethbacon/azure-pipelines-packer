@@ -6,7 +6,7 @@ import fs = require('fs');
 import crypto = require('crypto');
 
 import { randomUUID as uuidV4 } from 'crypto';
-import { fetchJson, fetchText, fetchTextAllow404 } from './http-client';
+import { fetchJson, fetchText, fetchTextAllow404, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
 
 const packerToolName = "packer";
@@ -26,7 +26,13 @@ class ChecksumUnavailableError extends Error {
     constructor(message: string) { super(message); this.name = 'ChecksumUnavailableError'; }
 }
 
-/** Strips the query string (which can carry a pre-signed signature/token) from a URL for safe logging. */
+/**
+ * Strips the ENTIRE query string (which can carry a pre-signed signature/token —
+ * Azure `sig`, AWS `X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Security-Token`,
+ * GCS `X-Goog-Signature`/`X-Goog-Credential`) from a URL for safe logging. The whole
+ * query is dropped rather than redacting known parameter names one at a time, so an
+ * unforeseen token parameter can never leak through the error path.
+ */
 function redactUrl(url: string): string {
     try {
         const u = new URL(url);
@@ -34,6 +40,47 @@ function redactUrl(url: string): string {
     } catch {
         return url.split('?')[0];
     }
+}
+
+/**
+ * True when a query-string parameter carries a live pre-signed credential/token: its
+ * name is exactly `sig` (Azure SAS) or contains `signature`, `credential`, or `token`
+ * — covering AWS (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Security-Token`) and GCS
+ * (`X-Goog-Signature`/`X-Goog-Credential`) while leaving benign params such as
+ * `X-Amz-SignedHeaders`, `X-Amz-Date`, and `X-Amz-Expires` visible.
+ */
+function isSensitiveQueryParam(name: string): boolean {
+    const lower = name.toLowerCase();
+    return lower === 'sig'
+        || lower.includes('signature')
+        || lower.includes('credential')
+        || lower.includes('token');
+}
+
+/**
+ * Extracts the values of every sensitive query-string token in `url`. Values are
+ * returned in the raw form they appear in the URL (still percent-encoded) so they
+ * match the exact substring tool-lib logs at INFO; the decoded form is added too when
+ * it differs, so a consumer that logs the decoded value is masked as well. Used to
+ * setSecret() the tokens before download and to scrub them from any failure message.
+ */
+function extractUrlTokenSecrets(url: string): string[] {
+    const qIndex = url.indexOf('?');
+    if (qIndex === -1) return [];
+    const query = url.slice(qIndex + 1).split('#')[0];
+    const secrets: string[] = [];
+    for (const pair of query.split('&')) {
+        const eq = pair.indexOf('=');
+        if (eq === -1) continue;
+        const name = pair.slice(0, eq);
+        const rawValue = pair.slice(eq + 1);
+        if (!rawValue || !isSensitiveQueryParam(name)) continue;
+        secrets.push(rawValue);
+        let decoded: string;
+        try { decoded = decodeURIComponent(rawValue); } catch { decoded = rawValue; }
+        if (decoded !== rawValue) secrets.push(decoded);
+    }
+    return secrets;
 }
 
 /**
@@ -48,11 +95,41 @@ function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
     return value === 'true';
 }
 
+/**
+ * Races tools.downloadTool (azure-pipelines-tool-lib's typed-rest-client based
+ * downloader) against a wall-clock timeout. downloadTool applies no timeout of its
+ * own, so a stalled connection would otherwise hang the zip download — the largest
+ * and slowest fetch of the install — until the pipeline's own job-timeout kills the
+ * whole task with no specific diagnostic. Reuses the same DOWNLOAD_TIMEOUT_MS ceiling
+ * the GPG signature fetch uses. `timeoutMs` is a parameter (default DOWNLOAD_TIMEOUT_MS)
+ * purely so it can be exercised directly in a unit test without a 10-minute wait; every
+ * real call site uses the default. See #105.
+ *
+ * Note: Promise.race cannot cancel the underlying request if it loses the race — the
+ * download continues in the background — but the task has already failed and the
+ * process exits shortly after, so this is an accepted, low-cost limitation rather
+ * than a full re-architecture onto the hardened http-client (see #105 deferred notes).
+ */
+export async function downloadToolWithTimeout(url: string, fileName: string, timeoutMs: number = DOWNLOAD_TIMEOUT_MS): Promise<string> {
+    let timer!: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Download of ${redactUrl(url)} timed out after ${timeoutMs}ms.`)), timeoutMs);
+    });
+    try {
+        return await Promise.race([tools.downloadTool(url, fileName), timeout]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 const MIRROR_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /** Reads and validates registryMirrorName against a conservative charset, rejecting path separators/traversal shapes. */
 function getValidatedMirrorName(): string {
-    const mirrorName = tasks.getInput("registryMirrorName", true)! || "packer";
+    // registryMirrorName is required=true with task.json defaultValue "packer", so
+    // getInput() here always returns a non-empty string or throws first; the old
+    // `|| "packer"` fallback was unreachable dead code.
+    const mirrorName = tasks.getInput("registryMirrorName", true)!;
     if (!MIRROR_NAME_PATTERN.test(mirrorName)) {
         throw new Error(`registryMirrorName '${mirrorName}' contains characters other than letters, digits, '.', '_', '-'.`);
     }
@@ -132,17 +209,23 @@ async function resolveVersionFromHashiCorp(inputVersion: string): Promise<string
         return inputVersion;
     }
     console.log(tasks.loc("GettingLatestPackerVersion"));
+    // Only a genuine request failure (network/timeout/5xx, already retried by fetchJson)
+    // falls back to the pinned version — that's an availability tradeoff worth keeping.
+    // A malformed response (the API contract itself broke) is NOT caught here: it throws
+    // fatally instead of silently downgrading, since silently trusting a fallback version
+    // in that case would mask a real API-shape regression rather than a transient blip.
+    let data: { current_version: string };
     try {
-        const data = await fetchJson<{ current_version: string }>('https://checkpoint-api.hashicorp.com/v1/check/packer');
-        if (!data.current_version) {
-            throw new Error("HashiCorp checkpoint API returned invalid response: missing current_version");
-        }
-        return data.current_version;
+        data = await fetchJson<{ current_version: string }>('https://checkpoint-api.hashicorp.com/v1/check/packer');
     } catch (err) {
         tasks.debug(`HashiCorp checkpoint API request failed: ${err}`);
         tasks.warning(`${tasks.loc("PackerVersionNotFound")} (falling back to ${FALLBACK_PACKER_VERSION})`);
         return FALLBACK_PACKER_VERSION;
     }
+    if (!data.current_version) {
+        throw new Error("HashiCorp checkpoint API returned invalid response: missing current_version");
+    }
+    return data.current_version;
 }
 
 async function resolveVersionFromRegistry(inputVersion: string, registryUrl: string, mirrorName: string): Promise<string> {
@@ -166,7 +249,7 @@ async function downloadZipFromHashiCorp(version: string): Promise<string> {
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
-        zipPath = await tools.downloadTool(downloadUrl, fileName);
+        zipPath = await downloadToolWithTimeout(downloadUrl, fileName);
     } catch (exception) {
         throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
     }
@@ -208,15 +291,32 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     }
 
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
+    // The pre-signed download_url carries a live, read-scoped storage credential in
+    // its query string. tools.downloadTool logs the URL at INFO and only auto-redacts
+    // Azure `sig=`, so AWS X-Amz-Signature/X-Amz-Credential/X-Amz-Security-Token and
+    // GCS X-Goog-Signature/X-Goog-Credential would otherwise print unredacted on every
+    // normal registry run. Register each token component as a secret FIRST so the agent
+    // masks it in tool-lib's log line (and in any failure message). See #98.
+    const urlTokenSecrets = extractUrlTokenSecrets(data.download_url);
+    for (const secret of urlTokenSecrets) {
+        tasks.setSecret(secret);
+    }
     let zipPath: string;
     try {
-        zipPath = await tools.downloadTool(data.download_url, fileName);
+        zipPath = await downloadToolWithTimeout(data.download_url, fileName);
     } catch (exception) {
         // download_url is a pre-signed URL whose query string carries the signing
-        // token; redact it (and scrub it from the tool-lib exception text) so the
-        // live credential never reaches the build log via the failure message.
+        // token; drop the whole query (redactUrl) and scrub the raw URL out of the
+        // tool-lib exception text so the live credential never reaches the build log
+        // via the failure message.
         const safeUrl = redactUrl(data.download_url);
-        const safeMsg = String(exception instanceof Error ? exception.message : exception).split(data.download_url).join(safeUrl);
+        let safeMsg = String(exception instanceof Error ? exception.message : exception).split(data.download_url).join(safeUrl);
+        // Belt-and-suspenders: tool-lib may embed a URL it partially transformed
+        // (its own `sig=` redaction) that the exact-URL replace above misses, so also
+        // scrub each known token value out of the message.
+        for (const secret of urlTokenSecrets) {
+            safeMsg = safeMsg.split(secret).join('<redacted>');
+        }
         throw new Error(tasks.loc("PackerDownloadFailed", safeUrl, safeMsg));
     }
 
@@ -243,7 +343,7 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
-        zipPath = await tools.downloadTool(downloadUrl, fileName);
+        zipPath = await downloadToolWithTimeout(downloadUrl, fileName);
     } catch (exception) {
         throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
     }

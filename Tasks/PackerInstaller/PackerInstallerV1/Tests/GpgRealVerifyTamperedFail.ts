@@ -43,9 +43,9 @@ async function main() {
             if (url.endsWith('SHA256SUMS')) return TAMPERED_SHA256SUMS;
             throw new Error('Unexpected fetchText URL: ' + url);
         },
-        fetchBuffer: async (url: string) => {
+        fetchBufferAllow404: async (url: string) => {
             if (url.endsWith('.sig')) return signatureBytes as Uint8Array;
-            throw new Error('Unexpected fetchBuffer URL: ' + url);
+            throw new Error('Unexpected fetchBufferAllow404 URL: ' + url);
         }
     });
 

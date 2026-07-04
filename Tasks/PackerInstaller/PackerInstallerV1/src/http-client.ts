@@ -4,8 +4,9 @@
 //   provenance header current. Enforced by scripts/check-shared-modules.js.
 // @shared-module-status: DIVERGED — this copy is intentionally ahead of upstream: it adds
 //   per-hop redirect host/scheme re-validation + MAX_REDIRECTS, a typed HttpError with a
-//   withRetry backoff wrapper, and fetchTextAllow404 (2026-07 installer hardening, #75/#78).
-//   Backport to azure-pipelines-terraform is pending; do not "reconcile" by reverting these.
+//   withRetry backoff wrapper, fetchTextAllow404 (2026-07 installer hardening, #75/#78), and
+//   fetchBufferAllow404 (#106). Backport to azure-pipelines-terraform is pending; do not
+//   "reconcile" by reverting these.
 import tasks = require('azure-pipelines-task-lib/task');
 import { ProxyAgent } from 'undici';
 
@@ -166,6 +167,22 @@ export function fetchTextAllow404(url: string): Promise<string | null> {
 
 export function fetchBuffer(url: string): Promise<Uint8Array> {
     return withRetry(() => fetchWithTimeout(url, DOWNLOAD_TIMEOUT_MS, async (response) => {
+        if (!response.ok) {
+            throw new HttpError(`Failed to fetch ${url}: HTTP ${response.status}`, response.status >= 500);
+        }
+        return new Uint8Array(await response.arrayBuffer());
+    }));
+}
+
+/**
+ * Like fetchBuffer, but returns null on a 404 (resource genuinely absent) so
+ * callers can distinguish "not published" from a transient/other failure
+ * without substring-matching error text. Other non-2xx and network errors
+ * still throw (5xx is retried).
+ */
+export function fetchBufferAllow404(url: string): Promise<Uint8Array | null> {
+    return withRetry(() => fetchWithTimeout(url, DOWNLOAD_TIMEOUT_MS, async (response) => {
+        if (response.status === 404) return null;
         if (!response.ok) {
             throw new HttpError(`Failed to fetch ${url}: HTTP ${response.status}`, response.status >= 500);
         }
