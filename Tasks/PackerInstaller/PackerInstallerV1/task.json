@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "6",
+        "Minor": "7",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -98,6 +98,9 @@
         }
     },
     "execution": {
+        "Node20_1": {
+            "target": "src/index.js"
+        },
         "Node24": {
             "target": "src/index.js"
         }

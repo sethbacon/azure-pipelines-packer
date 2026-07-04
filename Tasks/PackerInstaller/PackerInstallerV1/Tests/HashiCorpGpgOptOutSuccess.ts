@@ -2,10 +2,11 @@ import ma = require('azure-pipelines-task-lib/mock-answer');
 import tmrm = require('azure-pipelines-task-lib/mock-run');
 import path = require('path');
 
-// #68: with requireGpgSignature=false and the .sig unavailable, the hashicorp install
-// SUCCEEDS (SHA256 is still enforced) via the REAL gpg-verifier's downgrade branch.
-// gpg-verifier is intentionally NOT mocked; only its fetchBuffer dependency (the .sig
-// fetch) is made to fail so the "unavailable && !required -> warn+return" path runs.
+// #68: with requireGpgSignature=false and the .sig unavailable (a genuine 404), the
+// hashicorp install SUCCEEDS (SHA256 is still enforced) via the REAL gpg-verifier's
+// downgrade branch. gpg-verifier is intentionally NOT mocked; only its
+// fetchBufferAllow404 dependency (the .sig fetch) returns null, matching the real
+// "not published" contract, so the "unavailable && !required -> warn+return" path runs.
 // Because the real gpg-verifier loads openpgp (which needs the full crypto module),
 // crypto is NOT mocked here -- so EXPECTED_SHA256 is the genuine SHA256 of the mocked
 // zip content ('fake-zip-content'), computed by real crypto and matched against SUMS.
@@ -26,8 +27,9 @@ tr.registerMock('./http-client', {
         if (url.endsWith('SHA256SUMS')) return `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`;
         throw new Error('Unexpected fetchText URL: ' + url);
     },
-    // The .sig is unavailable; the real gpg-verifier catches this and (requireGpg=false) warns.
-    fetchBuffer: async (_url: string) => { throw new Error('Failed to fetch .sig: HTTP 404'); }
+    // The .sig is genuinely absent (404); the real gpg-verifier's fetchBufferAllow404
+    // call resolves to null and (requireGpg=false) warns-and-proceeds.
+    fetchBufferAllow404: async (_url: string) => null
 });
 
 tr.registerMock('undici', { ProxyAgent: class { } });

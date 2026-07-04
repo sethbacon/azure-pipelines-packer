@@ -1,12 +1,15 @@
 // @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/gpg-verifier.ts)
 // @shared-module-policy: This is a copy of the sibling extension's SHA256SUMS.sig verifier.
 //   Apply verification-logic fixes to both copies. Enforced by scripts/check-shared-modules.js.
-// @shared-module-status: IN-SYNC — verification logic is byte-identical with upstream (only the
-//   terraform-internal parity header, which references that repo's own task families, differs).
+// @shared-module-status: DIVERGED — this copy now distinguishes a genuine 404 (signature
+//   not published) from a transient/network failure via fetchBufferAllow404, so a
+//   requireGpgSignature=false opt-out only downgrades on real absence, not on a 5xx/network
+//   blip an attacker could induce (#106). Backport to azure-pipelines-terraform is pending;
+//   do not "reconcile" by reverting this.
 import tasks = require('azure-pipelines-task-lib/task');
 import * as openpgp from 'openpgp';
 
-import { fetchBuffer } from './http-client';
+import { fetchBufferAllow404 } from './http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from './hashicorp-gpg-key';
 
 /**
@@ -14,15 +17,17 @@ import { HASHICORP_GPG_PUBLIC_KEY } from './hashicorp-gpg-key';
  * Fetches the `.sig` file from the same base URL as the SHA256SUMS file.
  *
  * - If verification succeeds, returns the SHA256SUMS content (already fetched).
- * - If the `.sig` file is unavailable and `required` is false, warns and returns unverified.
- * - If the `.sig` file is unavailable and `required` is true, throws (hard fail).
+ * - If the `.sig` file is genuinely absent (HTTP 404) and `required` is false, warns and
+ *   returns unverified.
+ * - If the `.sig` file is genuinely absent (HTTP 404) and `required` is true, throws.
+ * - Any other fetch failure (5xx / network / timeout) is transient and always throws —
+ *   even when `required` is false — so an attacker who can merely disrupt the .sig fetch
+ *   cannot strip verification from a mirror that does publish signatures.
  * - If the signature is invalid, throws (hard fail).
  */
 export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl: string, required: boolean = false): Promise<void> {
-    let signatureBytes: Uint8Array;
-    try {
-        signatureBytes = await fetchBuffer(signatureUrl);
-    } catch {
+    const signatureBytes = await fetchBufferAllow404(signatureUrl);
+    if (signatureBytes === null) {
         if (required) {
             throw new Error(`GPG signature file unavailable (${signatureUrl}) and signature verification is required. Set 'requireGpgSignature' to false to skip.`);
         }

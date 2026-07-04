@@ -2,27 +2,29 @@ import ma = require('azure-pipelines-task-lib/mock-answer');
 import tmrm = require('azure-pipelines-task-lib/mock-run');
 import path = require('path');
 
-// #65: the mirror path now honors requireGpgSignature (previously the toggle was
-// inert on this path). With requireGpgSignature=true (default) and the .sig
-// genuinely absent (404), the install must FAIL. Uses the REAL gpg-verifier; only
-// its fetchBufferAllow404 dependency (the .sig fetch) resolves to null.
+// #106: a TRANSIENT .sig fetch failure (5xx/network -- anything other than a genuine
+// 404) must remain FATAL even with requireGpgSignature=false. Only a real "not
+// published" (404, surfaced as fetchBufferAllow404 resolving to null) may downgrade to
+// a warning. Uses the REAL gpg-verifier; only its fetchBufferAllow404 dependency is
+// made to throw, simulating a 5xx that survived http-client's own retries.
 const tp = path.join(__dirname, 'RunInstaller.js');
 const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
-
-const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 
 tr.setInput('packerVersion', '1.12.0');
 tr.setInput('downloadSource', 'mirror');
 tr.setInput('mirrorBaseUrl', 'https://artifacts.example.com/hashicorp/packer');
-// requireGpgSignature left unset -> defaults to true (fail-closed).
+tr.setInput('requireGpgSignature', 'false');
 
 tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64' });
+
+const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Mirror path should not call fetchJson: ' + url); },
     fetchTextAllow404: async (_url: string) => `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`,
-    // .sig genuinely absent (404) -> real gpg-verifier with requireGpg=true must throw.
-    fetchBufferAllow404: async (_url: string) => null
+    // .sig fetch fails with a transient error (not a 404) -> must stay fatal even
+    // though requireGpgSignature=false.
+    fetchBufferAllow404: async (_url: string) => { throw new Error('Failed to fetch .sig: HTTP 503'); }
 });
 
 tr.registerMock('undici', { ProxyAgent: class { } });
@@ -33,8 +35,8 @@ tr.registerMock('fs', {
 tr.registerMock('azure-pipelines-tool-lib/tool', {
     findLocalTool: (_t: string, _v: string) => null,
     downloadTool: async (_url: string, _fileName: string) => '/tmp/packer.zip',
-    extractZip: async () => { throw new Error('Should not extract when required GPG verification cannot be performed'); },
-    cacheDir: async () => { throw new Error('Should not cache when required GPG verification cannot be performed'); },
+    extractZip: async () => { throw new Error('Should not extract when a transient GPG fetch error is treated as fatal'); },
+    cacheDir: async () => { throw new Error('Should not cache when a transient GPG fetch error is treated as fatal'); },
     cleanVersion: (v: string) => v,
     prependPath: (_p: string) => { }
 });

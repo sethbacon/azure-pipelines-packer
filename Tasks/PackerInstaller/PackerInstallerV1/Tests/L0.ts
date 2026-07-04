@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as openpgp from 'openpgp';
 import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
+import { downloadToolWithTimeout } from '../src/packer-installer';
+import tools = require('azure-pipelines-tool-lib/tool');
 
 describe('PackerInstaller Test Suite', function () {
 
@@ -73,6 +75,15 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail
     expectFailure('MirrorSha256MismatchFail');       // genuine mismatch is fatal even with requireChecksum=false
 
+    // --- 'latest' checkpoint resolution: transient failure still falls back, but a
+    // malformed API response is now fatal instead of silently downgrading (#106) ---
+    expectSuccess('HashiCorpLatestCheckpointDownFallback');
+    expectFailure('HashiCorpLatestCheckpointInvalidResponseFail');
+
+    // --- GPG fetch-failure classification: only a genuine 404 may downgrade when
+    // requireGpgSignature=false; a transient failure stays fatal (#106) ---
+    expectFailure('GpgSigTransientErrorFail');
+
     // --- Verification opt-out toggles: must skip-and-install WITH a warning ---
     it('MirrorChecksumOptOutSuccess', async () => {
         const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorChecksumOptOutSuccess.js'));
@@ -92,6 +103,38 @@ describe('PackerInstaller Test Suite', function () {
         runValidations(() => {
             assert.ok(tr.succeeded, 'task should have succeeded (SHA256 still enforced)');
             assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+        }, tr);
+    });
+
+    // --- Registry pre-signed download-URL token masking (#98) ---
+    // The registry download_url carries a live storage credential in its query string
+    // and tool-lib logs the URL at INFO. Assert every token component is registered as
+    // a secret (so the agent masks it) while benign params stay visible.
+    it('RegistryDownloadTokenMasked', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryDownloadTokenMasked.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+            const maskedTokens = [
+                'AWSSIGNATUREtoken1111',   // X-Amz-Signature
+                'AWSCREDENTIALtoken2222',  // X-Amz-Credential
+                'AWSSECURITYtoken3333',    // X-Amz-Security-Token
+                'GOOGSIGNATUREtoken4444',  // X-Goog-Signature
+                'GOOGCREDENTIALtoken5555', // X-Goog-Credential
+                'AZURESIGtoken6666'        // Azure SAS sig
+            ];
+            for (const token of maskedTokens) {
+                assert.ok(
+                    tr.stdout.includes('##vso[task.setsecret]' + token),
+                    `expected ##vso[task.setsecret] for token ${token}. stdout: ${tr.stdout}`
+                );
+            }
+            // Benign query parameters must NOT be masked (guards against over-redaction).
+            assert.ok(!tr.stdout.includes('##vso[task.setsecret]20260703T000000Z'),
+                'benign X-Amz-Date must not be registered as a secret');
+            assert.ok(!tr.stdout.includes('##vso[task.setsecret]host'),
+                'benign X-Amz-SignedHeaders must not be registered as a secret');
         }, tr);
     });
 
@@ -263,6 +306,21 @@ describe('PackerInstaller Test Suite', function () {
             assert.deepStrictEqual(Array.from(buf), [1, 2, 3]);
         } finally {
             global.fetch = originalFetch;
+        }
+    });
+
+    it('downloadToolWithTimeout aborts a hung download instead of hanging indefinitely (#105)', async () => {
+        const originalDownloadTool = tools.downloadTool;
+        // Never resolves, so the race is settled entirely by the timeout branch.
+        (tools as unknown as { downloadTool: (url: string, fileName: string) => Promise<string> }).downloadTool =
+            () => new Promise<string>(() => { /* intentionally never resolves */ });
+        try {
+            await assert.rejects(
+                () => downloadToolWithTimeout('https://example.com/packer.zip', 'packer.zip', 50),
+                /timed out after 50ms/
+            );
+        } finally {
+            (tools as unknown as { downloadTool: typeof originalDownloadTool }).downloadTool = originalDownloadTool;
         }
     });
 });
