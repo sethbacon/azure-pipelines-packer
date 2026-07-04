@@ -2,6 +2,7 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
+import { normalizePem } from './pem-normalizer';
 
 /**
  * Injects GCP credentials for the packer-plugin-googlecompute builders. Both
@@ -24,11 +25,33 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
                 .filter(Boolean).join(", ");
             throw new Error(`GCP service connection is missing required fields: ${missing}`);
         }
-        tasks.setSecret(privateKey);
+
+        // setSecret rejects multi-line input (LIB_MultilineSecret). The UI
+        // passwordbox strips newlines on paste, but a service connection created
+        // via the REST API / az devops CLI can deliver a genuine multi-line PEM,
+        // in which case setSecret on the raw value would throw before any
+        // credential is written. Register it line-wise first (safe for both the
+        // single-line-flattened and genuine multi-line shapes) so it is masked
+        // either way.
+        for (const line of privateKey.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed) tasks.setSecret(trimmed);
+        }
+        const normalized = normalizePem(privateKey);
+        // normalizePem rewrites the key to a byte-different LF-wrapped form --
+        // the form that actually lands in the on-disk (JSON-escaped) credentials
+        // file -- so also register each base64 body line of that form. Mirrors
+        // the OCI handler's on-disk masking (oci-packer-command-handler.ts).
+        for (const line of normalized.split('\n')) {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('-----')) {
+                tasks.setSecret(trimmed);
+            }
+        }
 
         const jsonCredsString = JSON.stringify({
             type: "service_account",
-            private_key: privateKey,
+            private_key: normalized,
             client_email: clientEmail,
             token_uri: tokenUri
         });

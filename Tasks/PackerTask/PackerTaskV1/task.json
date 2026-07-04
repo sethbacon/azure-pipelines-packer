@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "7",
+        "Minor": "8",
         "Patch": "0"
     },
     "instanceNameFormat": "Packer $(command)",
@@ -296,7 +296,7 @@
             "defaultValue": "",
             "required": false,
             "groupName": "variables",
-            "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings)."
+            "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings). These values are not masked in the build log — do not put secrets here. Use a secret pipeline variable (which the agent masks) or secureVarsFile instead."
         },
         {
             "name": "upgradePlugins",
@@ -314,7 +314,7 @@
             "defaultValue": "",
             "required": false,
             "visibleRule": "command = init",
-            "helpMarkDown": "Optional. Set PACKER_GITHUB_API_TOKEN to avoid GitHub rate limits when downloading plugins. This field is plain text, not a secret input type: reference a pipeline secret variable, e.g. `$(myGithubTokenSecret)`. Pasting a raw token directly into this field stores it in plaintext in the pipeline definition, visible to anyone with read access."
+            "helpMarkDown": "Optional. Set PACKER_GITHUB_API_TOKEN to avoid GitHub rate limits when downloading plugins. This field is plain text, not a secret input type — do not put secrets directly in this field. Reference a pipeline secret variable instead, e.g. `$(myGithubTokenSecret)`. Pasting a raw token directly into this field stores it in plaintext in the pipeline definition, visible to anyone with read access."
         },
         {
             "name": "syntaxOnly",
@@ -532,6 +532,9 @@
         }
     },
     "execution": {
+        "Node20_1": {
+            "target": "src/index.js"
+        },
         "Node24": {
             "target": "src/index.js"
         }
@@ -552,6 +555,6 @@
     ],
     "messages": {
         "PackerToolNotFound": "Packer was not found on the agent. Add the Pipeline Packer tool installer task before this task, or ensure packer is on the PATH.",
-        "Error_FederatedTokenAquisitionFailed": "Failed to acquire federated token for the service connection."
+        "Error_FederatedTokenAcquisitionFailed": "Failed to acquire federated token for the service connection."
     }
 }

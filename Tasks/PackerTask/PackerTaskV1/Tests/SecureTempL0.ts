@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import fs = require('fs');
-import { writeSecretFile } from '../src/secure-temp';
+import { writeSecretFile, tightenFilePermissions } from '../src/secure-temp';
 
 /**
  * Direct unit tests for writeSecretFile's fail-closed permission enforcement (#80).
@@ -49,5 +49,45 @@ describe('writeSecretFile — fail-closed chmod enforcement', function () {
     it('swallows a chmod failure on Windows (NTFS ACLs apply instead)', () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
         assert.doesNotThrow(() => writeSecretFile('/tmp/secret.txt', 'sensitive'));
+    });
+});
+
+/**
+ * Direct unit tests for tightenFilePermissions (#103): chmods a file already
+ * written by a third-party library (securefiles-common's download) to 0600.
+ * Same fail-closed/Windows-fallback contract as writeSecretFile, but without
+ * the create step -- fs is monkeypatched so no real file is touched.
+ */
+describe('tightenFilePermissions — post-hoc chmod for third-party downloads', function () {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monkeypatch the shared fs module
+    const f = fs as any;
+    const origChmod = f.chmodSync;
+    const origPlatform = process.platform;
+
+    afterEach(() => {
+        f.chmodSync = origChmod;
+        Object.defineProperty(process, 'platform', { value: origPlatform });
+    });
+
+    it('chmods the file to mode 0600', () => {
+        let chmodArgs: unknown[] | null = null;
+        f.chmodSync = (...args: unknown[]) => { chmodArgs = args; };
+        tightenFilePermissions('/tmp/downloaded-secure-file-does-not-matter.txt');
+        assert.deepStrictEqual(chmodArgs, ['/tmp/downloaded-secure-file-does-not-matter.txt', 0o600]);
+    });
+
+    it('re-throws when chmod fails on a non-Windows platform (fail closed)', () => {
+        Object.defineProperty(process, 'platform', { value: 'linux' });
+        f.chmodSync = () => { throw new Error('EPERM: operation not permitted'); };
+        assert.throws(
+            () => tightenFilePermissions('/tmp/downloaded-secure-file.txt'),
+            /Failed to set restrictive permissions/
+        );
+    });
+
+    it('swallows a chmod failure on Windows (NTFS ACLs apply instead)', () => {
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        f.chmodSync = () => { throw new Error('EPERM'); };
+        assert.doesNotThrow(() => tightenFilePermissions('/tmp/downloaded-secure-file.txt'));
     });
 });
