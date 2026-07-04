@@ -100,6 +100,20 @@ The task sets `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`, and `
 
 The task writes an `external_account` credentials JSON file pointing at the ADO OIDC token and sets `GOOGLE_APPLICATION_CREDENTIALS` — read natively by `packer-plugin-googlecompute`, no template wiring required.
 
+## Long-running builds and WIF token lifetime
+
+The ADO OIDC ID token the task requests is valid for only **~10 minutes**, and it is fetched once, at the start of the command, then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE`/the GCP `external_account` credential source points at). The token is a client assertion exchanged once for a cloud access token/session — that exchanged credential is itself typically valid for **~1 hour**, and there is no refetch or refresh path for either token during the build.
+
+A Packer build that runs longer than the exchanged credential's lifetime will start failing cloud API calls partway through. For Azure specifically, `packer-plugin-azure`'s calls to Entra will start returning **`AADSTS700024: Client assertion is not within its valid time range`** — this is a well-known failure mode for Azure DevOps-issued OIDC tokens on long-running operations (see Microsoft's WIF troubleshooting guidance for `AADSTS700024`). AWS and GCP builds can fail similarly once the assumed role session or Workload Identity Pool token expires.
+
+If your Packer templates build large or slow images (long provisioner scripts, big base images, multi-hour builds):
+
+- **Azure**: prefer a **Managed Identity**-backed service connection (`ManagedServiceIdentity` authorization scheme) for long builds — MSI credentials are refreshed by the Azure SDK for the life of the process, unlike a one-shot WIF assertion. If MSI is not available in your environment, a Service Principal with a client secret is the other long-build-safe fallback (the task will emit a warning recommending WIF, which you can accept for this specific case).
+- **AWS**: the assumed role's session duration is controlled by the IAM role's **Maximum session duration** setting (up to 12 hours) rather than anything this task configures — set it as high as your role's policy allows for long-running builds.
+- **GCP**: the exchanged access token from `external_account` credentials is refreshed automatically by Google's client libraries as long as the underlying ADO OIDC token used to establish it is still valid, but since the ADO token is one-shot and non-refreshable here, the same ~10-minute-then-derived-session-length constraint applies.
+
+There is currently no code path in this task that refetches the ADO OIDC token mid-build; the safest choice for long Azure builds today is Managed Identity or Service Principal rather than WIF.
+
 ## Prefer WIF over static keys
 
 For all three providers, prefer WIF over the static-credential alternative (AWS access keys, GCP service-account JSON keys, Azure Service Principal secrets):

@@ -122,11 +122,32 @@ After this task, `$(packerLocation)` holds the binary path and `$(packerDownload
 
 ```hcl
 # images/ubuntu/variables.pkr.hcl
-variable "arm_client_id"       { type = string, default = "" }
-variable "arm_subscription_id" { type = string, default = "" }
-variable "arm_tenant_id"       { type = string, default = "" }
-variable "arm_client_jwt"      { type = string, default = "", sensitive = true }
-variable "arm_client_secret"   { type = string, default = "", sensitive = true }
+variable "arm_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "arm_subscription_id" {
+  type    = string
+  default = ""
+}
+
+variable "arm_tenant_id" {
+  type    = string
+  default = ""
+}
+
+variable "arm_client_jwt" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+
+variable "arm_client_secret" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
 
 source "azure-arm" "ubuntu" {
   client_id       = var.arm_client_id
@@ -203,10 +224,10 @@ The OCI connection fields are exposed to the template as `PKR_VAR_oci_*` variabl
 ```hcl
 # images/oci/variables.pkr.hcl
 variable "oci_tenancy_ocid" { type = string }
-variable "oci_user_ocid"    { type = string }
-variable "oci_region"       { type = string }
-variable "oci_fingerprint"  { type = string }
-variable "oci_key_file"     { type = string }
+variable "oci_user_ocid" { type = string }
+variable "oci_region" { type = string }
+variable "oci_fingerprint" { type = string }
+variable "oci_key_file" { type = string }
 
 source "oracle-oci" "instance" {
   tenancy_ocid = var.oci_tenancy_ocid
@@ -228,14 +249,23 @@ The vSphere connection is exposed as `PKR_VAR_vsphere_*` variables.
     command: 'build'
     provider: 'vsphere'
     environmentServiceNameVSphere: 'my-vcenter-connection'
-    vsphereInsecureConnection: true
+    vsphereInsecureConnection: true   # self-signed vCenter cert only -- see SECURITY.md; never use in production
     templatePath: './images/vsphere'
 ```
 
 ```hcl
-variable "vsphere_server"   { type = string }
-variable "vsphere_user"     { type = string }
-variable "vsphere_password" { type = string, sensitive = true }
+variable "vsphere_server" {
+  type = string
+}
+
+variable "vsphere_user" {
+  type = string
+}
+
+variable "vsphere_password" {
+  type      = string
+  sensitive = true
+}
 
 source "vsphere-iso" "ubuntu" {
   vcenter_server = var.vsphere_server
