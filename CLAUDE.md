@@ -44,7 +44,8 @@ azure-pipelines-packer/
 ├── configs/{dev,release,self}.json          # Manifest publisher overrides (self.json gitignored)
 ├── docs/initiatives/                        # Initiative plans
 ├── scripts/
-│   ├── check-versions.js                    # CI: fails if a changed task's Minor wasn't bumped
+│   ├── check-versions.js                    # CI: validates version fields exist + are well-formed
+│   │                                         #     (does NOT enforce that a changed task's Minor was bumped)
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
@@ -129,3 +130,4 @@ Mock-runner L0 pattern (copied from the Terraform extension). Test pairs: `<Name
 ## Initiatives
 
 - [Initiative 1: Pipeline Tasks for Packer extension](docs/initiatives/initiative-1-packer-extension.md)
+- [Initiative 2: HCP Packer registry support](docs/initiatives/initiative-2-hcp-packer-registry-support.md)
