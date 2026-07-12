@@ -193,6 +193,77 @@ describe('PackerInstaller Test Suite', function () {
         assert.ok(key, 'openpgp.readKey should successfully parse the embedded key');
     });
 
+    // --- Proxy configuration (#140) ---
+    function withProxyEnv(vars: Record<string, string | undefined>, fn: () => Promise<void>) {
+        const keys = ['AGENT_PROXYURL', 'AGENT_PROXYUSERNAME', 'AGENT_PROXYPASSWORD'] as const;
+        const original = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+        for (const k of keys) {
+            if (vars[k] === undefined) delete process.env[k];
+            else process.env[k] = vars[k];
+        }
+        return fn().finally(() => {
+            for (const k of keys) {
+                if (original[k] === undefined) delete process.env[k];
+                else process.env[k] = original[k];
+            }
+        });
+    }
+
+    it('buildFetchOptions embeds proxy credentials into the dispatcher URL and masks the password as a secret', async () => {
+        await withProxyEnv({
+            AGENT_PROXYURL: 'http://proxy.example.com:8080',
+            AGENT_PROXYUSERNAME: 'proxyuser',
+            AGENT_PROXYPASSWORD: 'super-secret-pw',
+        }, async () => {
+            const originalFetch = global.fetch;
+            const originalWrite = process.stdout.write.bind(process.stdout);
+            let stdout = '';
+            let capturedDispatcher: unknown;
+            global.fetch = (async (_url: string, options?: RequestInit) => {
+                capturedDispatcher = (options as { dispatcher?: unknown } | undefined)?.dispatcher;
+                return new Response('ok', { status: 200 });
+            }) as typeof fetch;
+            process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
+                stdout += chunk.toString();
+                return (originalWrite as (...args: unknown[]) => boolean)(chunk, ...rest);
+            }) as typeof process.stdout.write;
+            try {
+                const result = await fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text());
+                assert.strictEqual(result, 'ok');
+                assert.ok(capturedDispatcher, 'a ProxyAgent dispatcher should have been passed to fetch');
+                assert.ok(
+                    stdout.includes('##vso[task.setsecret]super-secret-pw'),
+                    'the proxy password must be registered as a secret via tasks.setSecret'
+                );
+            } finally {
+                global.fetch = originalFetch;
+                process.stdout.write = originalWrite;
+            }
+        });
+    });
+
+    it('buildFetchOptions uses the bare proxy URL (no credential branch) when no username is configured', async () => {
+        await withProxyEnv({
+            AGENT_PROXYURL: 'http://proxy.example.com:8080',
+            AGENT_PROXYUSERNAME: undefined,
+            AGENT_PROXYPASSWORD: undefined,
+        }, async () => {
+            const originalFetch = global.fetch;
+            let capturedDispatcher: unknown;
+            global.fetch = (async (_url: string, options?: RequestInit) => {
+                capturedDispatcher = (options as { dispatcher?: unknown } | undefined)?.dispatcher;
+                return new Response('ok', { status: 200 });
+            }) as typeof fetch;
+            try {
+                const result = await fetchWithTimeout('https://example.com/start', 1000, async (r) => r.text());
+                assert.strictEqual(result, 'ok');
+                assert.ok(capturedDispatcher, 'a ProxyAgent dispatcher should have been passed to fetch even without credentials');
+            } finally {
+                global.fetch = originalFetch;
+            }
+        });
+    });
+
     it('fetchWithTimeout aborts a hung request instead of hanging indefinitely', async () => {
         const originalFetch = global.fetch;
         // Simulate a connection that never resolves on its own, but — like real
