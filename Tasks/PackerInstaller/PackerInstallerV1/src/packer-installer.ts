@@ -180,6 +180,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
 
     // Step 2: Check tool cache — skip download entirely if already present
     let cachedToolPath = tools.findLocalTool(packerToolName, version);
+    const wasCached = !!cachedToolPath;
 
     // Step 3: Download, extract, and cache if not found
     if (!cachedToolPath) {
@@ -217,6 +218,17 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
 
     if (!isWindows) {
         fs.chmodSync(packerPath, "755");
+    }
+
+    // Cheap, offline re-verification of a cache hit (#136): the tool cache itself is
+    // trusted for the lifetime of the agent (re-fetching SHA256SUMS/GPG on every hit
+    // would defeat the point of caching), but a hash recorded when this binary was
+    // first verified lets local tampering/corruption of the cache be caught without
+    // any network access.
+    if (wasCached) {
+        await verifyCachedBinaryHash(packerPath);
+    } else {
+        recordCachedBinaryHash(packerPath);
     }
 
     tasks.setVariable('packerLocation', packerPath);
@@ -431,6 +443,61 @@ async function verifySha256(filePath: string, expectedHash: string): Promise<voi
         throw new ChecksumMismatchError(tasks.loc("Sha256VerificationFailed", expectedHash, actualHash));
     }
     tasks.debug(`SHA256 verification passed: ${actualHash}`);
+}
+
+function getCacheHashSidecarPath(packerPath: string): string {
+    return `${packerPath}.sha256`;
+}
+
+/**
+ * Records the freshly-downloaded-and-verified binary's hash so a future cache hit can
+ * cheaply (no network) detect local tampering/corruption of the agent's tool cache
+ * (#136). Best-effort: a write failure only warns -- it must never fail an otherwise
+ * successful install.
+ */
+function recordCachedBinaryHash(packerPath: string): void {
+    try {
+        const hash = crypto.createHash('sha256').update(fs.readFileSync(packerPath)).digest('hex');
+        fs.writeFileSync(getCacheHashSidecarPath(packerPath), hash, { mode: 0o600 });
+    } catch (error) {
+        tasks.debug(`Could not record a cache-integrity hash for ${packerPath}: ${error instanceof Error ? error.message : error}`);
+    }
+}
+
+/**
+ * On a cache hit, cheaply (no network) re-verifies the cached binary against the hash
+ * recorded when it was first downloaded and verified (#136). A cache entry from before
+ * this check existed has no sidecar file yet -- that is treated as an unverifiable
+ * legacy entry, not tampering (a hash is recorded now so it is covered going forward).
+ * Being unable to even perform the check (sidecar read failure, etc.) only warns and
+ * continues -- this is a best-effort defense-in-depth layer, not a hard gate, and must
+ * never turn an unrelated filesystem quirk into a failed install. A genuine hash
+ * MISMATCH against an existing, readable sidecar is the one case that always fails.
+ */
+async function verifyCachedBinaryHash(packerPath: string): Promise<void> {
+    const sidecarPath = getCacheHashSidecarPath(packerPath);
+    let sidecarExists: boolean;
+    try {
+        sidecarExists = fs.existsSync(sidecarPath);
+    } catch (error) {
+        tasks.debug(`Could not check for a cache-integrity hash at ${sidecarPath}: ${error instanceof Error ? error.message : error}`);
+        return;
+    }
+    if (!sidecarExists) {
+        tasks.debug(`No cache-integrity hash recorded for ${packerPath} yet (cached before this check existed); recording one now.`);
+        recordCachedBinaryHash(packerPath);
+        return;
+    }
+    let expectedHash: string;
+    try {
+        expectedHash = fs.readFileSync(sidecarPath, 'utf8').trim();
+    } catch (error) {
+        tasks.debug(`Could not read the cache-integrity hash at ${sidecarPath}: ${error instanceof Error ? error.message : error}`);
+        return;
+    }
+    // A genuine mismatch (ChecksumMismatchError) always propagates -- that is real
+    // local tampering/corruption, distinct from merely being unable to check.
+    await verifySha256(packerPath, expectedHash);
 }
 
 function getPlatformString(): string {
