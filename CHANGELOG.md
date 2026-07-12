@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.4...v1.2.5) (2026-07-12)
+
+
+### Bug Fixes
+
+* cheap offline re-verification of the tool cache on a cache hit ([#148](https://github.com/sethbacon/azure-pipelines-packer/issues/148)) ([f32a1ae](https://github.com/sethbacon/azure-pipelines-packer/commit/f32a1aed164c63dc04eed962526ca24cd090069f)), closes [#136](https://github.com/sethbacon/azure-pipelines-packer/issues/136)
+* validate registryUrl as a well-formed https:// URL before use ([#145](https://github.com/sethbacon/azure-pipelines-packer/issues/145)) ([29921ec](https://github.com/sethbacon/azure-pipelines-packer/commit/29921ec9d6030b2070e9a17783fc3955ef8ca7cb)), closes [#139](https://github.com/sethbacon/azure-pipelines-packer/issues/139)
+* verify all signatures in a detached GPG .sig file, not just signatures[0] ([#146](https://github.com/sethbacon/azure-pipelines-packer/issues/146)) ([39e7cd7](https://github.com/sethbacon/azure-pipelines-packer/commit/39e7cd7f93ad5ae3e2d557d941442a6eae27e6eb)), closes [#137](https://github.com/sethbacon/azure-pipelines-packer/issues/137)
+
+
+### Documentation
+
+* correct stale PLANNED status and Node target claim in initiative-1 doc ([#134](https://github.com/sethbacon/azure-pipelines-packer/issues/134)) ([1ebc0b1](https://github.com/sethbacon/azure-pipelines-packer/commit/1ebc0b135aeab8bb160cc761e6d9af6b81633ab4))
+
 ## [1.2.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.3...v1.2.4) (2026-07-04)
 
 
