@@ -186,6 +186,7 @@ describe('PackerInstaller Test Suite', function () {
     // --- Real (unmocked) GPG verification ---
     expectSuccess('GpgRealVerifySuccess');
     expectFailure('GpgRealVerifyTamperedFail');
+    expectSuccess('GpgMultiSignatureFirstInvalidSuccess');   // #137: valid signature at index > 0 must not be ignored
 
     it('the embedded HashiCorp public key still parses with the current openpgp version', async () => {
         const key = await openpgp.readKey({ armoredKey: HASHICORP_GPG_PUBLIC_KEY });
