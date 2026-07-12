@@ -2,9 +2,11 @@ import ma = require('azure-pipelines-task-lib/mock-answer');
 import tmrm = require('azure-pipelines-task-lib/mock-run');
 import path = require('path');
 
-// #74: vSphere with an empty password must fail closed (like AWS/GCP/OCI) rather
-// than silently proceeding with server+user but no credential. Server and user
-// are present; the password endpoint parameter is intentionally omitted.
+// #74: vSphere with no password configured must fail closed (like AWS/GCP/OCI)
+// rather than silently proceeding with server+user but no credential.
+// getEndpointAuthorizationParameter(..., false) itself throws for an unset/empty
+// value (#141) -- server and user are present; the password parameter is
+// intentionally omitted so that throw is what this test exercises.
 const tp = path.join(__dirname, 'RunCommand.js');
 const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 
