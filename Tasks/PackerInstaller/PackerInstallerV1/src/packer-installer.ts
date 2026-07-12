@@ -136,6 +136,27 @@ function getValidatedMirrorName(): string {
     return mirrorName;
 }
 
+/**
+ * Reads and validates registryUrl: must parse as a well-formed absolute URL and use
+ * HTTPS (task.json's helpMarkDown already promises this; previously nothing enforced
+ * it before the raw string was interpolated into request paths — see #139). Returns
+ * the input with any trailing slash(es) stripped so `${registryUrl}/terraform/...`
+ * concatenation never produces a double slash.
+ */
+function getValidatedRegistryUrl(): string {
+    const registryUrl = tasks.getInput("registryUrl", true)!;
+    let parsed: URL;
+    try {
+        parsed = new URL(registryUrl);
+    } catch {
+        throw new Error(`registryUrl '${registryUrl}' is not a valid URL.`);
+    }
+    if (parsed.protocol !== 'https:') {
+        throw new Error(tasks.loc("InsecureUrlRejected", registryUrl));
+    }
+    return registryUrl.replace(/\/+$/, '');
+}
+
 export async function downloadPacker(inputVersion: string): Promise<string> {
     const downloadSource = tasks.getInput("downloadSource") || "hashicorp";
 
@@ -143,7 +164,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
     let resolvedVersion: string;
     switch (downloadSource) {
         case "registry": {
-            const registryUrl = tasks.getInput("registryUrl", true)!;
+            const registryUrl = getValidatedRegistryUrl();
             const mirrorName = getValidatedMirrorName();
             resolvedVersion = await resolveVersionFromRegistry(inputVersion, registryUrl, mirrorName);
             break;
@@ -165,7 +186,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
         let zipPath: string;
         switch (downloadSource) {
             case "registry": {
-                const registryUrl = tasks.getInput("registryUrl", true)!;
+                const registryUrl = getValidatedRegistryUrl();
                 const mirrorName = getValidatedMirrorName();
                 zipPath = await downloadZipFromRegistry(version, registryUrl, mirrorName);
                 tasks.setVariable('packerDownloadedFrom', `registry:${registryUrl}`);

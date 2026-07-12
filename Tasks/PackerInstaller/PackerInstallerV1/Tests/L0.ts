@@ -68,6 +68,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('GpgSignatureRequiredButMissing');
     expectFailure('RegistryEmptySha256Rejected');
     expectFailure('RegistryInsecureDownloadUrlReject');
+    expectFailure('RegistryUrlInvalidReject');   // #139: insecure/malformed registryUrl input rejected before any fetch
     expectFailure('MirrorMissingChecksumFail');
     expectFailure('RegistryMirrorNameInvalidReject');
     expectFailure('MirrorSumsMissingEntryFail');       // #111: SUMS published but our artifact isn't listed in it
