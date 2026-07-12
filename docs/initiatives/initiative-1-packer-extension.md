@@ -3,7 +3,7 @@
 
 ## Implementation Status
 
-**Status: PLANNED** — Nothing implemented yet. This document is the founding plan for the `azure-pipelines-packer` repository.
+**Status: SHIPPED** — implemented and published to the Visual Studio Marketplace (currently `v1.2.4`). This document is retained as the founding plan for the `azure-pipelines-packer` repository; treat it as historical context rather than a live spec.
 
 ## Goal
 
@@ -31,7 +31,7 @@ Ship a standalone Azure DevOps extension, modelled file-for-file on `azure-pipel
 | Tasks | `PipelinePackerInstaller` (`Tasks/PackerInstaller/PackerInstallerV1`), `PipelinePackerTask` (`Tasks/PackerTask/PackerTaskV1`) |
 | Endpoint types | `PTPAWSServiceEndpoint` ("Pipeline AWS for Packer"), `PTPGoogleCloudServiceEndpoint` ("Pipeline GCP for Packer"), `PTPOCIServiceEndpoint` ("Pipeline OCI for Packer"), `PTPvSphereServiceEndpoint` ("Pipeline vSphere for Packer") |
 
-Each task gets a **new GUID** (do not reuse Terraform task GUIDs). Execution targets `Node20_1` + `Node24`, matching the Terraform tasks.
+Each task gets a **new GUID** (do not reuse Terraform task GUIDs). Execution targets `Node24` only (as shipped; unlike the Terraform tasks, there is no `Node20_1` fallback section — see issue #113 item 3).
 
 ## Repository Bootstrap (copy from azure-pipelines-terraform)
 
