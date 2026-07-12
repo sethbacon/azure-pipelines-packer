@@ -50,12 +50,17 @@ export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl
     if (!result.signatures || result.signatures.length === 0) {
         throw new Error(`GPG signature verification failed: no signatures found in ${signatureUrl}`);
     }
-    const { verified } = result.signatures[0];
-    try {
-        await verified;
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(`GPG signature verification failed for SHA256SUMS: ${errorMessage}`);
+    // A detached .sig file can carry more than one signature (e.g. during a signing-key
+    // rotation window). Require at least one to verify successfully rather than only
+    // checking signatures[0] -- a valid signature at any other index would otherwise be
+    // silently ignored (#137).
+    const outcomes = await Promise.allSettled(result.signatures.map((sig) => sig.verified));
+    const anyVerified = outcomes.some((outcome) => outcome.status === 'fulfilled');
+    if (!anyVerified) {
+        const errors = outcomes
+            .filter((o): o is PromiseRejectedResult => o.status === 'rejected')
+            .map((o) => (o.reason instanceof Error ? o.reason.message : String(o.reason)));
+        throw new Error(`GPG signature verification failed for SHA256SUMS: ${errors.join('; ') || 'no signature verified'}`);
     }
 
     tasks.debug('GPG signature verification passed');
