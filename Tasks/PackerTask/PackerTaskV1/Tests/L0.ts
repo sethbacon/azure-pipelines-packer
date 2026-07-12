@@ -151,6 +151,8 @@ describe('PackerTask Test Suite', function () {
     expectFailure('AwsWifMissingServiceConnReject');   // #73
     expectFailure('GcpWifMissingServiceConnReject');   // #73
     expectFailure('VsphereEmptyPasswordReject');       // #74
+    expectFailure('VsphereMissingServiceConnReject');       // #141
+    expectFailure('VsphereServerUrlUnparseableReject');     // #141
     expectFailure('AzureUndefinedSchemeReject');               // #97
     expectFailure('AzureMissingServicePrincipalSecretReject'); // #97
     expectFailure('AzureUnknownSchemeRejects');                // #111

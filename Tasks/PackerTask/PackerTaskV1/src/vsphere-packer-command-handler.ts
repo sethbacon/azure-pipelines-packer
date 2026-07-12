@@ -40,13 +40,12 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
             throw new Error(`vSphere service connection '${serviceName}' server '${server}' contains characters outside the allowed hostname[:port] charset.`);
         }
         const username = tasks.getEndpointAuthorizationParameter(serviceName, "username", false) || '';
-        const password = tasks.getEndpointAuthorizationParameter(serviceName, "password", false) || '';
-        if (!password) {
-            // Fail closed like AWS/GCP/OCI: an empty password would otherwise be
-            // silently skipped by the env helper (warning only), leaving the build
-            // to attempt vCenter auth with no credential instead of failing clearly.
-            throw new Error(`vSphere password not found in service connection '${serviceName}'. Ensure the service connection includes a password.`);
-        }
+        // getEndpointAuthorizationParameter(..., false) already throws (LIB_EndpointAuthNotExist)
+        // for an unset OR empty value -- it can never return falsy here, so the manual
+        // "empty password" fail-closed check this used to duplicate was unreachable dead code
+        // (confirmed against AWS/GCP's identical optional=false calls, neither of which has an
+        // equivalent extra check). The `!` documents that runtime guarantee (#141).
+        const password = tasks.getEndpointAuthorizationParameter(serviceName, "password", false)!;
         tasks.setSecret(password);
 
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
