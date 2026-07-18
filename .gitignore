@@ -13,6 +13,7 @@ oci-keyfile-*.pem
 *.jwt
 output-*.json
 .env
+.audit/*.md
 
 # Code coverage artifacts
 .nyc_output/
