@@ -67,6 +67,15 @@
             "helpMarkDown": "Base URL of your binary mirror. Must use HTTPS. Must serve files at the same path structure as releases.hashicorp.com/packer. Example: https://artifacts.example.com/hashicorp/packer"
         },
         {
+            "name": "mirrorAllowedHosts",
+            "type": "string",
+            "label": "Allowed mirror hosts",
+            "defaultValue": "",
+            "required": false,
+            "visibleRule": "downloadSource = mirror",
+            "helpMarkDown": "Optional comma- or newline-separated host allowlist for private or air-gapped mirrors. When empty, loopback, link-local, metadata, and private-address hosts are rejected, including on redirects."
+        },
+        {
             "name": "requireGpgSignature",
             "type": "boolean",
             "label": "Require GPG signature verification",

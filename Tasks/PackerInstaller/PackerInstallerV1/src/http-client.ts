@@ -7,6 +7,9 @@
 //   withRetry backoff, fetchTextAllow404/fetchBufferAllow404, and proxy-password masking
 //   were backported there). Only comment wording differs. Apply future fixes to both.
 import tasks = require('azure-pipelines-task-lib/task');
+import fs = require('fs');
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
 import { ProxyAgent } from 'undici';
 
 /**
@@ -72,6 +75,7 @@ export async function fetchWithTimeout<T>(
     url: string,
     timeoutMs: number,
     consume: (response: Response) => Promise<T>,
+    isRedirectHostAllowed: (originHost: string, next: URL) => boolean = (originHost, next) => next.host === originHost,
 ): Promise<T> {
     if (!url.startsWith('https://')) {
         throw new HttpError(tasks.loc("InsecureUrlRejected", url), false);
@@ -95,7 +99,7 @@ export async function fetchWithTimeout<T>(
             if (next.protocol !== 'https:') {
                 throw new HttpError(tasks.loc("InsecureUrlRejected", next.toString()), false);
             }
-            if (next.host !== originHost) {
+            if (!isRedirectHostAllowed(originHost, next)) {
                 throw new HttpError(`Refusing to follow an off-host redirect (${originHost} -> ${next.host}) while fetching ${url}.`, false);
             }
             currentUrl = next.toString();
@@ -107,6 +111,38 @@ export async function fetchWithTimeout<T>(
         throw err;
     } finally {
         clearTimeout(timer);
+    }
+}
+
+/** Streams a download to disk while validating the initial host and every redirect hop. */
+export async function downloadToFile(
+    url: string,
+    destPath: string,
+    timeoutMs: number,
+    isHostAllowed: (hostname: string) => void,
+): Promise<void> {
+    isHostAllowed(new URL(url).hostname);
+    try {
+        await fetchWithTimeout(
+            url,
+            timeoutMs,
+            async (response) => {
+                if (!response.ok) {
+                    throw new Error(`Download from ${url} failed with HTTP ${response.status}.`);
+                }
+                if (!response.body) {
+                    throw new Error(`Download from ${url} returned an empty response body.`);
+                }
+                await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(destPath));
+            },
+            (_originHost, next) => {
+                isHostAllowed(next.hostname);
+                return true;
+            },
+        );
+    } catch (error) {
+        try { fs.unlinkSync(destPath); } catch { /* best effort cleanup */ }
+        throw error;
     }
 }
 
