@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.5...v1.2.6) (2026-07-25)
+
+
+### Bug Fixes
+
+* **installer:** block SSRF through mirror downloads ([#176](https://github.com/sethbacon/azure-pipelines-packer/issues/176)) ([a5b9d4b](https://github.com/sethbacon/azure-pipelines-packer/commit/a5b9d4b2b845071629eab564c249ba80346596af))
+* remediate production dependency vulnerabilities ([#173](https://github.com/sethbacon/azure-pipelines-packer/issues/173)) ([89faff8](https://github.com/sethbacon/azure-pipelines-packer/commit/89faff8522e25d054e1ff9fb46e1219d33e95248))
+* remediate remaining dependency alerts ([#178](https://github.com/sethbacon/azure-pipelines-packer/issues/178)) ([2f7f50a](https://github.com/sethbacon/azure-pipelines-packer/commit/2f7f50a7635b76093ab350b6a1331f0f93870567))
+
 ## [1.2.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.4...v1.2.5) (2026-07-12)
 
 
