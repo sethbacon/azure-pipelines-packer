@@ -62,6 +62,8 @@ The ADO OIDC token used for Workload Identity Federation is fetched once at the 
 
 `packer init` downloads plugins from GitHub, which is rate-limited for anonymous requests. Set the `githubToken` input on the `init` command to a token (use a pipeline secret variable); it is passed as `PACKER_GITHUB_API_TOKEN`.
 
+Packer itself verifies plugin checksums and signatures during `init` and the `plugins` commands. The task delegates plugin trust and source selection to Packer; it does not add a separate plugin allowlist or checksum policy. Pin plugin versions and required sources in the template's `required_plugins` block, and review its checksums before enabling `upgradePlugins` in a pipeline.
+
 ## Behind a proxy
 
 The installer honours the agent's proxy configuration (`tasks.getHttpProxyConfiguration()`). Ensure the agent's proxy is configured so it can reach `releases.hashicorp.com`, `checkpoint-api.hashicorp.com`, and your registry/mirror.

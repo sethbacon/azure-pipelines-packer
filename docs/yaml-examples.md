@@ -76,6 +76,8 @@ After this task, `$(packerLocation)` holds the binary path and `$(packerDownload
     githubToken: $(GITHUB_TOKEN)
 ```
 
+Plugin verification and source selection are performed by Packer. Keep plugin versions and sources pinned in the template's `required_plugins` block, review the recorded checksums, and use `upgradePlugins` only when updating those dependencies intentionally. The task does not add a separate plugin allowlist or checksum policy.
+
 ### validate
 
 ```yaml
