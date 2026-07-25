@@ -21,7 +21,7 @@
     "azure-pipelines-task-lib": "^5.278.0",
     "azure-pipelines-tool-lib": "^2.0.12",
     "openpgp": "^6.0.1",
-    "undici": "^8.7.0"
+    "undici": "^8.9.0"
   },
   "overrides": {
     "serialize-javascript": "^7.0.0",
@@ -32,7 +32,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^24",
     "@types/uuid": "^11.0.0",
-    "eslint": "^10.7.0",
+    "eslint": "^10.8.0",
     "mocha": "^11.2.0",
     "nyc": "^18.0.0",
     "ts-node": "^10.9.1",
