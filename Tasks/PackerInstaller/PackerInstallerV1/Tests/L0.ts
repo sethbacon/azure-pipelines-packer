@@ -1,13 +1,45 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
+import * as os from 'os';
 import * as path from 'path';
 import * as openpgp from 'openpgp';
-import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer } from '../src/http-client';
+import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer, downloadToFile } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
 import { downloadToolWithTimeout, redactUrl } from '../src/packer-installer';
+import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from '../src/registry-allowlist';
 import tools = require('azure-pipelines-tool-lib/tool');
 
 describe('PackerInstaller Test Suite', function () {
+
+    it('classifies mirror hosts and resolved addresses', async () => {
+        assert.deepStrictEqual(parseAllowedHosts(' Mirror.Example.com,\n*.trusted.example '), ['mirror.example.com', '*.trusted.example']);
+        assert.ok(isRegistryHostAllowed('mirror.example.com', ['mirror.example.com']));
+        assert.ok(isRegistryHostAllowed('cdn.trusted.example', ['*.trusted.example']));
+        assert.ok(!isRegistryHostAllowed('evil.example.com', ['*.trusted.example']));
+
+        for (const address of ['localhost', '127.0.0.1', '10.1.2.3', '10.1.2.3:8443', '172.16.0.1', '192.168.1.1', '169.254.1.1', '[::1]', 'fe80::1', 'fc00::1']) {
+            assert.ok(isPrivateOrLinkLocalHost(address), `expected private address: ${address}`);
+        }
+        assert.ok(!isPrivateOrLinkLocalHost('8.8.8.8'));
+        assert.ok(await resolvesToPrivateOrLinkLocalAddress('mirror.example.com', async () => [{ address: '10.0.0.8' }]));
+        assert.ok(!await resolvesToPrivateOrLinkLocalAddress('public.example.com', async () => [{ address: '8.8.8.8' }]));
+    });
+
+    it('streams an allowed mirror response to disk', async () => {
+        const originalFetch = globalThis.fetch;
+        const destination = path.join(os.tmpdir(), `packer-download-${Date.now()}.zip`);
+        globalThis.fetch = async () => new Response('fake-zip-content', { status: 200 });
+        try {
+            await downloadToFile('https://mirror.example.com/packer.zip', destination, 1000, hostname => {
+                assert.strictEqual(hostname, 'mirror.example.com');
+            });
+            assert.strictEqual(fs.readFileSync(destination, 'utf8'), 'fake-zip-content');
+        } finally {
+            globalThis.fetch = originalFetch;
+            try { fs.unlinkSync(destination); } catch { /* best effort cleanup */ }
+        }
+    });
 
     before(() => {
         // Prevent VSCode debug path-with-spaces issue when spawning child processes

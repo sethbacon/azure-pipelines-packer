@@ -6,8 +6,9 @@ import fs = require('fs');
 import crypto = require('crypto');
 
 import { randomUUID as uuidV4 } from 'crypto';
-import { fetchJson, fetchText, fetchTextAllow404, DOWNLOAD_TIMEOUT_MS } from './http-client';
+import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
+import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from './registry-allowlist';
 
 const packerToolName = "packer";
 const isWindows = os.type().match(/^Win/);
@@ -373,10 +374,32 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     // Mirror must serve files at the same path structure as releases.hashicorp.com/packer
     const downloadUrl = `${mirrorBaseUrl}/${version}/packer_${version}_${osPlatform}_${arch}.zip`;
 
+    const allowedHosts = parseAllowedHosts(tasks.getInput('mirrorAllowedHosts', false));
+    const initialHost = new URL(downloadUrl).hostname;
+    const validateHost = async (hostname: string): Promise<void> => {
+        if (allowedHosts.length > 0) {
+            if (!isRegistryHostAllowed(hostname, allowedHosts)) {
+                throw new Error(tasks.loc('MirrorDownloadHostNotAllowed', hostname, allowedHosts.join(', ')));
+            }
+        } else if (isPrivateOrLinkLocalHost(hostname) || await resolvesToPrivateOrLinkLocalAddress(hostname)) {
+            throw new Error(tasks.loc('MirrorDownloadHostIsPrivate', hostname));
+        }
+    };
+    await validateHost(initialHost);
+
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
-        zipPath = await downloadToolWithTimeout(downloadUrl, fileName);
+        zipPath = path.join(tasks.getVariable('Agent.TempDirectory') || os.tmpdir(), fileName);
+        await downloadToFile(downloadUrl, zipPath, DOWNLOAD_TIMEOUT_MS, hostname => {
+            if (allowedHosts.length > 0) {
+                if (!isRegistryHostAllowed(hostname, allowedHosts)) {
+                    throw new Error(tasks.loc('MirrorDownloadHostNotAllowed', hostname, allowedHosts.join(', ')));
+                }
+            } else if (isPrivateOrLinkLocalHost(hostname)) {
+                throw new Error(tasks.loc('MirrorDownloadHostIsPrivate', hostname));
+            }
+        });
     } catch (exception) {
         throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
     }
