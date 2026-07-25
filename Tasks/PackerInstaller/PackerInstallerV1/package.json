@@ -18,14 +18,15 @@
   },
   "minimumAgentVersion": "2.144.0",
   "dependencies": {
-    "azure-pipelines-task-lib": "^5.277.0",
+    "azure-pipelines-task-lib": "^5.278.0",
     "azure-pipelines-tool-lib": "^2.0.12",
     "openpgp": "^6.0.1",
     "undici": "^8.7.0"
   },
   "overrides": {
     "serialize-javascript": "^7.0.0",
-    "diff": "^8.0.3"
+    "diff": "^8.0.3",
+    "brace-expansion": "^5.0.8"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
