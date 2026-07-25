@@ -8,10 +8,12 @@ const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 tr.setInput('packerVersion', '1.12.0');
 tr.setInput('downloadSource', 'mirror');
 tr.setInput('mirrorBaseUrl', 'https://artifacts.example.com/hashicorp/packer');
+tr.setInput('mirrorAllowedHosts', 'artifacts.example.com');
 
 tr.registerMock('os', {
     type: () => 'Linux',
-    arch: () => 'x64'
+    arch: () => 'x64',
+    tmpdir: () => '/tmp'
 });
 
 const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -23,7 +25,8 @@ tr.registerMock('./http-client', {
             return `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`;
         }
         throw new Error('Unexpected fetchTextAllow404 URL: ' + url);
-    }
+    },
+    downloadToFile: async () => { }
 });
 
 tr.registerMock('undici', { ProxyAgent: class { } });
