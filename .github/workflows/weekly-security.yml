@@ -36,28 +36,71 @@ jobs:
             --recursive
             .
             --format=table
+            --output=osv-results.txt
+
+      # Surface the scan result in the run's Summary tab so a reviewer sees the
+      # findings (or a clean result) without opening the step logs. Runs even
+      # when the scan step reports vulnerabilities (continue-on-error above).
+      - name: Publish OSV results to job summary
+        if: always()
+        run: |
+          {
+            echo '## OSV-Scanner Results'
+            echo ''
+            if [ -s osv-results.txt ]; then
+              echo '```'
+              cat osv-results.txt
+              echo '```'
+            else
+              echo 'No known vulnerabilities found.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create issue on new vulnerabilities
         if: steps.osv.outcome == 'failure'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const title = `OSV-Scanner: vulnerabilities found — ${new Date().toISOString().slice(0,10)}`;
+            // Comment on the existing tracking issue instead of filing a new
+            // one each Monday -- an unremediated finding otherwise buries any
+            // genuinely new one under duplicates. Matched on a stable title
+            // PREFIX (the full title also embeds today's date) plus both
+            // labels, so only a prior OSV-Scanner issue is ever matched.
+            const titlePrefix = 'OSV-Scanner: vulnerabilities found';
+            const title = `${titlePrefix} — ${new Date().toISOString().slice(0,10)}`;
             const body = [
               '## OSV-Scanner Vulnerability Report',
               '',
               `**Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
-              'OSV-Scanner found known vulnerabilities in npm dependencies. Please review the workflow logs and update affected packages.',
+              'OSV-Scanner found known vulnerabilities in npm dependencies. Please review the run summary (or the workflow logs) and update affected packages.',
             ].join('\n');
 
-            await github.rest.issues.create({
+            const openIssues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title,
-              body,
-              labels: ['security', 'dependencies'],
+              state: 'open',
+              labels: 'security,dependencies',
+              per_page: 100,
             });
+            const existing = openIssues.data.find((issue) => issue.title.startsWith(titlePrefix));
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: `Still failing as of ${new Date().toISOString().slice(0,10)}:\n\n${body}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'dependencies'],
+              });
+            }
 
   # ── HashiCorp GPG key freshness ───────────────────────
   gpg-key-freshness:
