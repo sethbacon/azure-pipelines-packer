@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.6...v1.2.7) (2026-08-06)
+
+
+### Bug Fixes
+
+* remediate brace-expansion HIGH and suppress unfixable uuid OSV residual ([#183](https://github.com/sethbacon/azure-pipelines-packer/issues/183)) ([68365cd](https://github.com/sethbacon/azure-pipelines-packer/commit/68365cdc07354442e3a34b0260a78d18ef93d58a))
+
 ## [1.2.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.5...v1.2.6) (2026-07-25)
 
 
