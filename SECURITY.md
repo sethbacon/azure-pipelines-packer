@@ -44,6 +44,14 @@ This was not fixed in code because `tfx-cli` 0.23.2 (the current pinned version)
 
 If a future `tfx-cli` release adds a non-argv token option, this job should switch to it and the token-lifetime policy can be relaxed back toward the platform default if useful.
 
+## Standing OSV residuals
+
+Each task's job in `unit-test.yml` runs `npm audit --omit=dev --audit-level=high`, so a **moderate or low** severity advisory in a production dependency does not fail the PR/push build. That gap is covered by `weekly-security.yml`'s `osv-scan` job, which runs `google/osv-scanner-action` with no severity filter and files (or comments on) a tracked GitHub issue labeled `security, dependencies`. The advisories that scan currently reports, and their disposition:
+
+- **`uuid` 3.4.0 (GHSA-w5hq-g745-h8pq, moderate) — accepted, no safe fix.** Reached transitively through `azure-pipelines-tool-lib`, a production dependency of `PipelinePackerInstaller@1`. tool-lib's latest release (`2.0.12`) still pins `uuid ^3.3.2` — there is no fixed SDK to move to — and the flaw is confined to the `v3()`/`v5()`/`v6()` API methods **when passed an external output buffer**; tool-lib only calls `v4()` (random, no buffer) for tool-cache directory names, so the vulnerable path is never exercised. Forcing a fixed `uuid` (`11.1.1+`) via `overrides` would break tool-lib's v3-era `require('uuid/v4')` import style, so it is deliberately **not** overridden. Because it re-filed on the weekly tracking issue indefinitely with no actionable next step, it is suppressed via a scoped `osv-scanner.toml` (`[[IgnoredVulns]]`) in `Tasks/PackerInstaller/PackerInstallerV1/` — bounded with `ignoreUntil = 2027-02-05` rather than left open-ended, so the weekly scan resumes reporting it, forcing a fresh look, if tool-lib still hasn't shipped a `uuid`-free release by then.
+
+`brace-expansion` (GHSA-rgw5-rvv9-x895) and `diff` (GHSA-73rr-hh4g-fpgx) are **not** residuals: both are remediated through `overrides` entries in each task's `package.json`, since the packages that depend on them pin ranges that exclude the fixed versions. Remove those overrides if the direct dependents ever declare fixed ranges of their own.
+
 ## Verifying a release artifact
 
 Each GitHub Release attaches the `.vsix`, a cosign keyless signature bundle (`*.vsix.bundle`), and CycloneDX SBOMs. The `.vsix` is signed and attested by the release workflow using GitHub OIDC (no long-lived key), so you can verify it came from this repository's release pipeline and was not tampered with.
