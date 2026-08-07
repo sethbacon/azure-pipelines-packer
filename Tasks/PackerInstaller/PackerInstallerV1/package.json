@@ -21,7 +21,7 @@
     "azure-pipelines-task-lib": "^5.278.0",
     "azure-pipelines-tool-lib": "^2.0.12",
     "openpgp": "^6.0.1",
-    "undici": "^8.9.0"
+    "undici": "^8.10.0"
   },
   "overrides": {
     "serialize-javascript": "^7.0.0",
