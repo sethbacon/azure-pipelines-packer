@@ -223,12 +223,26 @@ export abstract class BasePackerCommandHandler {
         if (commandOptions) tool.line(commandOptions);
     }
 
+    /**
+     * Runs `tool` while buffering its stdout, and RETURNS the exit code instead of
+     * rejecting on it.
+     *
+     * `ignoreReturnCode` is forced here rather than left to callers (#203):
+     * task-lib's ToolRunner rejects the promise on any non-zero exit unless it is
+     * set, which would throw away the very stdout this method exists to capture.
+     * `packer fix` prints the fixed template and then exits non-zero merely
+     * because its own default post-fix `-validate` check still fails -- a common,
+     * non-catastrophic outcome, since fix does not resolve every deprecation. The
+     * equivalent raw CLI usage (`packer fix template.json > fixed.json`) keeps the
+     * output regardless of exit status, and fixOutputFile exists to replace that
+     * workflow. Callers get the code and remain responsible for failing the task.
+     */
     protected async execWithStdoutCapture(tool: ToolRunner, options: IExecOptions): Promise<{ code: number; stdout: string }> {
         let stdout = '';
         tool.on('stdout', (data: string | Buffer) => {
             stdout += data.toString();
         });
-        const code = await tool.execAsync(options);
+        const code = await tool.execAsync(<IExecOptions>{ ...options, ignoreReturnCode: true });
         return { code, stdout };
     }
 
@@ -388,8 +402,18 @@ export abstract class BasePackerCommandHandler {
 
         await this.handleProvider(command);
 
-        const code = await tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory });
+        // #202: the manifest post-processor writes artifact_id entries as each
+        // builder finishes, so a multi-builder template that fails on ONE builder
+        // still leaves a manifest on disk naming the artifacts the others already
+        // created. With the default ignoreReturnCode:false the await below would
+        // reject and setBuildOutputs() would never run, hiding exactly the ids a
+        // cleanup/deregistration step needs to remove those orphans. Capture the
+        // code, publish the outputs, and only then fail.
+        const code = await tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory, ignoreReturnCode: true });
         this.setBuildOutputs();
+        if (code !== 0) {
+            throw new Error(`packer build failed with exit code ${code}.`);
+        }
         return code;
     }
 
@@ -457,6 +481,9 @@ export abstract class BasePackerCommandHandler {
             if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
                 throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
             }
+            // execWithStdoutCapture forces ignoreReturnCode, so a non-zero exit
+            // resolves here with the fixed template still buffered (#203) instead
+            // of rejecting and discarding it.
             const result = await this.execWithStdoutCapture(tool, { cwd: command.workingDirectory });
             // Re-validate immediately before writing (TOCTOU guard, #110): packer
             // fix's run is an arbitrarily long window during which a symlink could
@@ -465,12 +492,19 @@ export abstract class BasePackerCommandHandler {
             if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
                 throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}) after packer fix ran. Refusing to write.`);
             }
-            tasks.writeFile(resolved, result.stdout);
-            const safeFixFilePath = this.sanitizeOutputVariableValue(resolved);
-            if (safeFixFilePath) {
-                tasks.setVariable('fixFilePath', safeFixFilePath, false, true);
-            } else {
-                tasks.warning(`fixFilePath '${resolved}' failed output-variable validation (length/printable-ASCII); skipping fixFilePath output variable.`);
+            if (result.stdout) {
+                tasks.writeFile(resolved, result.stdout);
+                const safeFixFilePath = this.sanitizeOutputVariableValue(resolved);
+                if (safeFixFilePath) {
+                    tasks.setVariable('fixFilePath', safeFixFilePath, false, true);
+                } else {
+                    tasks.warning(`fixFilePath '${resolved}' failed output-variable validation (length/printable-ASCII); skipping fixFilePath output variable.`);
+                }
+            }
+            // The write happens first so the fixed template survives; the task
+            // still fails on a non-zero code, exactly as it did before #203.
+            if (result.code !== 0) {
+                throw new Error(`packer fix failed with exit code ${result.code}.`);
             }
             return result.code;
         }
@@ -553,6 +587,15 @@ export abstract class BasePackerCommandHandler {
     private static readonly OUTPUT_VAR_MAX_LENGTH = 1024;
 
     /**
+     * Upper bound on the manifest file itself before it is read into memory and
+     * JSON.parse'd (#101). The manifest post-processor's output is
+     * build-template-controlled: a template that appends unbounded post-processor
+     * entries (or simply points manifestFile at a large artifact) would otherwise
+     * be buffered whole and parsed. A real manifest is a few KB per build.
+     */
+    private static readonly MANIFEST_MAX_BYTES = 5 * 1024 * 1024;
+
+    /**
      * Caps length and requires printable-ASCII content before a template- or
      * build-influenced value becomes a pipeline output variable. The manifest
      * JSON (artifactId in particular) is written by the Packer manifest
@@ -584,6 +627,11 @@ export abstract class BasePackerCommandHandler {
             return;
         }
         try {
+            const size = fs.statSync(resolved).size;
+            if (size > BasePackerCommandHandler.MANIFEST_MAX_BYTES) {
+                tasks.warning(`Manifest file ${resolved} is ${size} bytes, above the ${BasePackerCommandHandler.MANIFEST_MAX_BYTES}-byte cap; skipping build output variables.`);
+                return;
+            }
             const manifest = JSON.parse(fs.readFileSync(resolved, 'utf8'));
             const safeManifestPath = this.sanitizeOutputVariableValue(resolved);
             if (safeManifestPath) {

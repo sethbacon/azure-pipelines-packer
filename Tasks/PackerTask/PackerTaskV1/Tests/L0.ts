@@ -10,6 +10,7 @@ import './SecureFileLoaderL0';
 import './PreMaskingClassL0';
 import './CredentialFailClosedMatrixL0';
 import './EntryPointSignalsL0';
+import './OutputBoundaryClassL0';
 
 describe('PackerTask Test Suite', function () {
 
