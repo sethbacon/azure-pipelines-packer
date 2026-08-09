@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.9](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.8...v1.2.9) (2026-08-09)
+
+
+### Bug Fixes
+
+* publish outputs before failing, and cap the manifest read ([#232](https://github.com/sethbacon/azure-pipelines-packer/issues/232)) ([e432a2c](https://github.com/sethbacon/azure-pipelines-packer/commit/e432a2c5c1a92385107fa0df9a40ea2ec24d8662)), closes [#101](https://github.com/sethbacon/azure-pipelines-packer/issues/101) [#202](https://github.com/sethbacon/azure-pipelines-packer/issues/202) [#203](https://github.com/sethbacon/azure-pipelines-packer/issues/203) [#110](https://github.com/sethbacon/azure-pipelines-packer/issues/110)
+* route OIDC through the agent proxy, and make the docs match the code ([#231](https://github.com/sethbacon/azure-pipelines-packer/issues/231)) ([9a14573](https://github.com/sethbacon/azure-pipelines-packer/commit/9a14573199a1c077b6a94d4bed795b3678b6e65c)), closes [#196](https://github.com/sethbacon/azure-pipelines-packer/issues/196) [#190](https://github.com/sethbacon/azure-pipelines-packer/issues/190) [#205](https://github.com/sethbacon/azure-pipelines-packer/issues/205) [#206](https://github.com/sethbacon/azure-pipelines-packer/issues/206) [#207](https://github.com/sethbacon/azure-pipelines-packer/issues/207)
+
+
+### Security
+
+* authorize egress by resolved address, on every hop ([#226](https://github.com/sethbacon/azure-pipelines-packer/issues/226)) ([605e085](https://github.com/sethbacon/azure-pipelines-packer/commit/605e085f6e16e5a83059f55cd711e82021d82a46)), closes [#161](https://github.com/sethbacon/azure-pipelines-packer/issues/161) [#188](https://github.com/sethbacon/azure-pipelines-packer/issues/188) [#191](https://github.com/sethbacon/azure-pipelines-packer/issues/191) [#200](https://github.com/sethbacon/azure-pipelines-packer/issues/200) [#201](https://github.com/sethbacon/azure-pipelines-packer/issues/201)
+* bound wildcard host pins to exactly one label ([#229](https://github.com/sethbacon/azure-pipelines-packer/issues/229)) ([55d2602](https://github.com/sethbacon/azure-pipelines-packer/commit/55d2602aa91e293101a139f2ed205f3d96fa5c33))
+* discard unverified artifacts and re-verify the cache ([#233](https://github.com/sethbacon/azure-pipelines-packer/issues/233)) ([8fbff85](https://github.com/sethbacon/azure-pipelines-packer/commit/8fbff85e6abb7ff8117b317dec759f38922c0a40)), closes [#65](https://github.com/sethbacon/azure-pipelines-packer/issues/65) [#136](https://github.com/sethbacon/azure-pipelines-packer/issues/136) [#204](https://github.com/sethbacon/azure-pipelines-packer/issues/204) [#198](https://github.com/sethbacon/azure-pipelines-packer/issues/198) [#78](https://github.com/sethbacon/azure-pipelines-packer/issues/78)
+* fail closed on absent or malformed provider credentials ([#228](https://github.com/sethbacon/azure-pipelines-packer/issues/228)) ([8690a77](https://github.com/sethbacon/azure-pipelines-packer/commit/8690a777462512b69fe41ba1de65a8093d1d05a1)), closes [#97](https://github.com/sethbacon/azure-pipelines-packer/issues/97) [#187](https://github.com/sethbacon/azure-pipelines-packer/issues/187) [#199](https://github.com/sethbacon/azure-pipelines-packer/issues/199) [#194](https://github.com/sethbacon/azure-pipelines-packer/issues/194) [#44](https://github.com/sethbacon/azure-pipelines-packer/issues/44) [#197](https://github.com/sethbacon/azure-pipelines-packer/issues/197)
+* register credentials with setSecret before they can be logged ([#225](https://github.com/sethbacon/azure-pipelines-packer/issues/225)) ([18d2f48](https://github.com/sethbacon/azure-pipelines-packer/commit/18d2f484729a2ecaeb646507e738b0946e27ed83)), closes [#185](https://github.com/sethbacon/azure-pipelines-packer/issues/185) [#195](https://github.com/sethbacon/azure-pipelines-packer/issues/195) [#186](https://github.com/sethbacon/azure-pipelines-packer/issues/186) [#193](https://github.com/sethbacon/azure-pipelines-packer/issues/193) [#66](https://github.com/sethbacon/azure-pipelines-packer/issues/66)
+
 ## [1.2.8](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.7...v1.2.8) (2026-08-09)
 
 
