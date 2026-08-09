@@ -8,7 +8,8 @@ import crypto = require('crypto');
 import { randomUUID as uuidV4 } from 'crypto';
 import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
-import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from './registry-allowlist';
+import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from './registry-allowlist';
+import { validateUrlPathSegment } from './url-path-segment';
 import {
     extractUrlTokenSecrets,
     extractUrlUserInfoSecrets,
@@ -95,19 +96,38 @@ export async function downloadToolWithTimeout(url: string, fileName: string, tim
     }
 }
 
-const MIRROR_NAME_PATTERN = /^[A-Za-z0-9._-]+$/;
-
-/** Reads and validates registryMirrorName against a conservative charset, rejecting path separators/traversal shapes. */
+/**
+ * Reads registryMirrorName and validates it as a single URL path segment before
+ * it is interpolated into the registry API path. Delegates to the shared
+ * validateUrlPathSegment() so the traversal rejection can never drift between
+ * this task and the sibling terraform installers (#200) — the previous local
+ * charset pattern allowed the literal `..` despite its comment claiming
+ * otherwise.
+ */
 function getValidatedMirrorName(): string {
     // registryMirrorName is required=true with task.json defaultValue "packer", so
     // getInput() here always returns a non-empty string or throws first; the old
     // `|| "packer"` fallback was unreachable dead code.
-    const mirrorName = tasks.getInput("registryMirrorName", true)!;
-    if (!MIRROR_NAME_PATTERN.test(mirrorName)) {
-        throw new Error(`registryMirrorName '${mirrorName}' contains characters other than letters, digits, '.', '_', '-'.`);
-    }
-    return mirrorName;
+    return validateUrlPathSegment('registryMirrorName', tasks.getInput("registryMirrorName", true)!);
 }
+
+/**
+ * Localized rejection text for the mirror download source's egress authorization.
+ * Both keys are declared in task.json's `messages` map (which is what task-lib
+ * actually iterates when loading resources) as well as in the resjson — a key
+ * present only in the resjson is never loaded and renders as its raw key name
+ * (#201), which would have degraded exactly these two guards' diagnostics.
+ */
+const MIRROR_EGRESS_MESSAGES: EgressHostMessages = {
+    notAllowed: (hostname, allowedHosts) => tasks.loc('MirrorDownloadHostNotAllowed', hostname, allowedHosts),
+    isPrivate: (hostname) => tasks.loc('MirrorDownloadHostIsPrivate', hostname),
+};
+
+/** Localized rejection text for the private-registry download source's egress authorization. */
+const REGISTRY_EGRESS_MESSAGES: EgressHostMessages = {
+    notAllowed: (hostname, allowedHosts) => tasks.loc('RegistryDownloadHostNotAllowed', hostname, allowedHosts),
+    isPrivate: (hostname) => tasks.loc('RegistryDownloadHostIsPrivate', hostname),
+};
 
 /**
  * Reads and validates registryUrl: must parse as a well-formed absolute URL and use
@@ -307,9 +327,10 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     // Azure `sig=`, so AWS X-Amz-Signature/X-Amz-Credential/X-Amz-Security-Token and
     // GCS X-Goog-Signature/X-Goog-Credential would otherwise print unredacted on every
     // normal registry run. Register each token component as a secret FIRST — before
-    // ANY emission that can carry the URL, including the https-pin rejection below,
-    // which used to interpolate the raw pre-signed URL into its message while the
-    // registration still sat further down this function (#66/#98).
+    // ANY emission that can carry the URL, including the https-pin rejection and the
+    // egress-authorization refusal below, which used to interpolate the raw pre-signed
+    // URL into their message while the registration still sat further down this
+    // function (#66/#98).
     const urlTokenSecrets = extractUrlTokenSecrets(data.download_url);
     for (const secret of urlTokenSecrets) {
         tasks.setSecret(secret);
@@ -323,10 +344,25 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
         throw new Error(`Registry API returned a malformed sha256 for ${safeInfoUrl}: expected 64 hex characters.`);
     }
 
+    // Egress authorization for the registry-advertised download destination
+    // (#161, sibling of terraform #729/#679/#769). download_url is chosen by the
+    // registry at request time, not by the pipeline author, so a compromised or
+    // misconfigured registry could point it — or a redirect from it — at a
+    // loopback/link-local/private address, notably the cloud metadata service.
+    // This path previously had NO host check at all and downloaded via
+    // tools.downloadTool, which follows redirects with no way to re-validate
+    // them. Default (registryAllowedHosts empty) is the baseline private/reserved
+    // refusal; an operator whose registry legitimately serves from a private
+    // storage host pins it explicitly, exactly as the mirror source does.
+    const registryAllowedHosts = parseAllowedHosts(tasks.getInput("registryAllowedHosts", false));
+    await assertEgressHostAllowed(new URL(data.download_url).hostname, registryAllowedHosts, REGISTRY_EGRESS_MESSAGES);
+
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
-        zipPath = await downloadToolWithTimeout(data.download_url, fileName);
+        zipPath = path.join(tasks.getVariable('Agent.TempDirectory') || os.tmpdir(), fileName);
+        await downloadToFile(data.download_url, zipPath, DOWNLOAD_TIMEOUT_MS, hostname =>
+            assertEgressHostAllowed(hostname, registryAllowedHosts, REGISTRY_EGRESS_MESSAGES));
     } catch (exception) {
         // download_url is a pre-signed URL whose query string carries the signing
         // token; drop the whole query (redactUrl) and scrub the raw URL out of the
@@ -364,32 +400,24 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     // Mirror must serve files at the same path structure as releases.hashicorp.com/packer
     const downloadUrl = `${mirrorBaseUrl}/${version}/packer_${version}_${osPlatform}_${arch}.zip`;
 
+    // Egress authorization for the mirror download destination. The SAME decision
+    // (assertEgressHostAllowed) is applied to the initial URL and, via
+    // downloadToFile, to every redirect hop. Previously the per-hop callback
+    // re-checked only the textual private/link-local blocklist while the initial
+    // check also resolved DNS, so a redirect to an ordinary-looking name that
+    // resolves to 169.254.169.254 passed the hop check (#161/#191); the callback
+    // was also invoked without being awaited, so an async rejection could not have
+    // stopped the download even once it did resolve.
     const allowedHosts = parseAllowedHosts(tasks.getInput('mirrorAllowedHosts', false));
     const initialHost = new URL(downloadUrl).hostname;
-    const validateHost = async (hostname: string): Promise<void> => {
-        if (allowedHosts.length > 0) {
-            if (!isRegistryHostAllowed(hostname, allowedHosts)) {
-                throw new Error(tasks.loc('MirrorDownloadHostNotAllowed', hostname, allowedHosts.join(', ')));
-            }
-        } else if (isPrivateOrLinkLocalHost(hostname) || await resolvesToPrivateOrLinkLocalAddress(hostname)) {
-            throw new Error(tasks.loc('MirrorDownloadHostIsPrivate', hostname));
-        }
-    };
-    await validateHost(initialHost);
+    await assertEgressHostAllowed(initialHost, allowedHosts, MIRROR_EGRESS_MESSAGES);
 
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
         zipPath = path.join(tasks.getVariable('Agent.TempDirectory') || os.tmpdir(), fileName);
-        await downloadToFile(downloadUrl, zipPath, DOWNLOAD_TIMEOUT_MS, hostname => {
-            if (allowedHosts.length > 0) {
-                if (!isRegistryHostAllowed(hostname, allowedHosts)) {
-                    throw new Error(tasks.loc('MirrorDownloadHostNotAllowed', hostname, allowedHosts.join(', ')));
-                }
-            } else if (isPrivateOrLinkLocalHost(hostname)) {
-                throw new Error(tasks.loc('MirrorDownloadHostIsPrivate', hostname));
-            }
-        });
+        await downloadToFile(downloadUrl, zipPath, DOWNLOAD_TIMEOUT_MS, hostname =>
+            assertEgressHostAllowed(hostname, allowedHosts, MIRROR_EGRESS_MESSAGES));
     } catch (exception) {
         throw new Error(tasks.loc("PackerDownloadFailed", redactUrlUserInfo(downloadUrl), exception));
     }

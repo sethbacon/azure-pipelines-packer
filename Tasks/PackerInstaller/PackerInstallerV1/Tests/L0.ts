@@ -10,6 +10,11 @@ import { downloadToolWithTimeout, redactUrl } from '../src/packer-installer';
 import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from '../src/registry-allowlist';
 import tools = require('azure-pipelines-tool-lib/tool');
 
+// Table-driven class test for the egress-authorization defect class
+// (#161/#188/#191/#200/#201). Kept in its own file so its three tables stay
+// readable; imported for its side effect of registering the suite.
+import './EgressAuthorizationL0';
+
 describe('PackerInstaller Test Suite', function () {
 
     it('classifies mirror hosts and resolved addresses', async () => {
