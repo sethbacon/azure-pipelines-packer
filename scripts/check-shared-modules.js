@@ -31,6 +31,7 @@ const SHARED_MODULES = [
     'hashicorp-gpg-key.ts',
     'gpg-verifier.ts',
     'http-client.ts',
+    'url-secret-redaction.ts',
 ];
 
 // Required provenance markers (see any listed module's header for the format).

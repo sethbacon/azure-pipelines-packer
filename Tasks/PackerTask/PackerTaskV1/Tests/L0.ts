@@ -7,6 +7,7 @@ import './IdTokenGeneratorL0';
 import './PemNormalizerL0';
 import './SecureTempL0';
 import './SecureFileLoaderL0';
+import './PreMaskingClassL0';
 
 describe('PackerTask Test Suite', function () {
 
@@ -110,6 +111,7 @@ describe('PackerTask Test Suite', function () {
     expectSuccessMasksSecret('AwsWifAuth', ['mock-aws-oidc-jwt-12345']);
     expectSuccess('NoneAuth');
     expectSuccess('GcpMultilinePemAuth');   // #108: genuine multi-line PEM must not throw
+    expectSuccess('OciMultilinePemAuth');   // #195: same for OCI (REST/CLI-created connections)
 
     it('OciAuthPerLineMasking', async () => {
         const tp = path.join(__dirname, 'OciAuth.js');

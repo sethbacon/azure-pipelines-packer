@@ -3,9 +3,13 @@
 //   shared cross-extension package is extracted, apply fixes to both copies and keep the
 //   provenance header current. Enforced by scripts/check-shared-modules.js.
 // @shared-module-status: IN-SYNC — functionally identical to azure-pipelines-terraform's
-//   copy as of 2026-07-04 (redirect re-validation + MAX_REDIRECTS, typed HttpError +
-//   withRetry backoff, fetchTextAllow404/fetchBufferAllow404, and proxy-password masking
-//   were backported there). Only comment wording differs. Apply future fixes to both.
+//   copy as of 2026-08-08 for every guard this module carries (redirect re-validation +
+//   MAX_REDIRECTS, typed HttpError + withRetry backoff, fetchTextAllow404/
+//   fetchBufferAllow404, and proxy-password masking of BOTH the raw and the
+//   URL-percent-encoded form). The encoded-form registration in buildFetchOptions was
+//   applied to all four copies (this one plus terraform's three) in the same change.
+//   Terraform's copy additionally carries response-size/JSON-body caps and a shared
+//   retry.ts; only comment wording differs otherwise. Apply future fixes to both.
 import tasks = require('azure-pipelines-task-lib/task');
 import fs = require('fs');
 import { pipeline } from 'stream/promises';
@@ -49,6 +53,17 @@ function buildFetchOptions(): RequestInit {
         }
         url.username = proxy.proxyUsername;
         url.password = proxy.proxyPassword ?? "";
+        // url.password is now the WHATWG URL setter's PERCENT-ENCODED form (e.g.
+        // 'p@ss' -> 'p%40ss') — a byte-different string from the raw
+        // proxyPassword already setSecret()'d above. ADO's log masker matches
+        // literal registered strings, not derivations, so this encoded form
+        // (which is what url.toString() below actually embeds in proxyUrl, and
+        // therefore what an undici/ProxyAgent connection-failure message would
+        // surface) needs its own registration too. Mirrors the same fix in
+        // azure-pipelines-terraform's proxy-config.ts / https-client.ts.
+        if (url.password) {
+            tasks.setSecret(url.password);
+        }
         proxyUrl = url.toString();
     }
 

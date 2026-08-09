@@ -9,6 +9,17 @@ import { randomUUID as uuidV4 } from 'crypto';
 import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
 import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from './registry-allowlist';
+import {
+    extractUrlTokenSecrets,
+    extractUrlUserInfoSecrets,
+    redactUrl,
+    redactUrlUserInfo,
+    scrubSecretsFromMessage,
+} from './url-secret-redaction';
+
+// Re-exported for backward compatibility: Tests/L0.ts imports redactUrl from this
+// module. The implementation now lives in the shared ./url-secret-redaction copy.
+export { redactUrl } from './url-secret-redaction';
 
 const packerToolName = "packer";
 const isWindows = os.type().match(/^Win/);
@@ -28,60 +39,21 @@ class ChecksumUnavailableError extends Error {
 }
 
 /**
- * Strips the ENTIRE query string (which can carry a pre-signed signature/token —
- * Azure `sig`, AWS `X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Security-Token`,
- * GCS `X-Goog-Signature`/`X-Goog-Credential`) from a URL for safe logging. The whole
- * query is dropped rather than redacting known parameter names one at a time, so an
- * unforeseen token parameter can never leak through the error path.
+ * setSecret() any basic-auth userinfo embedded in an operator-supplied
+ * registry/mirror URL, so the agent masks it everywhere the URL — or any URL
+ * derived from it (infoUrl, latestUrl, sha256SumsUrl, downloadUrl) — might be
+ * echoed: pipeline variables, console output, error and warning messages.
+ * Idempotent; call at the earliest use of each operator URL, BEFORE the first
+ * emission. Pair with redactUrlUserInfo() to structurally strip the credential
+ * from any value that is stored or displayed (setSecret only masks logs, it does
+ * not sanitize a persisted pipeline variable's value). Mirrors
+ * azure-pipelines-terraform's registry-version-resolver.ts helper of the same
+ * name.
  */
-export function redactUrl(url: string): string {
-    try {
-        const u = new URL(url);
-        return u.origin + u.pathname + (u.search ? '?<redacted>' : '');
-    } catch {
-        return url.split('?')[0];
+function maskOperatorUrlCredentials(url: string): void {
+    for (const secret of extractUrlUserInfoSecrets(url)) {
+        tasks.setSecret(secret);
     }
-}
-
-/**
- * True when a query-string parameter carries a live pre-signed credential/token: its
- * name is exactly `sig` (Azure SAS) or contains `signature`, `credential`, or `token`
- * — covering AWS (`X-Amz-Signature`/`X-Amz-Credential`/`X-Amz-Security-Token`) and GCS
- * (`X-Goog-Signature`/`X-Goog-Credential`) while leaving benign params such as
- * `X-Amz-SignedHeaders`, `X-Amz-Date`, and `X-Amz-Expires` visible.
- */
-function isSensitiveQueryParam(name: string): boolean {
-    const lower = name.toLowerCase();
-    return lower === 'sig'
-        || lower.includes('signature')
-        || lower.includes('credential')
-        || lower.includes('token');
-}
-
-/**
- * Extracts the values of every sensitive query-string token in `url`. Values are
- * returned in the raw form they appear in the URL (still percent-encoded) so they
- * match the exact substring tool-lib logs at INFO; the decoded form is added too when
- * it differs, so a consumer that logs the decoded value is masked as well. Used to
- * setSecret() the tokens before download and to scrub them from any failure message.
- */
-function extractUrlTokenSecrets(url: string): string[] {
-    const qIndex = url.indexOf('?');
-    if (qIndex === -1) return [];
-    const query = url.slice(qIndex + 1).split('#')[0];
-    const secrets: string[] = [];
-    for (const pair of query.split('&')) {
-        const eq = pair.indexOf('=');
-        if (eq === -1) continue;
-        const name = pair.slice(0, eq);
-        const rawValue = pair.slice(eq + 1);
-        if (!rawValue || !isSensitiveQueryParam(name)) continue;
-        secrets.push(rawValue);
-        let decoded: string;
-        try { decoded = decodeURIComponent(rawValue); } catch { decoded = rawValue; }
-        if (decoded !== rawValue) secrets.push(decoded);
-    }
-    return secrets;
 }
 
 /**
@@ -146,14 +118,18 @@ function getValidatedMirrorName(): string {
  */
 function getValidatedRegistryUrl(): string {
     const registryUrl = tasks.getInput("registryUrl", true)!;
+    // registryUrl may embed basic-auth userinfo (https://user:password@host/...,
+    // a real pattern for internal artifact proxies). Mask it BEFORE the first
+    // emission below, and strip it structurally from every message.
+    maskOperatorUrlCredentials(registryUrl);
     let parsed: URL;
     try {
         parsed = new URL(registryUrl);
     } catch {
-        throw new Error(`registryUrl '${registryUrl}' is not a valid URL.`);
+        throw new Error(`registryUrl '${redactUrlUserInfo(registryUrl)}' is not a valid URL.`);
     }
     if (parsed.protocol !== 'https:') {
-        throw new Error(tasks.loc("InsecureUrlRejected", registryUrl));
+        throw new Error(tasks.loc("InsecureUrlRejected", redactUrlUserInfo(registryUrl)));
     }
     return registryUrl.replace(/\/+$/, '');
 }
@@ -191,13 +167,16 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
                 const registryUrl = getValidatedRegistryUrl();
                 const mirrorName = getValidatedMirrorName();
                 zipPath = await downloadZipFromRegistry(version, registryUrl, mirrorName);
-                tasks.setVariable('packerDownloadedFrom', `registry:${registryUrl}`);
+                // Strip any embedded basic-auth userinfo before persisting the source
+                // into a downstream-readable pipeline variable (setSecret masks logs,
+                // not a stored variable's value).
+                tasks.setVariable('packerDownloadedFrom', `registry:${redactUrlUserInfo(registryUrl)}`);
                 break;
             }
             case "mirror": {
                 const mirrorBaseUrl = tasks.getInput("mirrorBaseUrl", true)!;
                 zipPath = await downloadZipFromMirror(version, mirrorBaseUrl);
-                tasks.setVariable('packerDownloadedFrom', `mirror:${mirrorBaseUrl}`);
+                tasks.setVariable('packerDownloadedFrom', `mirror:${redactUrlUserInfo(mirrorBaseUrl)}`);
                 break;
             }
             default: { // "hashicorp"
@@ -266,11 +245,14 @@ async function resolveVersionFromRegistry(inputVersion: string, registryUrl: str
     if (inputVersion.toLowerCase() !== 'latest') {
         return inputVersion;
     }
-    console.log(tasks.loc("ResolvingLatestFromRegistry", registryUrl));
+    // registryUrl may embed basic-auth userinfo; mask it before it can reach a log
+    // via latestUrl in the console line or error below.
+    maskOperatorUrlCredentials(registryUrl);
+    console.log(tasks.loc("ResolvingLatestFromRegistry", redactUrlUserInfo(registryUrl)));
     const latestUrl = `${registryUrl}/terraform/binaries/${mirrorName}/versions/latest`;
     const data = await fetchJson<{ version: string }>(latestUrl);
     if (!data.version) {
-        throw new Error(`Registry API returned invalid response: missing version field from ${latestUrl}`);
+        throw new Error(`Registry API returned invalid response: missing version field from ${redactUrlUserInfo(latestUrl)}`);
     }
     console.log(tasks.loc("ResolvedVersionFromRegistry", data.version));
     return data.version;
@@ -305,36 +287,43 @@ async function downloadZipFromHashiCorp(version: string): Promise<string> {
 }
 
 async function downloadZipFromRegistry(version: string, registryUrl: string, mirrorName: string): Promise<string> {
+    // registryUrl may embed basic-auth userinfo; mask it before it can reach a log
+    // via infoUrl in any error/warning below.
+    maskOperatorUrlCredentials(registryUrl);
     const osPlatform = getPlatformString();
     const arch = getArchString();
     const infoUrl = `${registryUrl}/terraform/binaries/${mirrorName}/versions/${version}/${osPlatform}/${arch}`;
+    const safeInfoUrl = redactUrlUserInfo(infoUrl);
 
     const data = await fetchJson<{ download_url: string; sha256: string }>(infoUrl);
     if (!data.download_url) {
-        throw new Error(`Registry API returned invalid response: missing download_url from ${infoUrl}`);
+        throw new Error(`Registry API returned invalid response: missing download_url from ${safeInfoUrl}`);
     }
     // data.download_url = pre-signed storage URL (time-limited)
     // data.sha256       = hex SHA256 of the zip (may be empty if registry verified server-side)
-    // The download URL is registry-controlled and fetched outside fetchJson's HTTPS
-    // guard, so pin it to HTTPS before downloading — as the mirror path already does.
-    if (!data.download_url.startsWith('https://')) {
-        throw new Error(tasks.loc("InsecureUrlRejected", data.download_url));
-    }
-    if (data.sha256 && !SHA256_HEX_PATTERN.test(data.sha256)) {
-        throw new Error(`Registry API returned a malformed sha256 for ${infoUrl}: expected 64 hex characters.`);
-    }
-
-    const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
+    //
     // The pre-signed download_url carries a live, read-scoped storage credential in
     // its query string. tools.downloadTool logs the URL at INFO and only auto-redacts
     // Azure `sig=`, so AWS X-Amz-Signature/X-Amz-Credential/X-Amz-Security-Token and
     // GCS X-Goog-Signature/X-Goog-Credential would otherwise print unredacted on every
-    // normal registry run. Register each token component as a secret FIRST so the agent
-    // masks it in tool-lib's log line (and in any failure message). See #98.
+    // normal registry run. Register each token component as a secret FIRST — before
+    // ANY emission that can carry the URL, including the https-pin rejection below,
+    // which used to interpolate the raw pre-signed URL into its message while the
+    // registration still sat further down this function (#66/#98).
     const urlTokenSecrets = extractUrlTokenSecrets(data.download_url);
     for (const secret of urlTokenSecrets) {
         tasks.setSecret(secret);
     }
+    // The download URL is registry-controlled and fetched outside fetchJson's HTTPS
+    // guard, so pin it to HTTPS before downloading — as the mirror path already does.
+    if (!data.download_url.startsWith('https://')) {
+        throw new Error(tasks.loc("InsecureUrlRejected", redactUrl(data.download_url)));
+    }
+    if (data.sha256 && !SHA256_HEX_PATTERN.test(data.sha256)) {
+        throw new Error(`Registry API returned a malformed sha256 for ${safeInfoUrl}: expected 64 hex characters.`);
+    }
+
+    const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
     try {
         zipPath = await downloadToolWithTimeout(data.download_url, fileName);
@@ -344,13 +333,11 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
         // tool-lib exception text so the live credential never reaches the build log
         // via the failure message.
         const safeUrl = redactUrl(data.download_url);
-        let safeMsg = String(exception instanceof Error ? exception.message : exception).split(data.download_url).join(safeUrl);
-        // Belt-and-suspenders: tool-lib may embed a URL it partially transformed
-        // (its own `sig=` redaction) that the exact-URL replace above misses, so also
-        // scrub each known token value out of the message.
-        for (const secret of urlTokenSecrets) {
-            safeMsg = safeMsg.split(secret).join('<redacted>');
-        }
+        const safeMsg = scrubSecretsFromMessage(
+            String(exception instanceof Error ? exception.message : exception),
+            data.download_url,
+            urlTokenSecrets,
+        );
         throw new Error(tasks.loc("PackerDownloadFailed", safeUrl, safeMsg));
     }
 
@@ -358,16 +345,19 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     if (data.sha256) {
         await verifySha256(zipPath, data.sha256);
     } else if (requireChecksum) {
-        throw new Error(`Checksum verification is required but the registry did not provide a sha256 for ${infoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
+        throw new Error(`Checksum verification is required but the registry did not provide a sha256 for ${safeInfoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
     } else {
-        tasks.warning(`The registry returned no sha256 for ${infoUrl}; the binary is installed WITHOUT any local integrity verification (no checksum and the registry source performs no GPG check) — you are trusting the registry's server-side verification and TLS alone. Set 'requireChecksum' to true to require a local check.`);
+        tasks.warning(`The registry returned no sha256 for ${safeInfoUrl}; the binary is installed WITHOUT any local integrity verification (no checksum and the registry source performs no GPG check) — you are trusting the registry's server-side verification and TLS alone. Set 'requireChecksum' to true to require a local check.`);
     }
     return zipPath;
 }
 
 async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Promise<string> {
+    // mirrorBaseUrl may embed basic-auth userinfo; mask it before it can reach a log
+    // via the rejection message or any URL derived from it below.
+    maskOperatorUrlCredentials(mirrorBaseUrl);
     if (!mirrorBaseUrl.startsWith('https://')) {
-        throw new Error(tasks.loc("InsecureUrlRejected", mirrorBaseUrl));
+        throw new Error(tasks.loc("InsecureUrlRejected", redactUrlUserInfo(mirrorBaseUrl)));
     }
     const osPlatform = getPlatformString();
     const arch = getArchString();
@@ -401,11 +391,15 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
             }
         });
     } catch (exception) {
-        throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
+        throw new Error(tasks.loc("PackerDownloadFailed", redactUrlUserInfo(downloadUrl), exception));
     }
 
     const zipFileName = `packer_${version}_${osPlatform}_${arch}.zip`;
     const sha256SumsUrl = `${mirrorBaseUrl}/${version}/packer_${version}_SHA256SUMS`;
+    // Every message below interpolates sha256SumsUrl, which inherits any
+    // mirrorBaseUrl userinfo; render it credential-free (the userinfo is also
+    // setSecret-masked by maskOperatorUrlCredentials above).
+    const safeSha256SumsUrl = redactUrlUserInfo(sha256SumsUrl);
     const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
     const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
 
@@ -414,9 +408,9 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     const sha256SumsContent = await fetchTextAllow404(sha256SumsUrl);
     if (sha256SumsContent === null) {
         if (requireChecksum) {
-            throw new Error(`Checksum verification is required but the mirror did not publish a SHA256SUMS file (${sha256SumsUrl}). Set 'requireChecksum' to false to install without it.`);
+            throw new Error(`Checksum verification is required but the mirror did not publish a SHA256SUMS file (${safeSha256SumsUrl}). Set 'requireChecksum' to false to install without it.`);
         }
-        tasks.warning(`The mirror published no SHA256SUMS file (${sha256SumsUrl}); the binary is installed WITHOUT any local integrity verification. Set 'requireChecksum' to true to require it.`);
+        tasks.warning(`The mirror published no SHA256SUMS file (${safeSha256SumsUrl}); the binary is installed WITHOUT any local integrity verification. Set 'requireChecksum' to true to require it.`);
         return zipPath;
     }
 
@@ -433,9 +427,9 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
         // The SUMS file did not list our artifact — treat as "unavailable".
         if (error instanceof ChecksumUnavailableError) {
             if (requireChecksum) {
-                throw new Error(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${sha256SumsUrl}).`);
+                throw new Error(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}).`);
             }
-            tasks.warning(`${zipFileName} is not listed in the mirror's SHA256SUMS (${sha256SumsUrl}); skipping checksum verification. Set 'requireChecksum' to true to require it.`);
+            tasks.warning(`${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}); skipping checksum verification. Set 'requireChecksum' to true to require it.`);
         } else {
             throw error;
         }
