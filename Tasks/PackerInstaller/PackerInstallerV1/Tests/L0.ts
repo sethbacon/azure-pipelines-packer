@@ -94,6 +94,27 @@ describe('PackerInstaller Test Suite', function () {
     // --- Success cases ---
     expectSuccess('HashiCorpSpecificVersionSuccess');
     expectSuccess('HashiCorpLatestSuccess');
+    // #189: the two scenarios below point the mock runner at ../src/index.js
+    // itself, not at the RunInstaller.js re-implementation, so the declared
+    // task.json execution entry point is exercised (and measured — it is no
+    // longer excluded in .nycrc.json) on both its success and its fail-closed path.
+    it('EntryPointInstallSuccess', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'EntryPointInstallSuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded. errors: ' + tr.errorIssues);
+            assert.ok(
+                tr.stdout.includes('EntryPoint test: prependPath(' + path.join(path.sep + 'opt', 'hostedtoolcache', 'packer', '1.12.0', 'x64') + ')'),
+                'src/index.ts must prepend the install directory to PATH when PATH does not already start with it. stdout: ' + tr.stdout
+            );
+            assert.ok(
+                tr.stdout.includes('Packer v1.12.0'),
+                'src/index.ts must run the post-install `packer version` verification. stdout: ' + tr.stdout
+            );
+        }, tr);
+    });
+    expectFailure('EntryPointVerifyFail');
+
     expectSuccess('CachedInstallSuccess');
     expectSuccess('RegistrySpecificVersionSuccess');
     expectSuccess('MirrorCustomUrlSuccess');

@@ -18,11 +18,14 @@ jobs:
   guard:
     name: Verify tag is on main
     runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve-sha.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
       - name: Check tag reachable from main
         env:
@@ -43,20 +46,40 @@ jobs:
             echo "::error::Tag version (${TAG_VERSION}) does not match azure-devops-extension.json version (${EXT_VERSION}). Merge the release-please PR before tagging."
             exit 1
           fi
+      - name: Verify per-task Minor bumps
+        run: |
+          # Fail the release if any task's src/ or task.json changed since the previous
+          # release tag without its Minor being bumped: ADO agents cache tasks by
+          # Major.Minor, so an un-bumped fix would ship to the Marketplace but never
+          # reach running agents (#192). Layer 3 of 3 -- release-pr-minor-bumps.yml
+          # applies the bumps and pr-checks.yml gates the merge; this is the last
+          # line, and the only one an admin merge cannot bypass.
+          node scripts/check-minor-bumps.js
+      - name: Resolve validated commit SHA
+        id: resolve-sha
+        # Every downstream job checks out this exact commit rather than
+        # re-resolving the tag/ref name. A workflow_dispatch run used to check out
+        # the DISPATCHED ref in each job while the guard validated only the input
+        # TAG, so a dispatch from main with post-tag commits could build, sign,
+        # attest and draft-release a commit that was not the tag (#109). Pinning
+        # the SHA here also closes the tag-move race for a tag-triggered run.
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   ci:
     name: CI (build + test)
     needs: guard
     uses: ./.github/workflows/unit-test.yml
+    with:
+      ref: ${{ needs.guard.outputs.sha }}
 
   build:
     name: Build release bundle
-    needs: ci
+    needs: [guard, ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ needs.guard.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -74,12 +97,12 @@ jobs:
 
   package:
     name: Package extension (.vsix)
-    needs: build
+    needs: [guard, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ needs.guard.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -102,7 +125,7 @@ jobs:
 
   sbom-and-sign:
     name: Generate SBOM and sign VSIX
-    needs: package
+    needs: [guard, package]
     permissions:
       contents: read
       id-token: write
@@ -111,7 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ needs.guard.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -169,7 +192,7 @@ jobs:
 
   draft-release:
     name: Create Draft GitHub Release
-    needs: [package, sbom-and-sign]
+    needs: [guard, package, sbom-and-sign]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -178,7 +201,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ needs.guard.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Download vsix artifact
@@ -203,7 +226,7 @@ jobs:
 
   publish-marketplace:
     name: Publish to VS Marketplace
-    needs: draft-release
+    needs: [guard, draft-release]
     runs-on: ubuntu-latest
     environment: marketplace
     permissions:
@@ -212,7 +235,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          ref: ${{ needs.guard.outputs.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -237,22 +260,24 @@ jobs:
           tenant-id: ${{ vars.AZDO_PUBLISH_TENANT_ID }}
           allow-no-subscriptions: true
       - name: Publish extension with a Microsoft Entra token
+        # scripts/publish-marketplace.js spawns tfx WITHOUT --token (so tfx
+        # prompts and reads the token from stdin, keeping it out of
+        # /proc/<pid>/cmdline -- #109) and retries a transient upstream failure
+        # a bounded number of times (v1.2.7's publish died on a single HTTP 503
+        # and left an orphaned draft release). A deterministic rejection is
+        # never retried. Its behaviour is gated by
+        # scripts/test-publish-marketplace.js in CI.
         run: |
           VSIX_FILE=$(find . -maxdepth 1 -name "*.vsix" -print -quit)
           # 499b84ac-1321-427f-aa17-267ca6975798 is the Azure DevOps resource app.
-          ENTRA_TOKEN=$(az account get-access-token \
+          MARKETPLACE_TOKEN=$(az account get-access-token \
             --tenant "${VARS_AZDO_PUBLISH_TENANT_ID}" \
             --resource 499b84ac-1321-427f-aa17-267ca6975798 \
             --query accessToken -o tsv)
           # Mask the runtime-minted token so it is redacted from any log output.
-          echo "::add-mask::$ENTRA_TOKEN"
-          # tfx-cli 0.23.2 offers no non-argv way to supply --token (no token-file
-          # or stdin-prompt option), so this is visible in /proc/<pid>/cmdline for
-          # the process lifetime. The only observers on this ephemeral runner would
-          # be other code in the same job; --ignore-scripts above (#102) is the
-          # actual mitigation. The token itself is a short-lived (~1h) Entra access
-          # token scoped only to the Azure DevOps resource (#109, documented residual risk).
-          ./node_modules/.bin/tfx extension publish --vsix "$VSIX_FILE" --auth-type pat --token "$ENTRA_TOKEN"
+          echo "::add-mask::$MARKETPLACE_TOKEN"
+          export MARKETPLACE_TOKEN
+          node scripts/publish-marketplace.js --vsix "$VSIX_FILE"
         env:
           VARS_AZDO_PUBLISH_TENANT_ID: ${{ vars.AZDO_PUBLISH_TENANT_ID }}
 

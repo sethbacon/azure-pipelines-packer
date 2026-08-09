@@ -28,7 +28,18 @@ Azure DevOps extension providing HashiCorp Packer integration for Azure Pipeline
 4. PR to `main` with a conventional-commit title; CI runs version check → shared-module provenance check → build/test (Ubuntu + Windows) → actionlint → zizmor, plus PR-title/dependency-review checks and CodeQL.
 5. Squash-merge when green.
 
-Before tagging a release, bump the `Minor` field in `task.json` for every task whose code changed since the last release (ADO caches tasks by `Major.Minor`).
+Every task whose `src/` or `task.json` changed since the last release must have its `task.json`
+`Minor` bumped — ADO caches tasks by `Major.Minor`, so an un-bumped fix reaches the Marketplace but
+never a running agent. This is **no longer a manual step**: it is applied and enforced in three
+layers (#192), matching the sibling `azure-pipelines-terraform` repo —
+
+1. `release-pr-minor-bumps.yml` applies the bumps automatically on the release-please Release PR
+   (`scripts/bump-minor-versions.js`, idempotent — never hand-edit a `Minor`, and never bump an
+   already-bumped task again),
+2. the `Release PR Minor Bumps` merge gate in `pr-checks.yml` fails a Release PR that is still
+   missing them, and
+3. release.yml's tag-time `Verify per-task Minor bumps` guard (`scripts/check-minor-bumps.js`) is
+   the last line, before anything is built or signed.
 
 ## Trademark
 
@@ -45,15 +56,24 @@ azure-pipelines-packer/
 ├── docs/initiatives/                        # Initiative plans
 ├── scripts/
 │   ├── check-versions.js                    # CI: validates version fields exist + are well-formed
-│   │                                         #     (does NOT enforce that a changed task's Minor was bumped)
+│   ├── check-minor-bumps.js                 # CI: fails if a changed task's Minor was NOT bumped
+│   ├── bump-minor-versions.js               # CI: applies those bumps on the Release PR (idempotent)
+│   ├── check-enforced-disciplines.js        # CI: signature for documented-but-unenforced rules
+│   │                                         #     (entry point tested + measured, every declared
+│   │                                         #      execution handler exercised, Minor-bump layers,
+│   │                                         #      Marketplace publish retry + token off argv)
+│   ├── publish-marketplace.js               # Release: tfx publish, token on stdin + bounded retry
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
+│   ├── test-*.js                            # CI self-tests for each of the guards above
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
 └── .github/workflows/
-    ├── unit-test.yml         # CI: version/provenance checks, build/test, actionlint, zizmor
-    ├── pr-checks.yml         # PR title convention, dependency review
+    ├── unit-test.yml         # CI: version/provenance/discipline checks, build/test (Node 24 + a
+    │                         #     Node 20 load-only smoke per task), actionlint, zizmor
+    ├── pr-checks.yml         # PR title convention, dependency review, Release PR Minor Bumps gate
     ├── release.yml           # Tag-triggered: build, sign, attest, publish, draft/undraft release
     ├── release-please.yml    # main-triggered: version-bump PR automation
+    ├── release-pr-minor-bumps.yml # Release-PR-triggered: auto-applies per-task Minor bumps
     ├── codeql.yml            # CodeQL analysis (PR, push to main, weekly)
     └── weekly-security.yml   # OSV scan, GPG key freshness, stale-Dependabot check
 ```
@@ -112,9 +132,29 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 
 > **Resolved (was: Spike S1).** `packer-plugin-azure` does **not** read `ARM_*` environment variables — auth fields (`client_id`/`client_secret`/`client_jwt`/`tenant_id`/`subscription_id`/`use_azure_cli_auth`) are HCL-only (confirmed against `builder/azure/common/client/config.go`). The Azure handler injects `PKR_VAR_arm_client_id`/`PKR_VAR_arm_subscription_id`/`PKR_VAR_arm_tenant_id` plus either `PKR_VAR_arm_client_jwt` (WIF) or `PKR_VAR_arm_client_secret` (Service Principal); the template's `azure-arm` source block must reference them (see `docs/yaml-examples.md`). For Managed Identity, the handler deliberately injects **only** `subscription_id` — `packer-plugin-azure` falls back to MSI automatically when `tenant_id`/`client_secret`/`client_jwt`/`client_cert_path`/the OIDC fields are all unset, so the template must not set those either. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported. The historical `client_jwt` "x5t header" rejection of Azure DevOps-issued OIDC tokens (`hashicorp/packer-plugin-azure#451`) is fixed upstream; use a recent plugin version.
 
+## Node 20 fallback handler — load-only, not a behavioural gate
+
+Both `task.json` files declare a `Node20_1` execution handler alongside `Node24`, so older
+on-prem/air-gapped agents without the Node 24 runner can still invoke these tasks. Each task's CI leg
+has a "Set up Node 20 for Node20_1 handler smoke test" step that runs the already-compiled
+`src/index.js` under Node 20 with no ADO inputs supplied (#208). That proves the compiled module graph
+parses and loads under Node 20 — a Node-20-incompatible dependency or syntax construct fails it — but
+the task's own try/catch converts the resulting "input required" error into a caught failure before
+any real command, credential or verification logic runs. **Node 24 is the sole behavioural gate**;
+Node 20 is deliberately load-only, the same scope decision the sibling `azure-pipelines-terraform`
+repo made: running the full suite twice per task would roughly double CI time, and Node 20 is already
+EOL — the fallback exists for agents that have not upgraded their runner, not as a second
+fully-verified execution path.
+
 ## Testing
 
 Mock-runner L0 pattern (copied from the Terraform extension). Test pairs: `<Name>.ts` (mock-run setup) + `<Name>L0.ts` (the actual run), driven by `Tests/L0.ts` via `MockTestRunner`. Run with `npm test` in each task directory.
+
+The mock-runner entry must be the task's **real** `src/index.ts`, never a re-implementation of it:
+`PackerTaskV1/Tests/RunCommand.ts` now just `import '../src/index'`, and the installer's
+`EntryPointInstallSuccess`/`EntryPointVerifyFail` scenarios point `TaskMockRunner` straight at
+`../src/index.js`. `src/index.js` is included in each task's coverage metric (#189), and
+`scripts/check-enforced-disciplines.js` fails CI if either property regresses.
 
 ## Key Dependencies
 
