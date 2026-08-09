@@ -3,6 +3,26 @@ import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
 import { generateIdToken } from './id-token-generator';
+import {
+    assertIdentityValue,
+    neutralizeEnvironmentVariables,
+    requireIdentityField,
+    requireSecretField,
+} from './credential-guards';
+
+/**
+ * The `PKR_VAR_arm_*` variables that make packer-plugin-azure choose a
+ * particular credential. Each auth branch below clears the ones belonging to the
+ * schemes it is NOT using, so an inherited or passthrough value cannot decide
+ * the build's identity (#187). `UseMSI()` in particular only holds while
+ * client_secret / client_jwt / client_cert_path / tenant_id are ALL unset.
+ */
+const ARM_IDENTITY_SELECTORS = {
+    secret: 'PKR_VAR_arm_client_secret',
+    jwt: 'PKR_VAR_arm_client_jwt',
+    certPath: 'PKR_VAR_arm_client_cert_path',
+    tenant: 'PKR_VAR_arm_tenant_id',
+} as const;
 
 /**
  * Injects Azure credentials for the packer-plugin-azure builders as
@@ -34,12 +54,22 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
 
         tasks.debug("Setting up Azure provider for authorization scheme: " + authorizationScheme + ".");
 
+        // The subscription is genuinely optional (the template may pin it in the
+        // azure-arm source block), but when it IS supplied it becomes
+        // PKR_VAR_arm_subscription_id, so it is charset-validated like every other
+        // injected identity field (#199).
         let subscriptionId = tasks.getInput("environmentAzureRmOverrideSubscriptionID", false);
         if (!subscriptionId) {
             subscriptionId = tasks.getEndpointDataParameter(serviceConnectionID, "subscriptionid", true);
         }
         if (subscriptionId) {
+            subscriptionId = assertIdentityValue(subscriptionId, `Azure subscription id for service connection '${serviceConnectionID}'`);
             EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_subscription_id", subscriptionId);
+        } else {
+            // No subscription resolved from the input or the connection: an
+            // inherited PKR_VAR_arm_subscription_id would otherwise silently point
+            // the build at a subscription this service connection never named (#187).
+            neutralizeEnvironmentVariables(['PKR_VAR_arm_subscription_id'], "Azure");
         }
 
         switch (authorizationScheme) {
@@ -47,45 +77,62 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 // packer-plugin-azure falls back to Managed Identity only when
                 // client_secret, client_jwt, client_cert_path, tenant_id, and the
                 // OIDC request fields are ALL unset (its UseMSI() check) — so
-                // tenant_id must NOT be injected on this path. subscription_id
-                // (above) may still be set alongside MSI. ADO's MSI-scheme service
-                // connection does not expose a distinct client-id for a specific
-                // user-assigned identity, so only the VM's default (system-assigned,
-                // or its sole user-assigned) identity is supported by this task.
+                // tenant_id must NOT be injected on this path, and any value
+                // inherited from the agent or supplied through this task's
+                // `environmentVariables` passthrough has to be cleared or it
+                // silently disables the MSI fallback this branch depends on (#187).
+                // subscription_id (above) may still be set alongside MSI. ADO's
+                // MSI-scheme service connection does not expose a distinct client-id
+                // for a specific user-assigned identity, so only the VM's default
+                // (system-assigned, or its sole user-assigned) identity is supported.
+                //
+                // @credential-exempt: ManagedServiceIdentity deliberately injects NO
+                // credential fields — the agent VM's own identity IS the intended
+                // principal for this scheme, and ADO's MSI connection carries no
+                // client id to require.
+                neutralizeEnvironmentVariables(
+                    [ARM_IDENTITY_SELECTORS.secret, ARM_IDENTITY_SELECTORS.jwt, ARM_IDENTITY_SELECTORS.certPath, ARM_IDENTITY_SELECTORS.tenant],
+                    "Azure Managed Identity");
                 break;
 
             case AuthorizationScheme.WorkloadIdentityFederation: {
-                const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true)!;
-                const tenantId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false);
+                // #97 (reopened 2026-08-06): this branch previously read
+                // serviceprincipalid with optional=true behind a `!`, so an empty
+                // client id produced no PKR_VAR_arm_client_id at all (the env helper
+                // skips empty values with a warning) and packer-plugin-azure fell
+                // through to the agent VM's managed identity. It now fails closed and
+                // is charset-validated, exactly like the ServicePrincipal branch below.
+                const servicePrincipalId = requireIdentityField(serviceConnectionID, "serviceprincipalid");
+                const tenantId = requireIdentityField(serviceConnectionID, "tenantid");
                 const oidcToken = await generateIdToken(serviceConnectionID);
                 tasks.setSecret(oidcToken);
 
+                neutralizeEnvironmentVariables(
+                    [ARM_IDENTITY_SELECTORS.secret, ARM_IDENTITY_SELECTORS.certPath],
+                    "Azure Workload Identity Federation");
                 EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
-                if (tenantId) {
-                    EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
-                }
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
                 EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_jwt", oidcToken, true);
                 break;
             }
 
             case AuthorizationScheme.ServicePrincipal: {
                 tasks.warning("Client secret authentication is less secure than Workload Identity Federation. Prefer a WIF-configured service connection where possible.");
-                const servicePrincipalId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalid", true);
-                const servicePrincipalKey = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "serviceprincipalkey", true);
-                if (!servicePrincipalId || !servicePrincipalKey) {
-                    // Fail closed like AWS/GCP/vSphere/OCI: a missing client id or
-                    // secret would otherwise be silently skipped by the env helper
-                    // (warning only), leaving packer-plugin-azure to fall back to the
-                    // agent VM's ambient managed identity (its MSI path) and
-                    // authenticate as an unintended, possibly more-privileged identity.
-                    throw new Error(`Azure service principal credentials are incomplete for service connection '${serviceConnectionID}'. Both a service principal id and key are required.`);
-                }
+                // Fail closed like AWS/GCP/vSphere/OCI: a missing client id or
+                // secret would otherwise be silently skipped by the env helper
+                // (warning only), leaving packer-plugin-azure to fall back to the
+                // agent VM's ambient managed identity (its MSI path) and
+                // authenticate as an unintended, possibly more-privileged identity.
+                const servicePrincipalId = requireIdentityField(serviceConnectionID, "serviceprincipalid");
+                const servicePrincipalKey = requireSecretField(serviceConnectionID, "serviceprincipalkey");
                 tasks.setSecret(servicePrincipalKey);
-                const tenantId = tasks.getEndpointAuthorizationParameter(serviceConnectionID, "tenantid", false);
+                const tenantId = requireIdentityField(serviceConnectionID, "tenantid");
+
+                neutralizeEnvironmentVariables(
+                    [ARM_IDENTITY_SELECTORS.jwt, ARM_IDENTITY_SELECTORS.certPath],
+                    "Azure service principal");
                 EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
-                if (tenantId) {
-                    EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
-                }
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
                 EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_secret", servicePrincipalKey, true);
                 break;
             }

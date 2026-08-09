@@ -8,7 +8,10 @@ const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 tr.setInput('command', 'build');
 tr.setInput('provider', 'none');
 tr.setInput('templatePath', '.');
-tr.setInput('environmentVariables', 'AWS_ACCESS_KEY_ID=fake-value\nMY_CUSTOM_BUILD_VAR=hello');
+// AWS_REGION is a MANAGED name that merely CONFIGURES an already-chosen identity,
+// so it still only warns. Names that SELECT an identity (AWS_ACCESS_KEY_ID and
+// friends) are now rejected outright -- see EnvironmentVariablesIdentityReject (#187).
+tr.setInput('environmentVariables', 'AWS_REGION=eu-west-1\nMY_CUSTOM_BUILD_VAR=hello');
 
 const a: ma.TaskLibAnswers = {
     which: { packer: 'packer' },

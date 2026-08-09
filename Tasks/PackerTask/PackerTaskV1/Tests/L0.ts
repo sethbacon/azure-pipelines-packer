@@ -8,6 +8,7 @@ import './PemNormalizerL0';
 import './SecureTempL0';
 import './SecureFileLoaderL0';
 import './PreMaskingClassL0';
+import './CredentialFailClosedMatrixL0';
 
 describe('PackerTask Test Suite', function () {
 
@@ -163,6 +164,7 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('ConsoleExpressionSuccess');                 // #111
     expectSuccess('VsphereServerUserinfoStripped');            // #110
     expectFailure('VsphereServerInvalidCharsetReject');        // #110
+    expectFailure('EnvironmentVariablesIdentityReject');        // #187
 
     it('VsphereInsecureConnectionWarns', async () => {
         const tp = path.join(__dirname, 'VsphereInsecureConnectionWarns.js');
@@ -263,8 +265,12 @@ describe('PackerTask Test Suite', function () {
         runValidations(() => {
             assert.ok(tr.succeeded, 'task should have succeeded');
             assert.ok(
-                tr.warningIssues.some((w) => w.includes("sets 'AWS_ACCESS_KEY_ID'")),
+                tr.warningIssues.some((w) => w.includes("sets 'AWS_REGION'")),
                 'should warn about a managed-name collision. warnings: ' + tr.warningIssues
+            );
+            assert.ok(
+                !tr.warningIssues.some((w) => w.includes('will be overwritten by the provider handler')),
+                '#187: the warning must not promise an overwrite that does not happen. warnings: ' + tr.warningIssues
             );
             assert.ok(
                 !tr.warningIssues.some((w) => w.includes('MY_CUSTOM_BUILD_VAR')),

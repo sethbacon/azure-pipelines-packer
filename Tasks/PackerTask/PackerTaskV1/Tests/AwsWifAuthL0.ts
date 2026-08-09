@@ -15,7 +15,12 @@ async function run() {
 
         const ok = process.env['AWS_ROLE_ARN'] === 'arn:aws:iam::123456789012:role/packer-builder'
             && process.env['AWS_REGION'] === 'us-east-1'
-            && process.env['AWS_ROLE_SESSION_NAME'] === 'AzureDevOps-Packer'
+            // #197: derived from job context, sanitized into AWS's session-name charset.
+            && process.env['AWS_ROLE_SESSION_NAME'] === 'ado-packer-Contoso-Images-4242'
+            // #187: the inherited static keys the SDK would have preferred are gone.
+            && process.env['AWS_ACCESS_KEY_ID'] === undefined
+            && process.env['AWS_SECRET_ACCESS_KEY'] === undefined
+            && process.env['AWS_SESSION_TOKEN'] === undefined
             && tokenFileExists
             && tokenContents === 'mock-aws-oidc-jwt-12345';
         if (ok) {
@@ -24,6 +29,10 @@ async function run() {
             tl.setResult(tl.TaskResult.Failed, 'AWS WIF not injected as expected: ' + JSON.stringify({
                 roleArn: process.env['AWS_ROLE_ARN'],
                 region: process.env['AWS_REGION'],
+                sessionName: process.env['AWS_ROLE_SESSION_NAME'],
+                staticAccessKey: process.env['AWS_ACCESS_KEY_ID'],
+                staticSecretKey: process.env['AWS_SECRET_ACCESS_KEY'],
+                sessionToken: process.env['AWS_SESSION_TOKEN'],
                 tokenFileExists
             }));
         }

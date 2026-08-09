@@ -3,6 +3,50 @@ import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
 import { normalizePem } from './pem-normalizer';
+import {
+    assertIdentityValue,
+    neutralizeEnvironmentVariables,
+    requireIdentityField,
+    requireSecretField,
+} from './credential-guards';
+
+/**
+ * Google credential sources that resolve AHEAD of, or instead of, the
+ * GOOGLE_APPLICATION_CREDENTIALS file this handler writes (an inherited
+ * GOOGLE_CREDENTIALS / GOOGLE_OAUTH_ACCESS_TOKEN / gcloud ADC override on a
+ * self-hosted agent). Cleared on both branches so the build cannot authenticate
+ * as an identity the service connection never named (#187).
+ */
+const GOOGLE_COMPETING_CREDENTIAL_ENV = [
+    'GOOGLE_CREDENTIALS',
+    'GOOGLE_OAUTH_ACCESS_TOKEN',
+    'GOOGLE_GHA_CREDS_PATH',
+    'CLOUDSDK_AUTH_ACCESS_TOKEN',
+    'CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE',
+] as const;
+
+/**
+ * The only Google token endpoint this handler's static-key credentials file ever
+ * POSTs its service-account-signed assertion to. The service connection's
+ * "Audience" field lands verbatim in that file as `token_uri`, so it is
+ * constrained to the exact endpoint in use rather than trusted as free text --
+ * the same guard the sibling terraform extension's GCP handler applies
+ * (`assertGoogleTokenUri`), which this handler was missing (#199).
+ */
+const ALLOWED_GOOGLE_TOKEN_URI_HOSTS = ['oauth2.googleapis.com', 'sts.googleapis.com'];
+
+function assertGoogleTokenUri(tokenUri: string): string {
+    let parsed: URL;
+    try {
+        parsed = new URL(tokenUri);
+    } catch {
+        throw new Error(`GCP service connection field 'Audience' is not a valid URL: '${tokenUri}'.`);
+    }
+    if (parsed.protocol !== 'https:' || !ALLOWED_GOOGLE_TOKEN_URI_HOSTS.includes(parsed.hostname.toLowerCase())) {
+        throw new Error(`GCP service connection field 'Audience' must be one of https://${ALLOWED_GOOGLE_TOKEN_URI_HOSTS.join(', https://')}; got '${tokenUri}'.`);
+    }
+    return tokenUri;
+}
 
 /**
  * Injects GCP credentials for the packer-plugin-googlecompute builders. Both
@@ -16,15 +60,9 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
     }
 
     private writeServiceAccountKey(serviceName: string): string {
-        const clientEmail = tasks.getEndpointAuthorizationParameter(serviceName, "Issuer", false);
-        const tokenUri = tasks.getEndpointAuthorizationParameter(serviceName, "Audience", false);
-        const privateKey = tasks.getEndpointAuthorizationParameter(serviceName, "PrivateKey", false);
-
-        if (!clientEmail || !tokenUri || !privateKey) {
-            const missing = ([!clientEmail && "Issuer", !tokenUri && "Audience", !privateKey && "PrivateKey"] as (string | false)[])
-                .filter(Boolean).join(", ");
-            throw new Error(`GCP service connection is missing required fields: ${missing}`);
-        }
+        const clientEmail = requireIdentityField(serviceName, "Issuer");
+        const tokenUri = assertGoogleTokenUri(requireIdentityField(serviceName, "Audience"));
+        const privateKey = requireSecretField(serviceName, "PrivateKey");
 
         // setSecret rejects multi-line input (LIB_MultilineSecret). The UI
         // passwordbox strips newlines on paste, but a service connection created
@@ -62,10 +100,13 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
     private async writeWifCredentials(serviceConnection: string): Promise<string> {
         const tokenFilePath = await this.writeOidcTokenFile(serviceConnection, 'gcp-oidc-token');
 
-        const projectNumber = tasks.getInput("gcpProjectNumber", true)!;
-        const poolId = tasks.getInput("gcpWorkloadIdentityPoolId", true)!;
-        const providerId = tasks.getInput("gcpWorkloadIdentityProviderId", true)!;
-        const serviceAccountEmail = tasks.getInput("gcpServiceAccountEmail", true)!;
+        // Every one of these is interpolated into the audience / impersonation
+        // URLs written to the credentials file, so each is charset-validated
+        // rather than trusted as free text (#199).
+        const projectNumber = assertIdentityValue(tasks.getInput("gcpProjectNumber", true), "Input 'gcpProjectNumber'");
+        const poolId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityPoolId", true), "Input 'gcpWorkloadIdentityPoolId'");
+        const providerId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityProviderId", true), "Input 'gcpWorkloadIdentityProviderId'");
+        const serviceAccountEmail = assertIdentityValue(tasks.getInput("gcpServiceAccountEmail", true), "Input 'gcpServiceAccountEmail'");
 
         const audience = `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
         const credentials = {
@@ -91,6 +132,7 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
                 throw new Error("A GCP service connection is required for Workload Identity Federation. Set environmentServiceNameGCP.");
             }
             const credentialsFilePath = await this.writeWifCredentials(command.serviceProviderName);
+            neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP Workload Identity Federation");
             EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsFilePath);
             return;
         }
@@ -100,6 +142,7 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
             throw new Error("A GCP service connection is required for this command. Set environmentServiceNameGCP.");
         }
         const keyFilePath = this.writeServiceAccountKey(serviceName);
+        neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP service account key");
         EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", keyFilePath);
         // GOOGLE_PROJECT_ID is intentionally NOT injected: packer-plugin-googlecompute
         // reads the project only from the required HCL `project_id` field, never from

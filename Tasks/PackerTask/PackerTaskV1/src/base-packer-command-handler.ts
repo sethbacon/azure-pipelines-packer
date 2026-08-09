@@ -133,6 +133,33 @@ export abstract class BasePackerCommandHandler {
         /^AWS_/, /^ARM_/, /^GOOGLE_/, /^PKR_VAR_oci_/, /^PKR_VAR_vsphere_/, /^PKR_VAR_arm_/, /PROXY$/i
     ];
 
+    /**
+     * The subset of managed names that SELECT AN IDENTITY rather than merely
+     * configure one. These are rejected outright instead of warned about (#187).
+     *
+     * A warning was never sufficient here: `applyEnvironmentVariables()` runs in
+     * `executeCommand()` BEFORE `handleProvider()`, and while a provider handler
+     * does overwrite the variables it sets, it historically never cleared the
+     * ones belonging to a DIFFERENT auth scheme. A passthrough
+     * `AWS_ACCESS_KEY_ID` therefore survived into the AWS SDK's credential chain,
+     * which matches static env credentials strictly before the web-identity token
+     * file -- silently defeating Workload Identity Federation on the path
+     * operators are told is the safer one. The handlers now neutralize competing
+     * variables too (credential-guards.ts), but a value that names an identity has
+     * no legitimate reason to arrive through a builder-settings passthrough at all,
+     * so it fails the task instead.
+     */
+    private static readonly IDENTITY_SELECTING_ENV_PATTERNS = [
+        /^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|PROFILE|SHARED_CREDENTIALS_FILE|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|ROLE_SESSION_NAME)$/,
+        /^GOOGLE_(APPLICATION_CREDENTIALS|CREDENTIALS|OAUTH_ACCESS_TOKEN|GHA_CREDS_PATH)$/,
+        /^CLOUDSDK_AUTH_/,
+        /^PKR_VAR_arm_(client_id|client_secret|client_jwt|client_cert_path|tenant_id|subscription_id)$/,
+        /^PKR_VAR_oci_/,
+        /^PKR_VAR_vsphere_(server|user|password|insecure_connection)$/,
+        /^OCI_CLI_/,
+        /^ARM_/,
+    ];
+
     /** Sets any user-provided passthrough environment variables (tracked for cleanup). */
     protected applyEnvironmentVariables(): void {
         const env = tasks.getInput("environmentVariables", false);
@@ -147,8 +174,17 @@ export abstract class BasePackerCommandHandler {
             }
             const key = trimmed.substring(0, idx).trim();
             const value = trimmed.substring(idx + 1).trim();
+            if (BasePackerCommandHandler.IDENTITY_SELECTING_ENV_PATTERNS.some((p) => p.test(key))) {
+                throw new Error(`'environmentVariables' sets '${key}', which selects a cloud identity. Credentials must come from a service connection: this task resolves them per provider and masks them, whereas a passthrough value is unmasked and can take precedence over the service connection's own credentials in the provider SDK's resolution order. Remove '${key}' from 'environmentVariables' and configure the service connection instead.`);
+            }
             if (BasePackerCommandHandler.MANAGED_ENV_PATTERNS.some((p) => p.test(key))) {
-                tasks.warning(`'environmentVariables' sets '${key}', which this task also manages for cloud credentials. This value will be overwritten by the provider handler for build/validate/console/custom, or persist unmasked for commands that don't authenticate. Use 'environmentVariables' for non-secret builder settings only.`);
+                // Deliberately NOT promising an overwrite: the previous wording
+                // ("will be overwritten by the provider handler") was true for
+                // AWS_REGION but false for the variables that actually decide
+                // identity, which is what made it misleading (#187). Those names
+                // are now rejected above; what reaches here only configures an
+                // already-chosen identity.
+                tasks.warning(`'environmentVariables' sets '${key}', a name this task also manages. A provider handler may replace it during build/validate/console/custom, and it persists unmasked for commands that don't authenticate. Use 'environmentVariables' for non-secret builder settings only.`);
             }
             EnvironmentVariableHelper.setEnvironmentVariable(key, value);
         }
