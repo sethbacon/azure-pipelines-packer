@@ -60,6 +60,38 @@ Azure Resource Manager service connections with **Workload Identity Federation**
 
 The task sets `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_REGION`, and `AWS_ROLE_SESSION_NAME` — read natively by `packer-plugin-amazon`'s AWS SDK, no template wiring required.
 
+### Role session name — per-run by default, and pinning it in the trust policy
+
+`AWS_ROLE_SESSION_NAME` is the human-readable half of CloudTrail's `userIdentity.arn` (`arn:aws:sts::<acct>:assumed-role/<Role>/<SessionName>`), so it is the field an incident responder pivots on to find which pipeline and which run created a resource.
+
+Leave the optional `awsSessionName` input **blank** (the default) and the task derives a distinct name per run:
+
+```txt
+ado-packer-<System.TeamProject>-<Build.BuildId>
+```
+
+sanitized to AWS's `[A-Za-z0-9_+=,.@-]` charset and truncated to 64 characters from the right, so the build id — the part that distinguishes one run from the next — always survives.
+
+> **Behaviour change.** Earlier versions used the fixed constant `AzureDevOps-Packer` for every federated build of every pipeline in every organization. **If your IAM trust policy pins `sts:RoleSessionName` to that constant, assume-role will now be denied.** Either drop the condition, widen it to a prefix, or set `awsSessionName` explicitly to the old value (see below).
+
+To keep a `sts:RoleSessionName` condition while still getting per-run attribution, match on the prefix rather than the whole name:
+
+```json
+"Condition": {
+  "StringEquals": {
+    "vstoken.dev.azure.com/<ORG_ID>:aud": "api://AzureADTokenV2",
+    "vstoken.dev.azure.com/<ORG_ID>:sub": "sc://<ORG_NAME>/<PROJECT_NAME>/<SERVICE_CONNECTION_NAME>"
+  },
+  "StringLike": {
+    "sts:RoleSessionName": "ado-packer-MyProject-*"
+  }
+}
+```
+
+Setting `awsSessionName` explicitly still wins, and the value is validated against AWS's own grammar (2–64 characters from `[A-Za-z0-9_+=,.@-]`) so an invalid name fails in the task with a clear message rather than as an opaque STS rejection. Pinning it to a constant restores the old, un-attributable behaviour — prefer the prefix condition above.
+
+You cannot set `AWS_ROLE_SESSION_NAME` through the task's `environmentVariables` input: that input rejects any name that selects or forges an identity (see below).
+
 ## GCP (`gcp`)
 
 1. Enable the required APIs: `iam.googleapis.com`, `iamcredentials.googleapis.com`, `sts.googleapis.com`.
@@ -102,7 +134,9 @@ The task writes an `external_account` credentials JSON file pointing at the ADO 
 
 ## Long-running builds and WIF token lifetime
 
-The ADO OIDC ID token the task requests is valid for only **~10 minutes**, and it is fetched once, at the start of the command, then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE`/the GCP `external_account` credential source points at). The token is a client assertion exchanged once for a cloud access token/session — that exchanged credential is itself typically valid for **~1 hour**, and there is no refetch or refresh path for either token during the build.
+The ADO OIDC ID token is **short-lived — minutes, not hours**. Azure DevOps chooses the exact lifetime and has shortened it before, so this extension does not encode a figure and neither does this guide; treat it as "expires during a long build" rather than as a number you can plan against.
+
+What this repo *can* state, because it is a property of the code rather than of ADO's issuing policy: **the token is fetched exactly once, at the start of the command, and is never refetched or refreshed for the life of the build.** `src/id-token-generator.ts` has no expiry handling and no refresh path — it acquires the token, retries only transport failures, and returns. The token is then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE` / the GCP `external_account` credential source points at). It is a client assertion, exchanged once by the cloud SDK for an access token or role session; that exchanged credential has its own, longer lifetime, and it is not refreshed from the ADO token either.
 
 A Packer build that runs longer than the exchanged credential's lifetime will start failing cloud API calls partway through. For Azure specifically, `packer-plugin-azure`'s calls to Entra will start returning **`AADSTS700024: Client assertion is not within its valid time range`** — this is a well-known failure mode for Azure DevOps-issued OIDC tokens on long-running operations (see Microsoft's WIF troubleshooting guidance for `AADSTS700024`). AWS and GCP builds can fail similarly once the assumed role session or Workload Identity Pool token expires.
 
@@ -110,7 +144,7 @@ If your Packer templates build large or slow images (long provisioner scripts, b
 
 - **Azure**: prefer a **Managed Identity**-backed service connection (`ManagedServiceIdentity` authorization scheme) for long builds — MSI credentials are refreshed by the Azure SDK for the life of the process, unlike a one-shot WIF assertion. If MSI is not available in your environment, a Service Principal with a client secret is the other long-build-safe fallback (the task will emit a warning recommending WIF, which you can accept for this specific case).
 - **AWS**: the assumed role's session duration is controlled by the IAM role's **Maximum session duration** setting (up to 12 hours) rather than anything this task configures — set it as high as your role's policy allows for long-running builds.
-- **GCP**: the exchanged access token from `external_account` credentials is refreshed automatically by Google's client libraries as long as the underlying ADO OIDC token used to establish it is still valid, but since the ADO token is one-shot and non-refreshable here, the same ~10-minute-then-derived-session-length constraint applies.
+- **GCP**: the exchanged access token from `external_account` credentials is refreshed automatically by Google's client libraries as long as the underlying ADO OIDC token used to establish it is still valid — but since the ADO token is one-shot and non-refreshable here, the build is bounded by that token's lifetime plus the derived session length, exactly as above.
 
 There is currently no code path in this task that refetches the ADO OIDC token mid-build; the safest choice for long Azure builds today is Managed Identity or Service Principal rather than WIF.
 
@@ -119,7 +153,29 @@ There is currently no code path in this task that refetches the ADO OIDC token m
 For all three providers, prefer WIF over the static-credential alternative (AWS access keys, GCP service-account JSON keys, Azure Service Principal secrets):
 
 - No long-lived secret is stored in Azure DevOps.
-- Tokens are short-lived (typically ~5 minutes for the ADO OIDC token, up to 1 hour for the exchanged cloud credential).
+- Tokens are short-lived: the ADO OIDC token expires in minutes, the exchanged cloud credential within the hour — see [Long-running builds and WIF token lifetime](#long-running-builds-and-wif-token-lifetime) for what that means for a slow build.
 - The trust condition above (issuer + audience + subject) can be scoped to a single service connection, unlike a static key/secret which grants access for as long as it exists and however widely it is shared.
 
 The Azure Service Principal (client secret) and AWS static-key paths remain supported for compatibility, but the task emits a warning recommending WIF when a Service Principal secret is used.
+
+## Behaviour changes that can break an existing pipeline
+
+Three recent hardening changes fail a build that previously ran. Each is listed with what to do about it.
+
+### A passthrough `environmentVariables` entry that names an identity now fails the task
+
+`environmentVariables` is applied *before* the provider handler runs, so a passthrough `AWS_ACCESS_KEY_ID` (or `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_ROLE_SESSION_NAME`, `PKR_VAR_arm_client_secret`, `PKR_VAR_oci_*`, `PKR_VAR_vsphere_*`, `CLOUDSDK_AUTH_*`, `OCI_CLI_*`, …) used to survive into the provider SDK's credential chain and win against the service connection — silently defeating WIF on the path operators are told is the safer one. It **used to warn**; it now **fails**.
+
+Move the credential to a service connection. `environmentVariables` is for non-secret builder settings.
+
+Names that only *configure* an already-chosen identity (`AWS_REGION`, a non-selector `PKR_VAR_arm_*`, a `*PROXY` setting) still warn rather than fail.
+
+`ARM_*` is also refused. That is not because this task manages it — `packer-plugin-azure` never reads `ARM_*` at all, and no handler here sets one — but because setting it means you have this extension confused with the sibling Terraform extension, and your credential would otherwise sit there doing nothing.
+
+### The AWS role session name is derived per run
+
+See [Role session name](#role-session-name--per-run-by-default-and-pinning-it-in-the-trust-policy) above. Affects any IAM trust policy pinning `sts:RoleSessionName`.
+
+### Outbound calls now honour the agent's proxy configuration
+
+The ADO OIDC token request previously used Node's global `fetch` with no dispatcher, which ignores `HTTP_PROXY`/`HTTPS_PROXY` and the agent's own proxy settings — so on a self-hosted agent whose only egress is a forward proxy, **every** WIF path failed at token acquisition. It now routes through `Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword` exactly as the installer task already did, while keeping the https-only assertion and the no-redirect policy on the token exchange. Nothing to configure; if you worked around this by switching a connection back to static keys, you can switch it back to WIF.

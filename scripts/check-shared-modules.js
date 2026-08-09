@@ -23,23 +23,35 @@
 const fs = require('fs');
 const path = require('path');
 
-const SRC_DIR = 'Tasks/PackerInstaller/PackerInstallerV1/src';
+const INSTALLER_SRC = 'Tasks/PackerInstaller/PackerInstallerV1/src';
+const TASK_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 // The registry of modules copied from azure-pipelines-terraform. Adding a new
 // copy means adding it here AND giving it the provenance header below.
+//
+// Entries carry their own src dir: the registry used to assume a single
+// directory (the installer's), which meant a copied module landing in the
+// COMMAND task's src/ could not be registered at all and so was silently
+// exempt from the provenance convention this gate exists to enforce.
 const SHARED_MODULES = [
-    'hashicorp-gpg-key.ts',
-    'gpg-verifier.ts',
-    'http-client.ts',
-    'url-secret-redaction.ts',
+    { dir: INSTALLER_SRC, file: 'hashicorp-gpg-key.ts' },
+    { dir: INSTALLER_SRC, file: 'gpg-verifier.ts' },
+    { dir: INSTALLER_SRC, file: 'http-client.ts' },
+    { dir: INSTALLER_SRC, file: 'url-secret-redaction.ts' },
     // Egress authorization for a download destination (numeric private/reserved
     // address classification + assertEgressHostAllowed) and the operator-input
     // URL path-segment validator. Both were brought to body-identity with the
     // terraform copies in 2026-08 (#161/#200) — unlike http-client.ts, whose two
     // copies have genuinely diverged, these two are byte-identical below their
     // provenance headers, so a cross-repo diff of the body is the fix check.
-    'registry-allowlist.ts',
-    'url-path-segment.ts',
+    { dir: INSTALLER_SRC, file: 'registry-allowlist.ts' },
+    { dir: INSTALLER_SRC, file: 'url-path-segment.ts' },
+    // The agent-proxy fetch options builder (#196). Body byte-identical to
+    // TerraformTaskV5/src/proxy-config.ts, including both setSecret calls (raw
+    // and percent-encoded proxy password); only the JSDoc names this repo's own
+    // call site. scripts/check-proxy-parity.js enforces that every outbound call
+    // actually uses it.
+    { dir: TASK_SRC, file: 'proxy-config.ts' },
 ];
 
 // Required provenance markers (see any listed module's header for the format).
@@ -51,10 +63,10 @@ const MARKERS = [
 
 let hasError = false;
 
-for (const file of SHARED_MODULES) {
-    const full = path.resolve(SRC_DIR, file);
+for (const { dir, file } of SHARED_MODULES) {
+    const full = path.resolve(dir, file);
     if (!fs.existsSync(full)) {
-        console.error(`FAIL: shared module missing: ${path.join(SRC_DIR, file)}`);
+        console.error(`FAIL: shared module missing: ${path.join(dir, file)}`);
         hasError = true;
         continue;
     }

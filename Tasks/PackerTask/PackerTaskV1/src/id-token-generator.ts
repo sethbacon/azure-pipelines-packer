@@ -1,4 +1,5 @@
 import tasks = require("azure-pipelines-task-lib/task");
+import { buildProxyFetchOptions } from './proxy-config';
 
 export async function generateIdToken(serviceConnectionID: string): Promise<string> {
     const tokenGenerator = new TokenGenerator();
@@ -81,7 +82,20 @@ export class TokenGenerator {
                     },
                     signal: controller.signal,
                     // This token exchange has no legitimate redirect.
-                    redirect: 'error'
+                    redirect: 'error',
+                    // Node's global fetch ignores HTTP_PROXY/HTTPS_PROXY and the
+                    // agent's own proxy configuration unless it is handed an
+                    // undici dispatcher. Without this, every WIF provider fails
+                    // at token acquisition on a self-hosted agent whose only
+                    // egress is a forward proxy -- and the workaround an operator
+                    // reaches for is a long-lived static credential, which is what
+                    // WIF exists to eliminate (#196). Spread LAST so the
+                    // dispatcher cannot be clobbered, and note it adds only a
+                    // dispatcher: the redirect:'error' policy and the https-only
+                    // assertion on SYSTEM_OIDCREQUESTURI above still apply, so the
+                    // System.AccessToken bearer header never traverses the proxy
+                    // to an unvalidated hop.
+                    ...buildProxyFetchOptions()
                 });
             } catch (error) {
                 if (error instanceof Error && error.name === 'AbortError') {

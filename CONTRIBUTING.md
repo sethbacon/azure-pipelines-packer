@@ -65,7 +65,27 @@ npm install --include=dev
    ```
 
 4. Open a PR to `main` with a conventional-commit title.
-5. CI runs automatically: version consistency check → build + test (Ubuntu + Windows × Node 24) → actionlint.
+5. CI runs automatically. Every one of these jobs gates the PR — a change that
+   trips any of them blocks the merge, so it is worth knowing they exist before
+   you are surprised by one:
+
+   <!-- ci-jobs:begin -->
+   - `Check Version Consistency` — validates the version fields in each `task.json`.
+   - `Check Shared Module Provenance` — every module copied from
+     `azure-pipelines-terraform` must carry its `@shared-module` provenance header,
+     and every outbound HTTP call must honour the agent proxy configuration
+     (`scripts/check-shared-modules.js`, `scripts/check-egress-authorization.js`,
+     `scripts/check-proxy-parity.js`, `scripts/check-docs-claims.js`).
+   - `Build and Test Packer Task V1` — lint, compile and unit tests, on Ubuntu and Windows × Node 24.
+   - `Build and Test Packer Installer V1` — same, for the installer task.
+   - `Lint GitHub Actions` — actionlint.
+   - `Scan Workflows (zizmor)` — workflow-security scan.
+   <!-- ci-jobs:end -->
+
+   This list is checked against `.github/workflows/unit-test.yml` by
+   `scripts/check-docs-claims.js`, in both directions, so it cannot drift as jobs
+   are added or renamed.
+
 6. Squash-merge when CI passes and the PR is approved; the branch is deleted automatically.
 
 ## Testing

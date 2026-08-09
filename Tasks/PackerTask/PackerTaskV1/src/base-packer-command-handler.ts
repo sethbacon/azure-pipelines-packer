@@ -128,9 +128,23 @@ export abstract class BasePackerCommandHandler {
         );
     }
 
-    /** Prefixes/names this task manages itself; a passthrough value here would shadow a real credential. */
+    /**
+     * Prefixes/names this task manages itself; a passthrough value here would
+     * shadow a real credential.
+     *
+     * `/^ARM_/` is deliberately NOT in this list (#207). `packer-plugin-azure`
+     * does not read `ARM_*` environment variables at all — its auth fields are
+     * HCL-only, and the Azure handler injects only `PKR_VAR_arm_*` — so no
+     * handler in this codebase ever sets or overwrites a bare `ARM_*`, and
+     * warning that this task "also manages" it was simply false. It was a
+     * carry-over from the sibling Terraform extension, where `ARM_*` genuinely
+     * is the provider's native convention. A bare `ARM_*` is still refused, one
+     * check earlier and more strongly, by IDENTITY_SELECTING_ENV_PATTERNS below:
+     * an operator setting one has mistaken this extension for the Terraform one
+     * and their credential would silently do nothing.
+     */
     private static readonly MANAGED_ENV_PATTERNS = [
-        /^AWS_/, /^ARM_/, /^GOOGLE_/, /^PKR_VAR_oci_/, /^PKR_VAR_vsphere_/, /^PKR_VAR_arm_/, /PROXY$/i
+        /^AWS_/, /^GOOGLE_/, /^PKR_VAR_oci_/, /^PKR_VAR_vsphere_/, /^PKR_VAR_arm_/, /PROXY$/i
     ];
 
     /**
