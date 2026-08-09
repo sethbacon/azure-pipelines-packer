@@ -8,6 +8,8 @@ import crypto = require('crypto');
 import { randomUUID as uuidV4 } from 'crypto';
 import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
+import { VerificationFailure, isVerificationFailure } from './verification-failure';
+import { discardArtifactOnFailure } from './artifact-discard';
 import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from './registry-allowlist';
 import { validateUrlPathSegment } from './url-path-segment';
 import {
@@ -25,13 +27,26 @@ export { redactUrl } from './url-secret-redaction';
 const packerToolName = "packer";
 const isWindows = os.type().match(/^Win/);
 
-/** Fallback version used when the HashiCorp checkpoint API is unreachable. Update periodically. */
-const FALLBACK_PACKER_VERSION = '1.12.0';
-
 const SHA256_HEX_PATTERN = /^[a-fA-F0-9]{64}$/;
 
-/** A downloaded artifact's hash did not match the expected checksum. Always fatal — never downgradable. */
-class ChecksumMismatchError extends Error {
+/** Bounded retry for the binary download itself (#78); metadata fetches retry inside http-client.ts. */
+const DOWNLOAD_ATTEMPTS = 3;
+const DOWNLOAD_RETRY_BASE_MS = 200;
+
+/**
+ * A downloaded zip plus whether it ACTUALLY passed an integrity check. The mirror
+ * and registry sources can legitimately return an unverified artifact when the
+ * operator opted out (requireChecksum=false), and the caller must not record a
+ * cache-integrity hash for one of those.
+ */
+type DownloadedZip = { zipPath: string; verified: boolean };
+
+/**
+ * A downloaded artifact's hash did not match the expected checksum. Always fatal —
+ * never downgradable. A VerificationFailure, so the cache-hit re-verification path
+ * fails closed on it rather than degrading to the cached binary.
+ */
+class ChecksumMismatchError extends VerificationFailure {
     constructor(message: string) { super(message); this.name = 'ChecksumMismatchError'; }
 }
 /** No usable checksum was published for the artifact (SUMS file absent, or the file not listed in it). Downgradable when requireChecksum is off. */
@@ -85,15 +100,30 @@ function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
  * than a full re-architecture onto the hardened http-client (see #105 deferred notes).
  */
 export async function downloadToolWithTimeout(url: string, fileName: string, timeoutMs: number = DOWNLOAD_TIMEOUT_MS): Promise<string> {
-    let timer!: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Download of ${redactUrl(url)} timed out after ${timeoutMs}ms.`)), timeoutMs);
-    });
-    try {
-        return await Promise.race([tools.downloadTool(url, fileName), timeout]);
-    } finally {
-        clearTimeout(timer);
+    // Bounded retry (#78): tools.downloadTool performs a single HTTP GET with no
+    // retry of its own, so one transient blip during the largest fetch of the
+    // install failed the whole task. The metadata fetches already retry inside
+    // http-client.ts's withRetry; this brings the binary download to parity.
+    // Verification is deliberately OUTSIDE this loop — a checksum/signature
+    // failure is deterministic and must never be retried.
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+        let timer!: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`Download of ${redactUrl(url)} timed out after ${timeoutMs}ms.`)), timeoutMs);
+        });
+        try {
+            return await Promise.race([tools.downloadTool(url, `${fileName}${attempt > 1 ? `.retry${attempt}` : ''}`), timeout]);
+        } catch (error) {
+            lastError = error;
+            if (attempt === DOWNLOAD_ATTEMPTS) break;
+            tasks.debug(`Download attempt ${attempt} of ${redactUrl(url)} failed (${error instanceof Error ? error.message : error}); retrying...`);
+            await new Promise(resolve => setTimeout(resolve, DOWNLOAD_RETRY_BASE_MS * Math.pow(2, attempt - 1)));
+        } finally {
+            clearTimeout(timer);
+        }
     }
+    throw lastError;
 }
 
 /**
@@ -180,13 +210,20 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
     const wasCached = !!cachedToolPath;
 
     // Step 3: Download, extract, and cache if not found
+    // `verified` records whether this install's artifact ACTUALLY passed an
+    // integrity check: the registry and mirror sources can both legitimately
+    // return an unverified zip when the operator opted out (requireChecksum
+    // false). Recording a cache-integrity hash for such a binary would stamp
+    // "verified" on something nothing ever verified, and every later cache hit
+    // would then pass its re-verification (#136).
+    let verified = false;
     if (!cachedToolPath) {
         let zipPath: string;
         switch (downloadSource) {
             case "registry": {
                 const registryUrl = getValidatedRegistryUrl();
                 const mirrorName = getValidatedMirrorName();
-                zipPath = await downloadZipFromRegistry(version, registryUrl, mirrorName);
+                ({ zipPath, verified } = await downloadZipFromRegistry(version, registryUrl, mirrorName));
                 // Strip any embedded basic-auth userinfo before persisting the source
                 // into a downstream-readable pipeline variable (setSecret masks logs,
                 // not a stored variable's value).
@@ -195,12 +232,12 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
             }
             case "mirror": {
                 const mirrorBaseUrl = tasks.getInput("mirrorBaseUrl", true)!;
-                zipPath = await downloadZipFromMirror(version, mirrorBaseUrl);
+                ({ zipPath, verified } = await downloadZipFromMirror(version, mirrorBaseUrl));
                 tasks.setVariable('packerDownloadedFrom', `mirror:${redactUrlUserInfo(mirrorBaseUrl)}`);
                 break;
             }
             default: { // "hashicorp"
-                zipPath = await downloadZipFromHashiCorp(version);
+                ({ zipPath, verified } = await downloadZipFromHashiCorp(version));
                 tasks.setVariable('packerDownloadedFrom', 'hashicorp');
             }
         }
@@ -220,14 +257,27 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
         fs.chmodSync(packerPath, "755");
     }
 
-    // Cheap, offline re-verification of a cache hit (#136): the tool cache itself is
-    // trusted for the lifetime of the agent (re-fetching SHA256SUMS/GPG on every hit
-    // would defeat the point of caching), but a hash recorded when this binary was
-    // first verified lets local tampering/corruption of the cache be caught without
-    // any network access.
+    // Re-verification of a cache hit (#136). A version cached by a possibly-earlier
+    // job on this (potentially persistent, self-hosted) agent is otherwise reused
+    // without re-running the verification THIS job demands. Two layers:
+    //
+    //   1. Offline: compare the cached binary against the hash recorded when it was
+    //      first downloaded AND verified. No network, so air-gapped reuse still works.
+    //   2. When no usable hash was recorded (cached before this check existed, cached
+    //      by a run with verification disabled, or the record is unreadable/malformed),
+    //      escalate: re-download through the same source and require a byte match.
+    //
+    // A hash is recorded only for an artifact this run actually verified.
     if (wasCached) {
-        await verifyCachedBinaryHash(packerPath);
-    } else {
+        const recordVerified = await verifyCachedBinaryHash(packerPath);
+        if (!recordVerified) {
+            await reverifyUnmarkedCacheEntry(
+                `packer ${version}`,
+                packerPath,
+                () => downloadVerifiedZipForReverify(downloadSource, version),
+            );
+        }
+    } else if (verified) {
         recordCachedBinaryHash(packerPath);
     }
 
@@ -242,18 +292,17 @@ async function resolveVersionFromHashiCorp(inputVersion: string): Promise<string
         return inputVersion;
     }
     console.log(tasks.loc("GettingLatestPackerVersion"));
-    // Only a genuine request failure (network/timeout/5xx, already retried by fetchJson)
-    // falls back to the pinned version — that's an availability tradeoff worth keeping.
-    // A malformed response (the API contract itself broke) is NOT caught here: it throws
-    // fatally instead of silently downgrading, since silently trusting a fallback version
-    // in that case would mask a real API-shape regression rather than a transient blip.
+    // Fail closed (#78): a caller who asked for 'latest' — often precisely for
+    // security currency — must not be silently handed a hardcoded, since-superseded
+    // version because the checkpoint API was unreachable. A selective outage of only
+    // the version endpoint would otherwise force a silent downgrade that a green
+    // build's warning is easy to miss. Matches the sibling terraform installers,
+    // which all throw here rather than pinning a stale FALLBACK_* constant.
     let data: { current_version: string };
     try {
         data = await fetchJson<{ current_version: string }>('https://checkpoint-api.hashicorp.com/v1/check/packer');
     } catch (err) {
-        tasks.debug(`HashiCorp checkpoint API request failed: ${err}`);
-        tasks.warning(`${tasks.loc("PackerVersionNotFound")} (falling back to ${FALLBACK_PACKER_VERSION})`);
-        return FALLBACK_PACKER_VERSION;
+        throw new Error(`${tasks.loc("PackerVersionNotFound")} (${err instanceof Error ? err.message : err})`);
     }
     if (!data.current_version) {
         throw new Error("HashiCorp checkpoint API returned invalid response: missing current_version");
@@ -280,7 +329,7 @@ async function resolveVersionFromRegistry(inputVersion: string, registryUrl: str
 
 // --- Download strategies ---
 
-async function downloadZipFromHashiCorp(version: string): Promise<string> {
+async function downloadZipFromHashiCorp(version: string): Promise<DownloadedZip> {
     const downloadUrl = getHashiCorpDownloadUrl(version);
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
     let zipPath: string;
@@ -298,15 +347,17 @@ async function downloadZipFromHashiCorp(version: string): Promise<string> {
 
     const sha256SumsContent = await fetchText(sha256SumsUrl);
     const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
-    await verifyGpgSignature(sha256SumsContent, sha256SumsSigUrl, requireGpg);
+    // Verification failures discard the zip rather than leaving a rejected —
+    // possibly tampered — artifact on the agent's disk (#204).
+    await discardArtifactOnFailure(zipPath, async () => {
+        await verifyGpgSignature(sha256SumsContent, sha256SumsSigUrl, requireGpg);
+        await verifySha256(zipPath, parseSha256(sha256SumsContent, zipFileName));
+    });
 
-    const expectedHash = parseSha256(sha256SumsContent, zipFileName);
-    await verifySha256(zipPath, expectedHash);
-
-    return zipPath;
+    return { zipPath, verified: true };
 }
 
-async function downloadZipFromRegistry(version: string, registryUrl: string, mirrorName: string): Promise<string> {
+async function downloadZipFromRegistry(version: string, registryUrl: string, mirrorName: string): Promise<DownloadedZip> {
     // registryUrl may embed basic-auth userinfo; mask it before it can reach a log
     // via infoUrl in any error/warning below.
     maskOperatorUrlCredentials(registryUrl);
@@ -379,16 +430,20 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
 
     const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
     if (data.sha256) {
-        await verifySha256(zipPath, data.sha256);
-    } else if (requireChecksum) {
-        throw new Error(`Checksum verification is required but the registry did not provide a sha256 for ${safeInfoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
-    } else {
-        tasks.warning(`The registry returned no sha256 for ${safeInfoUrl}; the binary is installed WITHOUT any local integrity verification (no checksum and the registry source performs no GPG check) — you are trusting the registry's server-side verification and TLS alone. Set 'requireChecksum' to true to require a local check.`);
+        await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, data.sha256));
+        return { zipPath, verified: true };
     }
-    return zipPath;
+    if (requireChecksum) {
+        // A reachable registry deterministically withholding required material is a
+        // policy failure, not an availability blip: typed so the cache-hit
+        // re-verification path fails closed instead of degrading to the cached binary.
+        throw new VerificationFailure(`Checksum verification is required but the registry did not provide a sha256 for ${safeInfoUrl}. Set 'requireChecksum' to false to trust the registry's server-side verification only.`);
+    }
+    tasks.warning(`The registry returned no sha256 for ${safeInfoUrl}; the binary is installed WITHOUT any local integrity verification (no checksum and the registry source performs no GPG check) — you are trusting the registry's server-side verification and TLS alone. Set 'requireChecksum' to true to require a local check.`);
+    return { zipPath, verified: false };
 }
 
-async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Promise<string> {
+async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Promise<DownloadedZip> {
     // mirrorBaseUrl may embed basic-auth userinfo; mask it before it can reach a log
     // via the rejection message or any URL derived from it below.
     maskOperatorUrlCredentials(mirrorBaseUrl);
@@ -436,39 +491,52 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     const sha256SumsContent = await fetchTextAllow404(sha256SumsUrl);
     if (sha256SumsContent === null) {
         if (requireChecksum) {
-            throw new Error(`Checksum verification is required but the mirror did not publish a SHA256SUMS file (${safeSha256SumsUrl}). Set 'requireChecksum' to false to install without it.`);
+            throw new VerificationFailure(`Checksum verification is required but the mirror did not publish a SHA256SUMS file (${safeSha256SumsUrl}). Set 'requireChecksum' to false to install without it.`);
+        }
+        // The SHA256SUMS file IS the thing the GPG signature signs, so a mirror that
+        // publishes none also makes GPG verification impossible. requireGpgSignature
+        // must therefore be honored on THIS branch too: previously it was read only
+        // further down, so with requireChecksum=false the mirror binary installed with
+        // no checksum AND no signature while the toggle sat enabled and inert (#65).
+        if (requireGpg) {
+            throw new VerificationFailure(`GPG signature verification is required but the mirror published no SHA256SUMS file to verify (${safeSha256SumsUrl}). Set 'requireGpgSignature' to false for mirrors that do not serve signed checksums.`);
         }
         tasks.warning(`The mirror published no SHA256SUMS file (${safeSha256SumsUrl}); the binary is installed WITHOUT any local integrity verification. Set 'requireChecksum' to true to require it.`);
-        return zipPath;
+        return { zipPath, verified: false };
     }
 
     // SUMS is present: honor requireGpgSignature on the mirror path too (previously
     // GPG was only enforced on the hashicorp source — the toggle was inert here).
-    await verifyGpgSignature(sha256SumsContent, `${sha256SumsUrl}.sig`, requireGpg);
+    await discardArtifactOnFailure(zipPath, () => verifyGpgSignature(sha256SumsContent, `${sha256SumsUrl}.sig`, requireGpg));
 
+    let expectedHash: string;
     try {
-        const expectedHash = parseSha256(sha256SumsContent, zipFileName);
-        await verifySha256(zipPath, expectedHash);
+        // parseSha256 is OUTSIDE the discard wrapper on purpose: "this artifact is
+        // not listed in the SUMS" is a checksum-UNAVAILABLE outcome the operator may
+        // legitimately install through (requireChecksum=false), so the zip must
+        // survive it. Only a real comparison failure discards.
+        expectedHash = parseSha256(sha256SumsContent, zipFileName);
     } catch (error) {
-        // A genuine hash MISMATCH is always fatal, regardless of requireChecksum.
-        if (error instanceof ChecksumMismatchError) throw error;
         // The SUMS file did not list our artifact — treat as "unavailable".
         if (error instanceof ChecksumUnavailableError) {
             if (requireChecksum) {
-                throw new Error(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}).`);
+                throw new VerificationFailure(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}).`);
             }
             tasks.warning(`${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}); skipping checksum verification. Set 'requireChecksum' to true to require it.`);
-        } else {
-            throw error;
+            return { zipPath, verified: false };
         }
+        throw error;
     }
+    // A genuine hash MISMATCH is always fatal, regardless of requireChecksum — and
+    // the mismatched (possibly tampered) zip is deleted rather than left on disk.
+    await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, expectedHash));
 
-    return zipPath;
+    return { zipPath, verified: true };
 }
 
 // --- Helpers ---
 
-function parseSha256(sha256SumsContent: string, zipFileName: string): string {
+export function parseSha256(sha256SumsContent: string, zipFileName: string): string {
     const lines = sha256SumsContent.split('\n');
     for (const line of lines) {
         // Format: "<hex-hash>  <filename>" (two spaces between hash and filename)
@@ -481,7 +549,7 @@ function parseSha256(sha256SumsContent: string, zipFileName: string): string {
     throw new ChecksumUnavailableError(`SHA256 checksum not found for ${zipFileName}`);
 }
 
-async function verifySha256(filePath: string, expectedHash: string): Promise<void> {
+export async function verifySha256(filePath: string, expectedHash: string): Promise<void> {
     const fileBuffer = fs.readFileSync(filePath);
     const actualHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
     if (actualHash.toLowerCase() !== expectedHash.toLowerCase()) {
@@ -490,59 +558,168 @@ async function verifySha256(filePath: string, expectedHash: string): Promise<voi
     tasks.debug(`SHA256 verification passed: ${actualHash}`);
 }
 
-function getCacheHashSidecarPath(packerPath: string): string {
+export function getCacheHashSidecarPath(packerPath: string): string {
     return `${packerPath}.sha256`;
 }
 
 /**
  * Records the freshly-downloaded-and-verified binary's hash so a future cache hit can
  * cheaply (no network) detect local tampering/corruption of the agent's tool cache
- * (#136). Best-effort: a write failure only warns -- it must never fail an otherwise
- * successful install.
+ * (#136). Best-effort: a write failure only debug-logs -- it must never fail an
+ * otherwise successful install.
+ *
+ * The write is ATOMIC (temp file in the same directory, then rename). A plain
+ * writeFileSync interrupted mid-write -- agent disk full, job cancellation, a
+ * container kill -- leaves a sidecar that exists and is readable but is empty or
+ * truncated, and every subsequent install of this version then compares the real
+ * digest against that fragment and fails with a tampering-shaped
+ * Sha256VerificationFailed, permanently bricking the version on that agent (#198).
+ * Renaming into place means a reader only ever sees a complete digest or none.
  */
-function recordCachedBinaryHash(packerPath: string): void {
+export function recordCachedBinaryHash(packerPath: string): void {
+    const sidecarPath = getCacheHashSidecarPath(packerPath);
+    const tempPath = `${sidecarPath}.${uuidV4()}.tmp`;
     try {
         const hash = crypto.createHash('sha256').update(fs.readFileSync(packerPath)).digest('hex');
-        fs.writeFileSync(getCacheHashSidecarPath(packerPath), hash, { mode: 0o600 });
+        fs.writeFileSync(tempPath, hash, { mode: 0o600 });
+        fs.renameSync(tempPath, sidecarPath);
     } catch (error) {
         tasks.debug(`Could not record a cache-integrity hash for ${packerPath}: ${error instanceof Error ? error.message : error}`);
+        try { fs.unlinkSync(tempPath); } catch { /* best effort */ }
     }
 }
 
 /**
  * On a cache hit, cheaply (no network) re-verifies the cached binary against the hash
- * recorded when it was first downloaded and verified (#136). A cache entry from before
- * this check existed has no sidecar file yet -- that is treated as an unverifiable
- * legacy entry, not tampering (a hash is recorded now so it is covered going forward).
- * Being unable to even perform the check (sidecar read failure, etc.) only warns and
- * continues -- this is a best-effort defense-in-depth layer, not a hard gate, and must
- * never turn an unrelated filesystem quirk into a failed install. A genuine hash
- * MISMATCH against an existing, readable sidecar is the one case that always fails.
+ * recorded when it was first downloaded and verified (#136).
+ *
+ * Returns TRUE only when a well-formed record existed and the cached binary matched
+ * it. Returns FALSE for every "cannot check" outcome, which the caller escalates to a
+ * remote re-verification rather than silently trusting:
+ *
+ *   - no sidecar (cached before this check existed, or cached by a run with
+ *     verification disabled),
+ *   - the sidecar cannot be stat'd or read,
+ *   - the sidecar exists and is readable but is NOT a 64-character SHA256 digest.
+ *
+ * That last case is the one #198 names: an interrupted write (disk full, job
+ * cancellation, container kill) leaves an empty or truncated sidecar. Feeding that
+ * fragment to verifySha256 produces a ChecksumMismatchError -- by design never
+ * downgradable -- so every later install of that version failed with
+ * Sha256VerificationFailed, which reads as binary tampering and sends an operator
+ * down a security-incident path for what is a torn file. A malformed record is
+ * UNVERIFIABLE, not evidence of tampering; it is treated exactly like a missing one.
+ * The record is NOT healed here -- healing happens only after the escalated
+ * re-verification actually proves the cached binary.
+ *
+ * A genuine mismatch against a WELL-FORMED record is the one case that always throws:
+ * that is real local tampering or corruption.
  */
-async function verifyCachedBinaryHash(packerPath: string): Promise<void> {
+export async function verifyCachedBinaryHash(packerPath: string): Promise<boolean> {
     const sidecarPath = getCacheHashSidecarPath(packerPath);
     let sidecarExists: boolean;
     try {
         sidecarExists = fs.existsSync(sidecarPath);
     } catch (error) {
         tasks.debug(`Could not check for a cache-integrity hash at ${sidecarPath}: ${error instanceof Error ? error.message : error}`);
-        return;
+        return false;
     }
     if (!sidecarExists) {
-        tasks.debug(`No cache-integrity hash recorded for ${packerPath} yet (cached before this check existed); recording one now.`);
-        recordCachedBinaryHash(packerPath);
-        return;
+        tasks.debug(`No cache-integrity hash recorded for ${packerPath} yet (cached before this check existed, or cached without verification).`);
+        return false;
     }
-    let expectedHash: string;
+    let recordedHash: string;
     try {
-        expectedHash = fs.readFileSync(sidecarPath, 'utf8').trim();
+        recordedHash = fs.readFileSync(sidecarPath, 'utf8').trim();
     } catch (error) {
         tasks.debug(`Could not read the cache-integrity hash at ${sidecarPath}: ${error instanceof Error ? error.message : error}`);
-        return;
+        return false;
+    }
+    if (!SHA256_HEX_PATTERN.test(recordedHash)) {
+        tasks.debug(`The cache-integrity hash at ${sidecarPath} is not a 64-character SHA256 digest (${recordedHash.length} character(s) recorded); treating the cache entry as unverifiable rather than tampered.`);
+        return false;
     }
     // A genuine mismatch (ChecksumMismatchError) always propagates -- that is real
     // local tampering/corruption, distinct from merely being unable to check.
-    await verifySha256(packerPath, expectedHash);
+    await verifySha256(packerPath, recordedHash);
+    return true;
+}
+
+/**
+ * A cache hit with NO usable integrity record means the tool was cached before the
+ * record existed, by a job that ran with verification disabled, or with a record that
+ * was torn on write. Under requireChecksum (default true) this job demands
+ * verification, so re-download the release through the exact same source and
+ * verification path a fresh install would use and require the cached executable to
+ * byte-match the freshly verified one (#136):
+ *
+ *  - Source UNREACHABLE (network/DNS/TLS failure, timeout, 5xx, offline or air-gapped
+ *    agent, version no longer published): degrade -- warn and keep the pre-existing
+ *    trust-the-cache behaviour, so offline cache reuse keeps working. An operator on a
+ *    shared persistent agent can opt out of that degradation with
+ *    requireOnlineReverification.
+ *  - Source REACHABLE but the material FAILS verification, or the reachable source
+ *    WITHHOLDS material a require-flag makes mandatory: both surface as a typed
+ *    VerificationFailure -- fail closed, never fall back to the cached copy.
+ *  - Cached binary differs from the freshly verified release: fail closed.
+ *  - Match: record the hash so future cache hits verify offline.
+ */
+async function reverifyUnmarkedCacheEntry(
+    toolLabel: string,
+    cachedPackerPath: string,
+    downloadVerifiedZip: () => Promise<string>,
+): Promise<void> {
+    if (!getBoolInputWithDefault("requireChecksum", true)) {
+        tasks.debug(`Cache hit for ${toolLabel}: no usable cache-integrity hash and requireChecksum is false; skipping remote re-verification.`);
+        return;
+    }
+    console.log(tasks.loc("ReverifyingCachedTool", toolLabel));
+    let zipPath: string;
+    try {
+        zipPath = await downloadVerifiedZip();
+    } catch (error) {
+        if (isVerificationFailure(error)) {
+            throw error;
+        }
+        if (getBoolInputWithDefault("requireOnlineReverification", false)) {
+            throw new Error(tasks.loc("CachedToolReverificationSourceUnreachable", toolLabel, error instanceof Error ? error.message : String(error)));
+        }
+        tasks.warning(tasks.loc("CachedToolReverificationUnavailable", toolLabel, error instanceof Error ? error.message : String(error)));
+        return;
+    } finally {
+        // downloadVerifiedZip records the source it fetched from; the binary this job
+        // actually runs still comes from the cache -- re-assert that.
+        tasks.setVariable('packerDownloadedFrom', 'cache');
+    }
+    const freshDir = await tools.extractZip(zipPath);
+    const freshPackerPath = findPackerExecutable(freshDir);
+    if (!freshPackerPath) {
+        throw new Error(tasks.loc("PackerNotFoundInFolder", freshDir));
+    }
+    const freshHash = crypto.createHash('sha256').update(fs.readFileSync(freshPackerPath)).digest('hex').toLowerCase();
+    const cachedHash = crypto.createHash('sha256').update(fs.readFileSync(cachedPackerPath)).digest('hex').toLowerCase();
+    if (freshHash !== cachedHash) {
+        throw new Error(tasks.loc("CachedToolReverificationMismatch", toolLabel, freshHash, cachedHash));
+    }
+    recordCachedBinaryHash(cachedPackerPath);
+    console.log(tasks.loc("CachedToolReverified", toolLabel));
+}
+
+/**
+ * Re-runs the configured source's download + verification exactly as a fresh install
+ * would (same inputs, same toggles, same trust roots) and returns the verified zip.
+ * Used only by the cache-hit re-verification path, which gates on requireChecksum=true
+ * -- under which every strategy either verifies or throws.
+ */
+async function downloadVerifiedZipForReverify(downloadSource: string, version: string): Promise<string> {
+    switch (downloadSource) {
+        case "registry":
+            return (await downloadZipFromRegistry(version, getValidatedRegistryUrl(), getValidatedMirrorName())).zipPath;
+        case "mirror":
+            return (await downloadZipFromMirror(version, tasks.getInput("mirrorBaseUrl", true)!)).zipPath;
+        default: // "hashicorp"
+            return (await downloadZipFromHashiCorp(version)).zipPath;
+    }
 }
 
 function getPlatformString(): string {

@@ -92,8 +92,11 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | `registry-allowlist.ts` | **The mirror/registry download path's SSRF defense.** Host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* to every redirect hop, with DNS resolution — change SSRF behaviour here, not in a caller |
 | `url-path-segment.ts` | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators) |
 | `url-secret-redaction.ts` | Strips/masks `user:password@` userinfo from a URL before it can reach the build log |
+| `verification-failure.ts` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
+| `artifact-discard.ts` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
 
-- Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) with a pinned fallback; registry source resolves via `/terraform/binaries/{name}/versions/latest`.
+- Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) and **fails closed** if that lookup fails — it never silently installs a pinned stale version (#78); registry source resolves via `/terraform/binaries/{name}/versions/latest`.
+- A cache hit is re-verified: offline against the `<binary>.sha256` integrity record written after a verified download, and — when no usable record exists — by re-downloading the release through the same source and requiring a byte match (`requireOnlineReverification` turns the "source unreachable" degradation into a hard failure). A malformed/truncated record counts as *unverifiable*, not tampering.
 - The private registry path needs no backend changes — `terraform-registry-backend` already supports a `packer` binary-mirror tool type.
 - Output variables: `packerLocation`, `packerDownloadedFrom`.
 

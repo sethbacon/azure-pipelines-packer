@@ -32,7 +32,9 @@ The downloaded archive's hash did not match the published `SHA256SUMS`. This is 
 
 ## Installer: GPG signature unavailable
 
-For `hashicorp` and `mirror` sources the installer verifies the `SHA256SUMS.sig` against HashiCorp's release key. If the `.sig` is missing and `requireGpgSignature` is `true` (the default), the task fails. Set `requireGpgSignature: false` only for mirrors that do not serve `.sig` files — you then rely on SHA256 alone.
+For `hashicorp` and `mirror` sources the installer verifies the `SHA256SUMS.sig` against HashiCorp's release key. If the `.sig` is missing and `requireGpgSignature` is `true` (the default), the task fails. The same applies when a mirror publishes no `SHA256SUMS` at all: that file is what the `.sig` signs, so there is nothing left to verify and the task fails rather than installing with the toggle enabled but inert. Set `requireGpgSignature: false` only for mirrors that do not serve `.sig` files — you then rely on SHA256 alone.
+
+A download whose checksum or signature fails verification is **deleted** rather than left in the agent's temp directory, so a rejected (possibly tampered) archive never lingers on a persistent self-hosted agent.
 
 ## `latest` resolves to an unexpected version
 
