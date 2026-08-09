@@ -34,7 +34,7 @@
     "@types/node": "^24",
     "@types/uuid": "^11.0.0",
     "eslint": "^10.8.0",
-    "mocha": "^11.2.0",
+    "mocha": "^11.8.0",
     "nyc": "^18.0.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.9.3",
