@@ -9,6 +9,7 @@ import './SecureTempL0';
 import './SecureFileLoaderL0';
 import './PreMaskingClassL0';
 import './CredentialFailClosedMatrixL0';
+import './EntryPointSignalsL0';
 
 describe('PackerTask Test Suite', function () {
 

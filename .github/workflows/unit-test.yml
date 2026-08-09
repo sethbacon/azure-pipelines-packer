@@ -7,7 +7,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch: {}
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      ref:
+        description: >-
+          Commit SHA or ref to check out (defaults to github.sha when omitted).
+          Lets a caller — release.yml's guard-validated release pipeline — pin
+          every job in this reusable workflow to an exact commit instead of a
+          mutable tag/branch name, so a workflow_dispatch release can never
+          TEST a different commit than the one it builds, signs and publishes (#109).
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,9 +29,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - name: Validate version fields
         run: node scripts/check-versions.js
+      - name: Self-test check-minor-bumps.js
+        run: node scripts/test-check-minor-bumps.js
+      - name: Self-test bump-minor-versions.js
+        run: node scripts/test-bump-minor-versions.js
+      - name: Self-test publish-marketplace.js
+        run: node scripts/test-publish-marketplace.js
 
   check-shared-modules:
     name: Check Shared Module Provenance
@@ -29,11 +46,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - name: Validate shared installer modules carry a provenance header
         run: node scripts/check-shared-modules.js
       - name: Validate egress authorization (SSRF class signature)
         run: node scripts/check-egress-authorization.js
+      - name: Validate enforced disciplines (documented-but-unenforced class signature)
+        run: node scripts/check-enforced-disciplines.js
+      - name: Self-test check-enforced-disciplines.js
+        run: node scripts/test-check-enforced-disciplines.js
 
   build-and-test-task-v1:
     name: Build and Test Packer Task V1 (${{ matrix.os }})
@@ -48,6 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -62,6 +85,33 @@ jobs:
         run: npm run compile
       - name: Run unit tests with coverage
         run: npm run test:coverage
+      # Both task.json files declare a Node20_1 execution handler alongside
+      # Node24 so older on-prem/air-gapped agents without the Node 24 runner can
+      # still invoke these tasks in production -- but nothing in CI ever ran
+      # under Node 20, so a Node-20-incompatible change (e.g. a dependency bump
+      # using newer syntax) would ship invisible to exactly the agent population
+      # that depends on the fallback (#208). Every step above runs under Node 24
+      # (ts-node/mocha need it); this re-points the runner's `node` at 20 and
+      # executes the ALREADY-COMPILED src/index.js the Node20_1 handler targets.
+      #
+      # This is deliberately LOAD-ONLY, not a behavioural gate -- the same
+      # decision the sibling azure-pipelines-terraform repo documents and the
+      # same one adopted here, not a silent downgrade of it: with no ADO input
+      # environment variables present, index.ts's own try/catch converts the
+      # resulting "input required" error into a caught
+      # tasks.setResult(Failed, ...) and the process exits 0. So the exit code
+      # alone is the signal: zero means Node 20 parsed and loaded the whole
+      # compiled module graph, non-zero means a real incompatibility surfaced
+      # before that catch could run. The full mocha/L0 assertion suite stays
+      # Node-24-only; running it twice per task would roughly double CI time,
+      # and Node 20 is already EOL -- the handler exists for agents that have
+      # not upgraded their runner, not as a second fully-verified path.
+      - name: Set up Node 20 for Node20_1 handler smoke test
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+      - name: Verify compiled output runs under Node 20 (Node20_1 handler)
+        run: node src/index.js
 
   build-and-test-installer-v1:
     name: Build and Test Packer Installer V1 (${{ matrix.os }})
@@ -76,6 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -90,6 +141,14 @@ jobs:
         run: npm run compile
       - name: Run unit tests with coverage
         run: npm run test:coverage
+      # See build-and-test-task-v1's identical step above for the full
+      # rationale (#208): this task.json also declares a Node20_1 handler.
+      - name: Set up Node 20 for Node20_1 handler smoke test
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+      - name: Verify compiled output runs under Node 20 (Node20_1 handler)
+        run: node src/index.js
 
   actionlint:
     name: Lint GitHub Actions
@@ -97,6 +156,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       - name: Install actionlint
         shell: bash
@@ -115,6 +175,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
       # Online audits (ref-version-mismatch, impostor-commit, known-vulnerable
       # actions) use GITHUB_TOKEN; the rest (unpinned-uses, template-injection,
