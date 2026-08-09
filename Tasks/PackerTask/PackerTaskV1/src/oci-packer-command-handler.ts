@@ -3,11 +3,32 @@ import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
 import { normalizePem } from './pem-normalizer';
-import { maskSecretLines, readSecretEndpointDataParameter } from './endpoint-data-secret';
+import { maskSecretLines } from './endpoint-data-secret';
+import {
+    FINGERPRINT_PATTERN,
+    neutralizeEnvironmentVariables,
+    OCID_PATTERN,
+    REGION_PATTERN,
+    requireIdentityField,
+    requireSecretField,
+} from './credential-guards';
 
-const OCID_PATTERN = /^ocid1\.[a-z0-9_]+\.[a-z0-9._-]*$/;
-const REGION_PATTERN = /^[a-z0-9-]+$/;
-const FINGERPRINT_PATTERN = /^([0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}$/;
+/**
+ * OCI SDK configuration the packer-plugin-oracle builder honours ahead of, or
+ * instead of, the PKR_VAR_oci_* values this handler injects. Cleared so an
+ * inherited config file or profile on a self-hosted agent cannot redirect the
+ * build to a different tenancy/user (#187).
+ */
+const OCI_COMPETING_CREDENTIAL_ENV = [
+    'OCI_CLI_CONFIG_FILE',
+    'OCI_CLI_PROFILE',
+    'OCI_CLI_AUTH',
+    'OCI_CLI_TENANCY',
+    'OCI_CLI_USER',
+    'OCI_CLI_FINGERPRINT',
+    'OCI_CLI_KEY_FILE',
+    'OCI_CLI_REGION',
+] as const;
 
 /**
  * Injects OCI credentials for the packer-plugin-oracle (oracle-oci) builder
@@ -20,15 +41,6 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
     constructor() {
         super();
         this.providerName = "oci";
-    }
-
-    /** Rejects missing/newline-bearing/malformed service-connection fields before they reach a PKR_VAR_* environment variable. */
-    private requireField(serviceName: string, dataKey: string, pattern: RegExp, description: string): string {
-        const value = tasks.getEndpointDataParameter(serviceName, dataKey, false) || '';
-        if (!pattern.test(value)) {
-            throw new Error(`OCI service connection '${serviceName}' field '${dataKey}' is missing or not a valid ${description}.`);
-        }
-        return value;
     }
 
     private writeKeyFile(privateKey: string): string {
@@ -63,22 +75,26 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
             throw new Error("An OCI service connection is required for this command. Set environmentServiceNameOCI.");
         }
 
-        // NOT tasks.getEndpointDataParameter(): that helper debug-logs the value it
-        // returns, so the raw API key would already be in the build log before the
-        // first setSecret below. readSecretEndpointDataParameter reads the same
-        // ENDPOINT_DATA_* variable directly, masks it line-wise, and deletes it so
-        // the packer child process does not inherit it (see endpoint-data-secret.ts).
-        const rawPrivateKey = readSecretEndpointDataParameter(serviceName, "privateKey");
-        if (!rawPrivateKey) {
-            throw new Error("OCI private key not found in service connection. Ensure the 'privateKey' field is configured.");
-        }
+        // Fails closed on an absent/empty key (#199), and reads it through
+        // readSecretEndpointDataParameter rather than tasks.getEndpointDataParameter
+        // (#185/#195): the latter debug-logs the value it returns, so the raw API key
+        // would be in the build log before the first setSecret below, and leaves
+        // ENDPOINT_DATA_* in process.env for the packer child to inherit. Both guards
+        // now compose inside requireSecretField(source: 'data') -- see
+        // credential-guards.ts readSecretEndpointField and endpoint-data-secret.ts.
+        const rawPrivateKey = requireSecretField(serviceName, "privateKey", { source: 'data' });
         const keyFilePath = this.writeKeyFile(rawPrivateKey);
 
-        const tenancyOcid = this.requireField(serviceName, "tenancy", OCID_PATTERN, "OCID");
-        const userOcid = this.requireField(serviceName, "user", OCID_PATTERN, "OCID");
-        const region = this.requireField(serviceName, "region", REGION_PATTERN, "region identifier");
-        const fingerprint = this.requireField(serviceName, "fingerprint", FINGERPRINT_PATTERN, "key fingerprint");
+        // The strict per-field grammars this handler pioneered now live in the
+        // shared credential-guards module, so the Azure/AWS/vSphere/GCP handlers
+        // apply the same "reject missing/newline-bearing/malformed before it
+        // reaches an injected environment variable" contract (#199).
+        const tenancyOcid = requireIdentityField(serviceName, "tenancy", { source: 'data', pattern: OCID_PATTERN, description: 'OCID' });
+        const userOcid = requireIdentityField(serviceName, "user", { source: 'data', pattern: OCID_PATTERN, description: 'OCID' });
+        const region = requireIdentityField(serviceName, "region", { source: 'data', pattern: REGION_PATTERN, description: 'region identifier' });
+        const fingerprint = requireIdentityField(serviceName, "fingerprint", { source: 'data', pattern: FINGERPRINT_PATTERN, description: 'key fingerprint' });
 
+        neutralizeEnvironmentVariables(OCI_COMPETING_CREDENTIAL_ENV, "OCI API key");
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);

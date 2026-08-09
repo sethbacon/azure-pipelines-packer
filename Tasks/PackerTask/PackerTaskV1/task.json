@@ -159,11 +159,11 @@
             "name": "awsSessionName",
             "type": "string",
             "label": "AWS role session name",
-            "defaultValue": "AzureDevOps-Packer",
+            "defaultValue": "",
             "required": false,
             "groupName": "providerAuth",
             "visibleRule": "environmentAuthSchemeAWS = WorkloadIdentityFederation",
-            "helpMarkDown": "Session name for the assumed role."
+            "helpMarkDown": "Session name for the assumed role. Leave blank to derive one from the job (`ado-packer-<TeamProject>-<BuildId>`). The session name is the human-readable half of CloudTrail's `userIdentity.arn` (`arn:aws:sts::<acct>:assumed-role/<Role>/<SessionName>`), so a per-run value is what lets an incident responder tell which pipeline and which run created a resource; it can also be constrained with an `sts:RoleSessionName` trust-policy condition. A value supplied here must match AWS's grammar: 2-64 characters from `[A-Za-z0-9_+=,.@-]`."
         },
         {
             "name": "environmentServiceNameGCP",
@@ -257,7 +257,7 @@
             "required": false,
             "groupName": "providerAuth",
             "visibleRule": "provider = vsphere",
-            "helpMarkDown": "Set PKR_VAR_vsphere_insecure_connection=true to skip vCenter TLS verification."
+            "helpMarkDown": "Sets PKR_VAR_vsphere_insecure_connection=true, which makes the vsphere-iso/vsphere-clone builders **skip vCenter TLS certificate validation**. The vSphere password is then sent to vCenter over an unverified connection and can be intercepted on-path. Use only on a trusted network with a self-signed lab certificate -- never in production. The task emits a warning whenever this is enabled."
         },
         {
             "name": "variableFiles",
