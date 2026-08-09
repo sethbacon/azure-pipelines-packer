@@ -3,6 +3,7 @@ import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from './environment-variables';
 import { normalizePem } from './pem-normalizer';
+import { maskSecretLines, readSecretEndpointDataParameter } from './endpoint-data-secret';
 
 const OCID_PATTERN = /^ocid1\.[a-z0-9_]+\.[a-z0-9._-]*$/;
 const REGION_PATTERN = /^[a-z0-9-]+$/;
@@ -31,7 +32,16 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
     }
 
     private writeKeyFile(privateKey: string): string {
-        tasks.setSecret(privateKey);
+        // Mask the raw value LINE-WISE first. setSecret rejects multi-line input
+        // (LIB_MultilineSecret): the UI passwordbox strips newlines on paste, but
+        // a service connection created via the REST API / az devops CLI can
+        // deliver a genuine multi-line PEM, in which case setSecret on the raw
+        // value throws before any credential is written AND leaves the raw form
+        // unregistered. No boundary-line filtering here: the flattened
+        // single-line form is itself one "line" that starts with "-----BEGIN".
+        // Mirrors gcp-packer-command-handler.ts and the terraform extension's
+        // getPrivateKeyFilePath().
+        maskSecretLines(privateKey);
         const normalized = normalizePem(privateKey);
         // setSecret masks exact substrings within a single log line. normalizePem
         // rewrites the key to a byte-different LF-wrapped form — the form actually
@@ -53,7 +63,12 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
             throw new Error("An OCI service connection is required for this command. Set environmentServiceNameOCI.");
         }
 
-        const rawPrivateKey = tasks.getEndpointDataParameter(serviceName, "privateKey", false);
+        // NOT tasks.getEndpointDataParameter(): that helper debug-logs the value it
+        // returns, so the raw API key would already be in the build log before the
+        // first setSecret below. readSecretEndpointDataParameter reads the same
+        // ENDPOINT_DATA_* variable directly, masks it line-wise, and deletes it so
+        // the packer child process does not inherit it (see endpoint-data-secret.ts).
+        const rawPrivateKey = readSecretEndpointDataParameter(serviceName, "privateKey");
         if (!rawPrivateKey) {
             throw new Error("OCI private key not found in service connection. Ensure the 'privateKey' field is configured.");
         }

@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "8",
+        "Minor": "9",
         "Patch": "0"
     },
     "instanceNameFormat": "Packer $(command)",
@@ -287,7 +287,7 @@
             "required": false,
             "groupName": "variables",
             "visibleRule": "command = build || command = validate || command = custom",
-            "helpMarkDown": "A variable file from the Secure Files library, passed as -var-file."
+            "helpMarkDown": "A variable file from the Secure Files library, passed as -var-file. Every scalar string value in the file (JSON `.pkrvars.json` or quoted HCL `.pkrvars.hcl` literals) is registered with the build-log secret masker before packer runs, so a value packer echoes is redacted. Values shorter than 4 characters, and numeric/boolean values, are NOT masked; nor is the file's content protected from a template that deliberately writes it to an artifact."
         },
         {
             "name": "environmentVariables",
