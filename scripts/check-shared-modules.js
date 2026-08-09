@@ -46,6 +46,18 @@ const SHARED_MODULES = [
     // provenance headers, so a cross-repo diff of the body is the fix check.
     { dir: INSTALLER_SRC, file: 'registry-allowlist.ts' },
     { dir: INSTALLER_SRC, file: 'url-path-segment.ts' },
+    // Verification-failure classification: the typed marker that distinguishes
+    // "material was obtained and FAILED verification / was withheld by a reachable
+    // source under a require-flag" (fail closed) from "the source could not be
+    // reached at all" (degrade to the cached tool). The cache-hit re-verification
+    // path in BOTH extensions branches on it, so a drift would silently reclassify
+    // a bad GPG signature as a mere availability warning.
+    { dir: INSTALLER_SRC, file: 'verification-failure.ts' },
+    // Discard-on-failed-verification wrapper: a downloaded archive whose checksum or
+    // signature does NOT verify is deleted rather than left in the agent's temp
+    // directory. Same body as the terraform copy, which is byte-identical across its
+    // three installer tasks.
+    { dir: INSTALLER_SRC, file: 'artifact-discard.ts' },
     // The agent-proxy fetch options builder (#196). Body byte-identical to
     // TerraformTaskV5/src/proxy-config.ts, including both setSecret calls (raw
     // and percent-encoded proxy password); only the JSDoc names this repo's own

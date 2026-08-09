@@ -15,6 +15,12 @@ import tools = require('azure-pipelines-tool-lib/tool');
 // readable; imported for its side effect of registering the suite.
 import './EgressAuthorizationL0';
 
+// Table-driven class test for the artifact-trust defect class
+// (#65/#78/#136/#198/#204): every path by which a binary becomes trusted, plus the
+// failure/edge states of the verification itself. Kept in its own file so its three
+// tables stay readable; imported for its side effect of registering the suite.
+import './ArtifactTrustL0';
+
 describe('PackerInstaller Test Suite', function () {
 
     it('classifies mirror hosts and resolved addresses', async () => {
@@ -137,9 +143,9 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail
     expectFailure('MirrorSha256MismatchFail');       // genuine mismatch is fatal even with requireChecksum=false
 
-    // --- 'latest' checkpoint resolution: transient failure still falls back, but a
-    // malformed API response is now fatal instead of silently downgrading (#106) ---
-    expectSuccess('HashiCorpLatestCheckpointDownFallback');
+    // --- 'latest' checkpoint resolution fails closed: neither an unreachable API
+    // (#78) nor a malformed response (#106) may silently install a pinned version ---
+    expectFailure('HashiCorpLatestCheckpointDownFail');
     expectFailure('HashiCorpLatestCheckpointInvalidResponseFail');
 
     // --- GPG fetch-failure classification: only a genuine 404 may downgrade when

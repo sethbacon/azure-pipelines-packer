@@ -4,13 +4,19 @@
 // @shared-module-status: DIVERGED — this copy now distinguishes a genuine 404 (signature
 //   not published) from a transient/network failure via fetchBufferAllow404, so a
 //   requireGpgSignature=false opt-out only downgrades on real absence, not on a 5xx/network
-//   blip an attacker could induce (#106). Backport to azure-pipelines-terraform is pending;
-//   do not "reconcile" by reverting this.
+//   blip an attacker could induce (#106), and it accepts a valid signature at ANY index of
+//   a multi-signature .sig (#137). Backport to azure-pipelines-terraform is pending; do not
+//   "reconcile" by reverting either. As of 2026-08-08 it MATCHES the terraform copy in
+//   throwing a typed VerificationFailure for every "material obtained but it does not
+//   verify" / "required signature withheld by a reachable source" outcome, which is what
+//   lets the cache-hit re-verification path fail closed on a bad signature while still
+//   degrading gracefully on a transport outage.
 import tasks = require('azure-pipelines-task-lib/task');
 import * as openpgp from 'openpgp';
 
 import { fetchBufferAllow404 } from './http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from './hashicorp-gpg-key';
+import { VerificationFailure } from './verification-failure';
 
 /**
  * Verifies the GPG signature of a SHA256SUMS file against HashiCorp's public key.
@@ -29,7 +35,7 @@ export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl
     const signatureBytes = await fetchBufferAllow404(signatureUrl);
     if (signatureBytes === null) {
         if (required) {
-            throw new Error(`GPG signature file unavailable (${signatureUrl}) and signature verification is required. Set 'requireGpgSignature' to false to skip.`);
+            throw new VerificationFailure(`GPG signature file unavailable (${signatureUrl}) and signature verification is required. Set 'requireGpgSignature' to false to skip.`);
         }
         tasks.warning(`GPG signature file unavailable (${signatureUrl}). SHA256SUMS will be trusted without signature verification.`);
         return;
@@ -48,7 +54,7 @@ export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl
     });
 
     if (!result.signatures || result.signatures.length === 0) {
-        throw new Error(`GPG signature verification failed: no signatures found in ${signatureUrl}`);
+        throw new VerificationFailure(`GPG signature verification failed: no signatures found in ${signatureUrl}`);
     }
     // A detached .sig file can carry more than one signature (e.g. during a signing-key
     // rotation window). Require at least one to verify successfully rather than only
@@ -60,7 +66,7 @@ export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl
         const errors = outcomes
             .filter((o): o is PromiseRejectedResult => o.status === 'rejected')
             .map((o) => (o.reason instanceof Error ? o.reason.message : String(o.reason)));
-        throw new Error(`GPG signature verification failed for SHA256SUMS: ${errors.join('; ') || 'no signature verified'}`);
+        throw new VerificationFailure(`GPG signature verification failed for SHA256SUMS: ${errors.join('; ') || 'no signature verified'}`);
     }
 
     tasks.debug('GPG signature verification passed');
