@@ -26,7 +26,7 @@
     "diff": "^8.0.3",
     "brace-expansion": "^5.0.9",
     "mocha": {
-      "js-yaml": "^4.3.0"
+      "js-yaml": "^4.3.1"
     }
   },
   "devDependencies": {
