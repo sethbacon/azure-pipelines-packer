@@ -57,7 +57,7 @@ SOFTWARE.
 ## undici
 
 **Repository:** https://github.com/nodejs/undici
-**Used by:** `Tasks/PackerInstaller/PackerInstallerV1` (proxy-aware HTTP client)
+**Used by:** `Tasks/PackerInstaller/PackerInstallerV1` (proxy-aware HTTP client), `Tasks/PackerTask/PackerTaskV1` (proxy-aware OIDC token request, `src/proxy-config.ts`)
 **License:** MIT
 
 ```txt

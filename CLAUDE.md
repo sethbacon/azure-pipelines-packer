@@ -86,9 +86,12 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | --- | --- |
 | `index.ts` | Entry point — installs Packer, prepends PATH, verifies |
 | `packer-installer.ts` | Download strategies (hashicorp / registry / mirror), version resolution, SHA256 verify |
-| `http-client.ts` | Proxy-aware fetch helpers with HTTPS enforcement |
+| `http-client.ts` | Proxy-aware fetch helpers with HTTPS enforcement, per-hop redirect re-validation and bounded retry |
 | `gpg-verifier.ts` | Verifies SHA256SUMS.sig against HashiCorp's GPG key |
 | `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
+| `registry-allowlist.ts` | **The mirror/registry download path's SSRF defense.** Host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* to every redirect hop, with DNS resolution — change SSRF behaviour here, not in a caller |
+| `url-path-segment.ts` | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators) |
+| `url-secret-redaction.ts` | Strips/masks `user:password@` userinfo from a URL before it can reach the build log |
 
 - Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) with a pinned fallback; registry source resolves via `/terraform/binaries/{name}/versions/latest`.
 - The private registry path needs no backend changes — `terraform-registry-backend` already supports a `packer` binary-mirror tool type.
@@ -114,7 +117,13 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `vsphere-packer-command-handler.ts` | vSphere auth → `PKR_VAR_vsphere_*` env |
 | `none-packer-command-handler.ts` | No cloud creds (local/hypervisor builders) |
 | `environment-variables.ts` | Tracked env var helper with `finally`-block cleanup |
-| `secure-file-loader.ts`, `secure-temp.ts`, `id-token-generator.ts` | Secure file download, restrictive temp writes, OIDC token generation |
+| `credential-guards.ts` | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`) |
+| `endpoint-data-secret.ts` | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted) |
+| `secure-file-loader.ts` | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600 |
+| `secure-temp.ts` | Restrictive temp-file primitives (owner-only 0600 + `O_EXCL` on Unix, a restrictive DACL on Windows; both fail closed) |
+| `secure-var-file-masking.ts` | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them |
+| `id-token-generator.ts` | Requests the ADO OIDC ID token used by every WIF provider (https-pinned, `redirect: 'error'`, 30s abort, bounded retry, proxy-aware via `proxy-config.ts`) |
+| `proxy-config.ts` | Builds `fetch()` options routing outbound HTTPS through the agent's configured proxy (`Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword`), masking both the raw and percent-encoded proxy password |
 | `pem-normalizer.ts` | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping |
 
 ### Commands

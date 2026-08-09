@@ -56,6 +56,10 @@ jobs:
         run: node scripts/check-enforced-disciplines.js
       - name: Self-test check-enforced-disciplines.js
         run: node scripts/test-check-enforced-disciplines.js
+      - name: Validate outbound proxy parity (#196 class signature)
+        run: node scripts/check-proxy-parity.js
+      - name: Validate documented claims against the code
+        run: node scripts/check-docs-claims.js
 
   build-and-test-task-v1:
     name: Build and Test Packer Task V1 (${{ matrix.os }})
