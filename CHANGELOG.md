@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.8](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.7...v1.2.8) (2026-08-09)
+
+
+### Bug Fixes
+
+* patch transitive js-yaml 3.x to 3.15.1 in both task lockfiles ([#224](https://github.com/sethbacon/azure-pipelines-packer/issues/224)) ([e9d158f](https://github.com/sethbacon/azure-pipelines-packer/commit/e9d158f970c446f6f7795852d2b157202f629e3a))
+* raise js-yaml to 4.3.1 in both task lockfiles ([#222](https://github.com/sethbacon/azure-pipelines-packer/issues/222)) ([6015701](https://github.com/sethbacon/azure-pipelines-packer/commit/60157010f563c962b19b4961f2017d84a261e5b7))
+
 ## [1.2.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.6...v1.2.7) (2026-08-06)
 
 
