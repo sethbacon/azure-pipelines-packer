@@ -19,7 +19,16 @@ tr.setInput('registryMirrorName', 'packer');
 const SIG_TOKEN = 'SUPERSECRETSIGNATUREtoken9999';
 const PRESIGNED_URL = `https://storage.example.com/signed/packer_1.12.0_linux_amd64.zip?sig=${SIG_TOKEN}`;
 
-tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64' });
+tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64', tmpdir: () => '/tmp' });
+
+// The registry's advertised download_url host is benign; mock dns so the
+// default-deny egress check (which resolves the host) passes without a real
+// network lookup and the download path is reached.
+tr.registerMock('dns', {
+    promises: {
+        lookup: async (_host: string, _opts: unknown) => [{ address: '203.0.113.10', family: 4 }]
+    }
+});
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => {
@@ -31,7 +40,13 @@ tr.registerMock('./http-client', {
         }
         throw new Error('Unexpected fetchJson URL: ' + url);
     },
-    fetchText: async (url: string) => { throw new Error('Registry path should not fetch SHA256SUMS text: ' + url); }
+    fetchText: async (url: string) => { throw new Error('Registry path should not fetch SHA256SUMS text: ' + url); },
+    downloadToFile: async (_url: string, _destPath: string, _timeoutMs: number, isHostAllowed: (hostname: string) => void | Promise<void>) => {
+        // The real client authorizes the initial host and every redirect hop
+        // through this same callback; exercise it once with the advertised host.
+        await isHostAllowed('storage.example.com');
+    },
+    DOWNLOAD_TIMEOUT_MS: 30000
 });
 
 tr.registerMock('undici', { ProxyAgent: class { } });

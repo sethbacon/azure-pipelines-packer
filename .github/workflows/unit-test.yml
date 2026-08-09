@@ -32,6 +32,8 @@ jobs:
           persist-credentials: false
       - name: Validate shared installer modules carry a provenance header
         run: node scripts/check-shared-modules.js
+      - name: Validate egress authorization (SSRF class signature)
+        run: node scripts/check-egress-authorization.js
 
   build-and-test-task-v1:
     name: Build and Test Packer Task V1 (${{ matrix.os }})

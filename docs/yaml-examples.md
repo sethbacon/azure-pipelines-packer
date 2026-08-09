@@ -41,6 +41,11 @@ The mirror must serve files at the same path structure as `releases.hashicorp.co
     packerVersion: '1.12.0'
     downloadSource: 'mirror'
     mirrorBaseUrl: 'https://artifacts.example.com/hashicorp/packer'
+    # Optional. Empty (the default) refuses any mirror host that is, or resolves
+    # to, a loopback/link-local/metadata/CGNAT/private address -- on the initial
+    # URL and on every redirect hop. Set it to pin a deliberately private or
+    # air-gapped mirror; '*.' matches subdomains only. See SECURITY.md.
+    mirrorAllowedHosts: 'artifacts.example.com'
     requireChecksum: true
 ```
 
@@ -55,6 +60,9 @@ Points at a [terraform-registry-backend](https://github.com/sethbacon/terraform-
     downloadSource: 'registry'
     registryUrl: 'https://registry.example.com'
     registryMirrorName: 'packer'
+    # Optional. Same shape as mirrorAllowedHosts, applied to the storage host the
+    # registry hands the download off to (and to every redirect hop from it).
+    registryAllowedHosts: '*.s3.amazonaws.com'
 ```
 
 After this task, `$(packerLocation)` holds the binary path and `$(packerDownloadedFrom)` records the source (`hashicorp`, `registry:<url>`, `mirror:<url>`, or `cache`).

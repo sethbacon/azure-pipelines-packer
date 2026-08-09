@@ -2,14 +2,18 @@
 // @shared-module-policy: This is a copy of the sibling extension's HTTP client. Until a
 //   shared cross-extension package is extracted, apply fixes to both copies and keep the
 //   provenance header current. Enforced by scripts/check-shared-modules.js.
-// @shared-module-status: IN-SYNC — functionally identical to azure-pipelines-terraform's
-//   copy as of 2026-08-08 for every guard this module carries (redirect re-validation +
-//   MAX_REDIRECTS, typed HttpError + withRetry backoff, fetchTextAllow404/
-//   fetchBufferAllow404, and proxy-password masking of BOTH the raw and the
-//   URL-percent-encoded form). The encoded-form registration in buildFetchOptions was
-//   applied to all four copies (this one plus terraform's three) in the same change.
-//   Terraform's copy additionally carries response-size/JSON-body caps and a shared
-//   retry.ts; only comment wording differs otherwise. Apply future fixes to both.
+// @shared-module-status: DIVERGED — this copy shares the redirect re-validation +
+//   MAX_REDIRECTS shape, the typed HttpError, fetchTextAllow404/fetchBufferAllow404 and
+//   proxy-password masking with azure-pipelines-terraform's copy, and as of 2026-08-08
+//   also its ASYNC host-authorization contract (downloadToFile awaits isHostAllowed on
+//   the initial URL and on every redirect hop, passing URL.host — #161/#191). It also
+//   masks BOTH the raw and the URL-percent-encoded form of the proxy password in
+//   buildFetchOptions; that registration was written for all four copies (this one plus
+//   terraform's three) in the same change, so port it with any terraform sync. The
+//   terraform copy has advanced further and this one has NOT yet taken:
+//   MAX_RESPONSE_BYTES-bounded body reads, 429/Retry-After handling, delegation of
+//   withRetry to a shared retry.ts, and the github.com -> *.githubusercontent.com
+//   release-asset redirect exception. Apply future fixes to both.
 import tasks = require('azure-pipelines-task-lib/task');
 import fs = require('fs');
 import { pipeline } from 'stream/promises';
@@ -90,7 +94,7 @@ export async function fetchWithTimeout<T>(
     url: string,
     timeoutMs: number,
     consume: (response: Response) => Promise<T>,
-    isRedirectHostAllowed: (originHost: string, next: URL) => boolean = (originHost, next) => next.host === originHost,
+    isRedirectHostAllowed: (originHost: string, next: URL) => boolean | Promise<boolean> = (originHost, next) => next.host === originHost,
 ): Promise<T> {
     if (!url.startsWith('https://')) {
         throw new HttpError(tasks.loc("InsecureUrlRejected", url), false);
@@ -114,7 +118,7 @@ export async function fetchWithTimeout<T>(
             if (next.protocol !== 'https:') {
                 throw new HttpError(tasks.loc("InsecureUrlRejected", next.toString()), false);
             }
-            if (!isRedirectHostAllowed(originHost, next)) {
+            if (!(await isRedirectHostAllowed(originHost, next))) {
                 throw new HttpError(`Refusing to follow an off-host redirect (${originHost} -> ${next.host}) while fetching ${url}.`, false);
             }
             currentUrl = next.toString();
@@ -129,14 +133,30 @@ export async function fetchWithTimeout<T>(
     }
 }
 
-/** Streams a download to disk while validating the initial host and every redirect hop. */
+/**
+ * Streams a download to disk while authorizing the initial host and every
+ * redirect hop against the SAME `isHostAllowed` decision.
+ *
+ * `isHostAllowed` may be asynchronous (the installers' default-deny path also
+ * resolves the hostname via DNS), so it is AWAITED at every call site here —
+ * previously the initial call and the per-hop call were both invoked without
+ * awaiting, which meant an async rejection surfaced as an unhandled rejection
+ * while the download proceeded (#161/#191). It should THROW with a
+ * caller-specific message rather than return a bare boolean, so the error text
+ * can name the offending host and the applicable allowlist.
+ *
+ * The per-hop call is passed `next.host` (not `next.hostname`) so an explicit
+ * port travels with the host, matching the sibling terraform extension's copy:
+ * the address checks strip the port themselves, and an allowlist entry without
+ * a port no longer silently matches a redirect to a different port.
+ */
 export async function downloadToFile(
     url: string,
     destPath: string,
     timeoutMs: number,
-    isHostAllowed: (hostname: string) => void,
+    isHostAllowed: (hostname: string) => void | Promise<void>,
 ): Promise<void> {
-    isHostAllowed(new URL(url).hostname);
+    await isHostAllowed(new URL(url).hostname);
     try {
         await fetchWithTimeout(
             url,
@@ -150,8 +170,8 @@ export async function downloadToFile(
                 }
                 await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(destPath));
             },
-            (_originHost, next) => {
-                isHostAllowed(next.hostname);
+            async (_originHost, next) => {
+                await isHostAllowed(next.host);
                 return true;
             },
         );

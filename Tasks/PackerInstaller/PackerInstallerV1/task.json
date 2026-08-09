@@ -58,6 +58,15 @@
             "helpMarkDown": "The mirror configuration name in your registry backend. This is the {name} path segment in /terraform/binaries/{name}/..."
         },
         {
+            "name": "registryAllowedHosts",
+            "type": "string",
+            "label": "Allowed registry download hosts",
+            "defaultValue": "",
+            "required": false,
+            "visibleRule": "downloadSource = registry",
+            "helpMarkDown": "Optional comma- or newline-separated allowlist of the storage hosts the registry may hand the binary download off to. A `*.` prefix matches subdomains only (e.g. `*.s3.amazonaws.com`). The allowlist is enforced on the initial download URL and re-checked on every redirect hop. When empty (default), the registry may name any public host, but a host that is — or resolves to — a loopback, link-local/metadata (169.254.0.0/16), carrier-grade-NAT, or RFC1918/ULA private address is refused; set this to pin a registry that legitimately serves from a private or air-gapped storage host."
+        },
+        {
             "name": "mirrorBaseUrl",
             "type": "string",
             "label": "Mirror base URL",
@@ -73,7 +82,7 @@
             "defaultValue": "",
             "required": false,
             "visibleRule": "downloadSource = mirror",
-            "helpMarkDown": "Optional comma- or newline-separated host allowlist for private or air-gapped mirrors. When empty, loopback, link-local, metadata, and private-address hosts are rejected, including on redirects."
+            "helpMarkDown": "Optional comma- or newline-separated host allowlist for private or air-gapped mirrors. A `*.` prefix matches subdomains only. The allowlist is enforced on the initial download URL and re-checked on every redirect hop. When empty (default), a host that is — or resolves to — a loopback, link-local/metadata (169.254.0.0/16), carrier-grade-NAT, or RFC1918/ULA private address is refused, on the initial URL and on every redirect hop alike. Addresses are classified numerically, so short-form/decimal/octal/hex IPv4 and IPv4-mapped IPv6 spellings are covered. Note that the default-deny check resolves DNS at check time and does not pin the resulting address into the connection, so it is defense-in-depth against a host that statically points at a private address rather than a complete defense against active DNS rebinding."
         },
         {
             "name": "requireGpgSignature",
@@ -134,6 +143,10 @@
         "PackerVersionNotFound": "Unable to get latest version from source, using fallback version",
         "GettingLatestPackerVersion": "Getting latest Packer version.",
         "InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
+        "MirrorDownloadHostIsPrivate": "Mirror download host %s is private or link-local and was rejected. Configure mirrorAllowedHosts to explicitly allow a trusted private mirror.",
+        "MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
+        "RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",
+        "RegistryDownloadHostNotAllowed": "Registry download host %s is not in registryAllowedHosts (%s).",
         "RegistryRequestFailed": "Registry request failed for %s. HTTP status: %s",
         "Sha256VerificationFailed": "SHA256 verification failed. Expected: %s, Got: %s",
         "ResolvingLatestFromRegistry": "Resolving latest Packer version from registry: %s",

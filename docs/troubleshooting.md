@@ -13,6 +13,19 @@ The installer prepends the binary directory to `PATH` for subsequent tasks in th
 
 `registryUrl` and `mirrorBaseUrl` must use `https://`. Plain HTTP is rejected before any network access.
 
+## Installer fails with "... host ... is private or link-local and was rejected"
+
+The installer refuses to download the Packer binary from a host that is — or resolves to — a loopback, link-local/metadata (`169.254.0.0/16`), carrier-grade-NAT (`100.64.0.0/10`), or RFC1918/ULA private address. The check runs on the initial download URL and again on every redirect hop, so a public-looking mirror that redirects (or resolves) to an internal address is refused too.
+
+If the host really is your private or air-gapped mirror, name it explicitly:
+
+- `mirrorAllowedHosts` for `downloadSource: mirror`
+- `registryAllowedHosts` for `downloadSource: registry`
+
+Both accept a comma- or newline-separated list; a `*.` prefix matches subdomains only. Naming a host disables the baseline private-address refusal **for that host** and pins every hop to the list. See SECURITY.md → "Security-relevant toggles".
+
+A companion message, "... host ... is not in mirrorAllowedHosts (...)", means an allowlist *is* configured and the download (or a redirect from it) landed on a host outside it — add that host, or investigate why the mirror is redirecting off-list.
+
 ## Installer fails with a SHA256 verification error
 
 The downloaded archive's hash did not match the published `SHA256SUMS`. This is a hard failure (possible corruption or tampering). Re-run; if it persists, verify the mirror/registry is serving the correct files for the requested version and platform.

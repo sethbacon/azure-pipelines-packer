@@ -32,6 +32,14 @@ const SHARED_MODULES = [
     'gpg-verifier.ts',
     'http-client.ts',
     'url-secret-redaction.ts',
+    // Egress authorization for a download destination (numeric private/reserved
+    // address classification + assertEgressHostAllowed) and the operator-input
+    // URL path-segment validator. Both were brought to body-identity with the
+    // terraform copies in 2026-08 (#161/#200) — unlike http-client.ts, whose two
+    // copies have genuinely diverged, these two are byte-identical below their
+    // provenance headers, so a cross-repo diff of the body is the fix check.
+    'registry-allowlist.ts',
+    'url-path-segment.ts',
 ];
 
 // Required provenance markers (see any listed module's header for the format).
