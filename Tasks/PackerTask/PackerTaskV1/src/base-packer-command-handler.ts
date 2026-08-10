@@ -320,22 +320,25 @@ export abstract class BasePackerCommandHandler {
     public async executeCommand(command: string): Promise<number> {
         this.applyEnvironmentVariables();
 
-        const commands: Record<string, () => Promise<number>> = {
-            init: () => this.init(),
-            validate: () => this.validate(),
-            build: () => this.build(),
-            fmt: () => this.fmt(),
-            inspect: () => this.inspect(),
-            console: () => this.console(),
-            fix: () => this.fix(),
-            hcl2_upgrade: () => this.hcl2Upgrade(),
-            plugins: () => this.plugins(),
-            version: () => this.version(),
-            custom: () => this.custom(),
-        };
-        const fn = commands[command];
+        // A Map, not an object literal: `command` is a task input, and an object
+        // literal keyed by it resolves `constructor` to Object -- truthy, callable,
+        // and therefore straight past the not-found guard below.
+        const commands = new Map<string, () => Promise<number>>([
+            ['init', () => this.init()],
+            ['validate', () => this.validate()],
+            ['build', () => this.build()],
+            ['fmt', () => this.fmt()],
+            ['inspect', () => this.inspect()],
+            ['console', () => this.console()],
+            ['fix', () => this.fix()],
+            ['hcl2_upgrade', () => this.hcl2Upgrade()],
+            ['plugins', () => this.plugins()],
+            ['version', () => this.version()],
+            ['custom', () => this.custom()],
+        ]);
+        const fn = commands.get(command);
         if (!fn) {
-            throw new Error(`Invalid command: ${command}. Valid: ${Object.keys(commands).join(', ')}`);
+            throw new Error(`Invalid command: ${command}. Valid: ${[...commands.keys()].join(', ')}`);
         }
         return fn();
     }
