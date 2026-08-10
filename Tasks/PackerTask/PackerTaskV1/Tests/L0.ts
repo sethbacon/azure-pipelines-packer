@@ -14,6 +14,9 @@ import './PreMaskingClassL0';
 import './CredentialFailClosedMatrixL0';
 import './EntryPointSignalsL0';
 import './OutputBoundaryClassL0';
+// This extension's half of azure-pipelines-terraform#867's class: a credential
+// input left as `type: string` is stored in the pipeline definition in cleartext.
+import './CredentialInputTypeClassL0';
 
 describe('PackerTask Test Suite', function () {
 
