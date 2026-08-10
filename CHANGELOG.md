@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.10](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.9...v1.2.10) (2026-08-10)
+
+
+### Security
+
+* **packer:** declare githubToken a password so it is not stored in cleartext ([#235](https://github.com/sethbacon/azure-pipelines-packer/issues/235)) ([c1f88b6](https://github.com/sethbacon/azure-pipelines-packer/commit/c1f88b6144c1f17ef16d756c7af9c0ea3a9cf662))
+* **packer:** dispatch commands through a Map, not a prototype-reachable literal ([#238](https://github.com/sethbacon/azure-pipelines-packer/issues/238)) ([368004e](https://github.com/sethbacon/azure-pipelines-packer/commit/368004ed33f71de80bd93eada4313334704a70d3))
+* **packer:** retry the installer's binary download, safely ([#237](https://github.com/sethbacon/azure-pipelines-packer/issues/237)) ([f383a55](https://github.com/sethbacon/azure-pipelines-packer/commit/f383a55748813a6b2219147f719c9d436a44f372))
+
 ## [1.2.9](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.8...v1.2.9) (2026-08-09)
 
 
