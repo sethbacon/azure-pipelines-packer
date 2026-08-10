@@ -17,6 +17,9 @@ import './OutputBoundaryClassL0';
 // This extension's half of azure-pipelines-terraform#867's class: a credential
 // input left as `type: string` is stored in the pipeline definition in cleartext.
 import './CredentialInputTypeClassL0';
+// This extension's half of azure-pipelines-terraform#884/#897: command dispatch
+// keyed by a task input through a plain object literal.
+import './PrototypeSafeLookupClassL0';
 
 describe('PackerTask Test Suite', function () {
 
