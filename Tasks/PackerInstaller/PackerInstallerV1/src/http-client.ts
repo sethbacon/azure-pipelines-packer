@@ -156,22 +156,56 @@ export async function downloadToFile(
     timeoutMs: number,
     isHostAllowed: (hostname: string) => void | Promise<void>,
 ): Promise<void> {
-    await isHostAllowed(new URL(url).hostname);
+    await withRetry(() => attemptDownloadToFile(url, destPath, timeoutMs, isHostAllowed));
+}
+
+/**
+ * A single downloadToFile attempt. Safe to retry: it clears any partial file a
+ * PRIOR attempt left behind before opening its own write stream, and re-runs
+ * `isHostAllowed` from scratch for the initial host and every redirect hop, so a
+ * retry can neither resume into a truncated download nor reuse a stale
+ * authorization decision.
+ *
+ * An `isHostAllowed` rejection is re-thrown as a NON-retryable HttpError.
+ * withRetry treats any non-HttpError as transient, so without this an
+ * egress-authorization refusal -- a deterministic security decision, never a
+ * network condition -- would burn the retry budget and hand a DNS-rebinding host
+ * repeated chances within one run to flip from rejected to allowed.
+ */
+async function attemptDownloadToFile(
+    url: string,
+    destPath: string,
+    timeoutMs: number,
+    isHostAllowed: (hostname: string) => void | Promise<void>,
+): Promise<void> {
+    const assertHostAllowed = async (hostname: string): Promise<void> => {
+        try {
+            await isHostAllowed(hostname);
+        } catch (error) {
+            throw new HttpError(error instanceof Error ? error.message : String(error), false);
+        }
+    };
+
+    // Start each attempt from a clean destination. createWriteStream's default
+    // 'w' truncates on open; this makes that guarantee explicit.
+    try { fs.unlinkSync(destPath); } catch { /* nothing to remove -- the common case */ }
+
+    await assertHostAllowed(new URL(url).hostname);
     try {
         await fetchWithTimeout(
             url,
             timeoutMs,
             async (response) => {
                 if (!response.ok) {
-                    throw new Error(`Download from ${url} failed with HTTP ${response.status}.`);
+                    throw new HttpError(`Download from ${url} failed with HTTP ${response.status}.`, response.status >= 500);
                 }
                 if (!response.body) {
-                    throw new Error(`Download from ${url} returned an empty response body.`);
+                    throw new HttpError(`Download from ${url} returned an empty response body.`, false);
                 }
                 await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), fs.createWriteStream(destPath));
             },
             async (_originHost, next) => {
-                await isHostAllowed(next.host);
+                await assertHostAllowed(next.host);
                 return true;
             },
         );
