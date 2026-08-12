@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { assertEgressHostAllowed, isRegistryHostAllowed, parseAllowedHosts, EgressHostMessages } from '../src/registry-allowlist';
+import { assertEgressHostAllowed, isHostAllowed, parseAllowedHosts, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
 import { validateUrlPathSegment } from '../src/url-path-segment';
 import { downloadToFile } from '../src/http-client';
 
@@ -47,7 +47,7 @@ type HostRow = {
 
 /**
  * Table A. Rows marked `reject: 'IS_PRIVATE'` go RED if the numeric range check
- * in registry-allowlist.ts is inverted or a range is dropped; rows marked
+ * in the package's egress module is inverted or a range is dropped; rows marked
  * `NOT_ALLOWED` go RED if the allowlist branch is inverted; `undefined` rows go
  * RED if the guard over-blocks (which is how an over-eager fix would break a
  * legitimate public mirror).
@@ -264,7 +264,7 @@ describe('egress authorization (class test #161/#188/#191/#200/#201)', function 
         it('leaves no unauthorized or textual-only site anywhere in src/', () => {
             assert.strictEqual(report.failures, 0,
                 `residual egress-authorization sites:\n${JSON.stringify(report.sites.filter(s => s.verdict === 'UNAUTHORIZED' || s.verdict === 'TEXTUAL-ONLY'), null, 2)}`);
-            assert.deepStrictEqual(report.suspects, [], 'textual address classification found outside registry-allowlist.ts');
+            assert.deepStrictEqual(report.suspects, [], 'textual address classification found in this repo; it belongs to @4cloudguru/pipeline-task-core');
         });
 
         it('enumerates exactly the sites this table accounts for', () => {
@@ -313,7 +313,7 @@ describe('egress authorization (class test #161/#188/#191/#200/#201)', function 
      * Table F. The allowlist arm's own matching strength (#888). The `*.` pin is
      * the operator's mechanism for constraining a compromised registry, and it
      * has always documented TLS wildcard-SAN semantics (exactly one label).
-     * Rows go RED if the single-label check in isRegistryHostAllowed is dropped
+     * Rows go RED if the single-label check in isHostAllowed is dropped
      * back to a bare suffix match, or if entry validation stops rejecting a pin
      * that spans a whole public suffix.
      */
@@ -329,7 +329,7 @@ describe('egress authorization (class test #161/#188/#191/#200/#201)', function 
         ];
         for (const row of MATCH_ROWS) {
             it(`${row.allowed ? 'allows' : 'refuses'} ${row.what}`, () => {
-                assert.strictEqual(isRegistryHostAllowed(row.host, [row.entry]), row.allowed);
+                assert.strictEqual(isHostAllowed(row.host, [row.entry]), row.allowed);
             });
         }
 
@@ -362,7 +362,7 @@ describe('egress authorization (class test #161/#188/#191/#200/#201)', function 
             // WHATWG URL renders an IPv6 host bracketed ('[fd00::1]'), so carrying the
             // operator's unbracketed spelling verbatim would be a validated-but-dead pin.
             assert.deepStrictEqual(parseAllowedHosts('fd00::1'), ['[fd00::1]']);
-            assert.strictEqual(isRegistryHostAllowed('[fd00::1]', parseAllowedHosts('fd00::1')), true);
+            assert.strictEqual(isHostAllowed('[fd00::1]', parseAllowedHosts('fd00::1')), true);
         });
 
         it('rejects the whole input when any one entry is unparseable, rather than dropping it', () => {

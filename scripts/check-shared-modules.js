@@ -38,13 +38,11 @@ const SHARED_MODULES = [
     { dir: INSTALLER_SRC, file: 'gpg-verifier.ts' },
     { dir: INSTALLER_SRC, file: 'http-client.ts' },
     { dir: INSTALLER_SRC, file: 'url-secret-redaction.ts' },
-    // Egress authorization for a download destination (numeric private/reserved
-    // address classification + assertEgressHostAllowed) and the operator-input
-    // URL path-segment validator. Both were brought to body-identity with the
-    // terraform copies in 2026-08 (#161/#200) — unlike http-client.ts, whose two
-    // copies have genuinely diverged, these two are byte-identical below their
-    // provenance headers, so a cross-repo diff of the body is the fix check.
-    { dir: INSTALLER_SRC, file: 'registry-allowlist.ts' },
+    // Egress authorization moved to @4cloudguru/pipeline-task-core (src/egress/)
+    // and the local copy is deleted, so there is no longer a copy here to keep in
+    // parity — the version pin is what enforces it now. The terraform copy stays
+    // gated by ITS OWN check until that repo takes the dependency too; until then
+    // the two repos are deliberately no longer symmetrical.
     { dir: INSTALLER_SRC, file: 'url-path-segment.ts' },
     // Verification-failure classification: the typed marker that distinguishes
     // "material was obtained and FAILED verification / was withheld by a reachable

@@ -48,10 +48,14 @@ const ROOT = path.resolve(process.argv.filter(a => a !== '--json')[2] || process
 const AUTHORIZER = 'assertEgressHostAllowed';
 
 // The raw primitives. Present WITHOUT the authorizer = the half-applied shape.
-const RAW_PRIMITIVES = ['isPrivateOrLinkLocalHost', 'isRegistryHostAllowed', 'resolvesToPrivateOrLinkLocalAddress'];
+const RAW_PRIMITIVES = ['isPrivateOrLinkLocalHost', 'isHostAllowed', 'resolvesToPrivateOrLinkLocalAddress'];
 
-// The one module allowed to contain address-classification logic.
-const CLASSIFIER_MODULE = 'registry-allowlist.ts';
+// No in-repo module may contain address-classification logic any more: it moved
+// to @4cloudguru/pipeline-task-core (src/egress/), which carries its own tests
+// for it. null makes the check STRICTER than when registry-allowlist.ts was the
+// one permitted home -- a re-implementation appearing here is now always a
+// suspect, which is the whole point of taking the dependency.
+const CLASSIFIER_MODULE = null;
 
 // Outbound network sinks. Deliberately broad: any of these initiating a request
 // to a destination this process did not fix at build time is in the class.
@@ -247,7 +251,7 @@ for (const file of files) {
     const lineOf = (i) => source.slice(0, i).split('\n').length;
 
     // --- 3. textual address classification outside the sanctioned module ---
-    if (path.basename(file) !== CLASSIFIER_MODULE) {
+    if (CLASSIFIER_MODULE === null || path.basename(file) !== CLASSIFIER_MODULE) {
         const textual = [
             /\/\^?\(?\\d\{1,3\}\\?\.\\d\{1,3\}/,          // dotted-quad regex
             /['"]169\.254\.169\.254['"]/,                  // metadata literal
@@ -258,7 +262,7 @@ for (const file of files) {
         source.split('\n').forEach((line, i) => {
             if (line.trim().startsWith('//') || line.trim().startsWith('*')) return;
             if (textual.some(re => re.test(line))) {
-                suspects.push(`${rel}:${i + 1}: textual address classification outside ${CLASSIFIER_MODULE}: ${line.trim().slice(0, 100)}`);
+                    suspects.push(`${rel}:${i + 1}: textual address classification outside ${CLASSIFIER_MODULE ?? '@4cloudguru/pipeline-task-core'}: ${line.trim().slice(0, 100)}`);
             }
         });
     }

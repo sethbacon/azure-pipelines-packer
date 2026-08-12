@@ -10,7 +10,7 @@ import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEO
 import { verifyGpgSignature } from './gpg-verifier';
 import { VerificationFailure, isVerificationFailure } from './verification-failure';
 import { discardArtifactOnFailure } from './artifact-discard';
-import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from './registry-allowlist';
+import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
 import { validateUrlPathSegment } from './url-path-segment';
 import {
     extractUrlTokenSecrets,
