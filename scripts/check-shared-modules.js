@@ -37,13 +37,12 @@ const SHARED_MODULES = [
     { dir: INSTALLER_SRC, file: 'hashicorp-gpg-key.ts' },
     { dir: INSTALLER_SRC, file: 'gpg-verifier.ts' },
     { dir: INSTALLER_SRC, file: 'http-client.ts' },
-    { dir: INSTALLER_SRC, file: 'url-secret-redaction.ts' },
-    // Egress authorization moved to @4cloudguru/pipeline-task-core (src/egress/)
-    // and the local copy is deleted, so there is no longer a copy here to keep in
-    // parity — the version pin is what enforces it now. The terraform copy stays
-    // gated by ITS OWN check until that repo takes the dependency too; until then
-    // the two repos are deliberately no longer symmetrical.
-    { dir: INSTALLER_SRC, file: 'url-path-segment.ts' },
+    // Egress authorization and the two URL-safety modules moved to
+    // @4cloudguru/pipeline-task-core (src/egress/, src/url/) and the local copies
+    // are deleted, so there is no longer a copy here to keep in parity — the
+    // version pin is what enforces it now. The terraform copies stay gated by
+    // THEIR OWN check until that repo takes the dependency too; until then the
+    // two repos are deliberately no longer symmetrical.
     // Verification-failure classification: the typed marker that distinguishes
     // "material was obtained and FAILED verification / was withheld by a reachable
     // source under a require-flag" (fail closed) from "the source could not be

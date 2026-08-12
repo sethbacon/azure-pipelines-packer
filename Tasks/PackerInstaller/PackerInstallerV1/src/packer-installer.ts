@@ -11,18 +11,18 @@ import { verifyGpgSignature } from './gpg-verifier';
 import { VerificationFailure, isVerificationFailure } from './verification-failure';
 import { discardArtifactOnFailure } from './artifact-discard';
 import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
-import { validateUrlPathSegment } from './url-path-segment';
+import { validateUrlPathSegment } from '@4cloudguru/pipeline-task-core';
 import {
     extractUrlTokenSecrets,
     extractUrlUserInfoSecrets,
     redactUrl,
     redactUrlUserInfo,
     scrubSecretsFromMessage,
-} from './url-secret-redaction';
+} from '@4cloudguru/pipeline-task-core';
 
 // Re-exported for backward compatibility: Tests/L0.ts imports redactUrl from this
-// module. The implementation now lives in the shared ./url-secret-redaction copy.
-export { redactUrl } from './url-secret-redaction';
+// module. The implementation now lives in @4cloudguru/pipeline-task-core.
+export { redactUrl } from '@4cloudguru/pipeline-task-core';
 
 const packerToolName = "packer";
 const isWindows = os.type().match(/^Win/);
