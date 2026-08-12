@@ -7,7 +7,7 @@ import * as openpgp from 'openpgp';
 import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer, downloadToFile } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
 import { downloadToolWithTimeout, redactUrl } from '../src/packer-installer';
-import { parseAllowedHosts, isRegistryHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from '../src/registry-allowlist';
+import { parseAllowedHosts, isHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from '@4cloudguru/pipeline-task-core';
 import tools = require('azure-pipelines-tool-lib/tool');
 
 // Table-driven class test for the egress-authorization defect class
@@ -28,9 +28,9 @@ describe('PackerInstaller Test Suite', function () {
 
     it('classifies mirror hosts and resolved addresses', async () => {
         assert.deepStrictEqual(parseAllowedHosts(' Mirror.Example.com,\n*.trusted.example '), ['mirror.example.com', '*.trusted.example']);
-        assert.ok(isRegistryHostAllowed('mirror.example.com', ['mirror.example.com']));
-        assert.ok(isRegistryHostAllowed('cdn.trusted.example', ['*.trusted.example']));
-        assert.ok(!isRegistryHostAllowed('evil.example.com', ['*.trusted.example']));
+        assert.ok(isHostAllowed('mirror.example.com', ['mirror.example.com']));
+        assert.ok(isHostAllowed('cdn.trusted.example', ['*.trusted.example']));
+        assert.ok(!isHostAllowed('evil.example.com', ['*.trusted.example']));
 
         for (const address of ['localhost', '127.0.0.1', '10.1.2.3', '10.1.2.3:8443', '172.16.0.1', '192.168.1.1', '169.254.1.1', '[::1]', 'fe80::1', 'fc00::1']) {
             assert.ok(isPrivateOrLinkLocalHost(address), `expected private address: ${address}`);
