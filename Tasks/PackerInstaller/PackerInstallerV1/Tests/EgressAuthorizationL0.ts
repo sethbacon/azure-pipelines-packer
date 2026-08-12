@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { assertEgressHostAllowed, isHostAllowed, parseAllowedHosts, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
-import { validateUrlPathSegment } from '../src/url-path-segment';
+import { validateUrlPathSegment } from '@4cloudguru/pipeline-task-core';
 import { downloadToFile } from '../src/http-client';
 
 /**

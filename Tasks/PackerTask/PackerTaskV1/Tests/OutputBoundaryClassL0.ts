@@ -5,7 +5,7 @@ import * as ttm from 'azure-pipelines-task-lib/mock-test';
 // Dependency-free pure module (no imports of its own), so importing the sibling
 // PackerInstallerV1 package's copy directly is safe and keeps its row
 // BEHAVIOURAL rather than source-level.
-import { redactUrlUserInfo } from '../../../PackerInstaller/PackerInstallerV1/src/url-secret-redaction';
+import { redactUrlUserInfo } from '@4cloudguru/pipeline-task-core';
 
 /**
  * CLASS TEST — "a value that originates in template-, tool- or remote-service-
