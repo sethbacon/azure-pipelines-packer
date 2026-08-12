@@ -8,17 +8,22 @@ import crypto = require('crypto');
 import { randomUUID as uuidV4 } from 'crypto';
 import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
-import { VerificationFailure, isVerificationFailure } from './verification-failure';
-import { discardArtifactOnFailure } from './artifact-discard';
 import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
 import { validateUrlPathSegment } from '@4cloudguru/pipeline-task-core';
 import {
+    VerificationFailure,
+    isVerificationFailure,
+    discardArtifactOnFailure,
     extractUrlTokenSecrets,
     extractUrlUserInfoSecrets,
     redactUrl,
     redactUrlUserInfo,
     scrubSecretsFromMessage,
 } from '@4cloudguru/pipeline-task-core';
+
+// The package takes the debug sink as a parameter rather than importing the ADO
+// task lib itself; passing it keeps the discard visible in the build log.
+const discardLog = { debug: (message: string) => tasks.debug(message) };
 
 // Re-exported for backward compatibility: Tests/L0.ts imports redactUrl from this
 // module. The implementation now lives in @4cloudguru/pipeline-task-core.
@@ -352,7 +357,7 @@ async function downloadZipFromHashiCorp(version: string): Promise<DownloadedZip>
     await discardArtifactOnFailure(zipPath, async () => {
         await verifyGpgSignature(sha256SumsContent, sha256SumsSigUrl, requireGpg);
         await verifySha256(zipPath, parseSha256(sha256SumsContent, zipFileName));
-    });
+    }, discardLog);
 
     return { zipPath, verified: true };
 }
@@ -430,7 +435,7 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
 
     const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
     if (data.sha256) {
-        await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, data.sha256));
+        await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, data.sha256), discardLog);
         return { zipPath, verified: true };
     }
     if (requireChecksum) {
@@ -507,7 +512,7 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
 
     // SUMS is present: honor requireGpgSignature on the mirror path too (previously
     // GPG was only enforced on the hashicorp source — the toggle was inert here).
-    await discardArtifactOnFailure(zipPath, () => verifyGpgSignature(sha256SumsContent, `${sha256SumsUrl}.sig`, requireGpg));
+    await discardArtifactOnFailure(zipPath, () => verifyGpgSignature(sha256SumsContent, `${sha256SumsUrl}.sig`, requireGpg), discardLog);
 
     let expectedHash: string;
     try {
@@ -529,7 +534,7 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     }
     // A genuine hash MISMATCH is always fatal, regardless of requireChecksum — and
     // the mismatched (possibly tampered) zip is deleted rather than left on disk.
-    await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, expectedHash));
+    await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, expectedHash), discardLog);
 
     return { zipPath, verified: true };
 }

@@ -11,8 +11,7 @@ import {
     verifyCachedBinaryHash,
     verifySha256,
 } from '../src/packer-installer';
-import { discardArtifactOnFailure } from '../src/artifact-discard';
-import { VerificationFailure } from '../src/verification-failure';
+import { discardArtifactOnFailure, VerificationFailure } from '@4cloudguru/pipeline-task-core';
 
 /**
  * CLASS TEST — artifact trust (#65 / #78 / #136 / #198 / #204).

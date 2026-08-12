@@ -89,10 +89,8 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | `http-client.ts` | Proxy-aware fetch helpers with HTTPS enforcement, per-hop redirect re-validation and bounded retry |
 | `gpg-verifier.ts` | Verifies SHA256SUMS.sig against HashiCorp's GPG key |
 | `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
-| `verification-failure.ts` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
-| `artifact-discard.ts` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
 
-**Three defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
+**Five defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
 which this task consumes:
 
 | Was | Now | What it does |
@@ -100,10 +98,15 @@ which this task consumes:
 | `registry-allowlist.ts` | `src/egress/` | The mirror/registry download path's SSRF defense — host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* every redirect hop, with DNS resolution |
 | `url-path-segment.ts` | `src/url/path-segment.ts` | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators) |
 | `url-secret-redaction.ts` | `src/url/redaction.ts` | Strips/masks `user:password@` userinfo and pre-signed query tokens from a URL before either can reach the build log |
+| `verification-failure.ts` | `src/verification/` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
+| `artifact-discard.ts` | `src/verification/` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
 
 Change any of those in the package, not here and not in a caller.
 `scripts/check-egress-authorization.js` now treats an address-classification re-implementation
 anywhere in this repo as a suspect, since there is no longer a sanctioned in-repo home for one.
+`discardArtifactOnFailure` takes its debug sink as a parameter (the package does not import the
+ADO task lib), so call sites pass one — and they must keep calling it by that name, because
+`scripts/check-artifact-trust.js` recognises the discard by call-site name.
 
 - Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) and **fails closed** if that lookup fails — it never silently installs a pinned stale version (#78); registry source resolves via `/terraform/binaries/{name}/versions/latest`.
 - A cache hit is re-verified: offline against the `<binary>.sha256` integrity record written after a verified download, and — when no usable record exists — by re-downloading the release through the same source and requiring a byte match (`requireOnlineReverification` turns the "source unreachable" degradation into a hard failure). A malformed/truncated record counts as *unverifiable*, not tampering.

@@ -37,24 +37,13 @@ const SHARED_MODULES = [
     { dir: INSTALLER_SRC, file: 'hashicorp-gpg-key.ts' },
     { dir: INSTALLER_SRC, file: 'gpg-verifier.ts' },
     { dir: INSTALLER_SRC, file: 'http-client.ts' },
-    // Egress authorization and the two URL-safety modules moved to
-    // @4cloudguru/pipeline-task-core (src/egress/, src/url/) and the local copies
-    // are deleted, so there is no longer a copy here to keep in parity — the
-    // version pin is what enforces it now. The terraform copies stay gated by
-    // THEIR OWN check until that repo takes the dependency too; until then the
-    // two repos are deliberately no longer symmetrical.
-    // Verification-failure classification: the typed marker that distinguishes
-    // "material was obtained and FAILED verification / was withheld by a reachable
-    // source under a require-flag" (fail closed) from "the source could not be
-    // reached at all" (degrade to the cached tool). The cache-hit re-verification
-    // path in BOTH extensions branches on it, so a drift would silently reclassify
-    // a bad GPG signature as a mere availability warning.
-    { dir: INSTALLER_SRC, file: 'verification-failure.ts' },
-    // Discard-on-failed-verification wrapper: a downloaded archive whose checksum or
-    // signature does NOT verify is deleted rather than left in the agent's temp
-    // directory. Same body as the terraform copy, which is byte-identical across its
-    // three installer tasks.
-    { dir: INSTALLER_SRC, file: 'artifact-discard.ts' },
+    // Egress authorization, the two URL-safety modules, and the verification pair
+    // (verification-failure.ts, artifact-discard.ts) moved to
+    // @4cloudguru/pipeline-task-core (src/egress/, src/url/, src/verification/) and
+    // the local copies are deleted, so there is no longer a copy here to keep in
+    // parity — the version pin is what enforces it now. The terraform copies stay
+    // gated by THEIR OWN check until that repo takes the dependency too; until then
+    // the two repos are deliberately no longer symmetrical.
     // The agent-proxy fetch options builder (#196). Body byte-identical to
     // TerraformTaskV5/src/proxy-config.ts, including both setSecret calls (raw
     // and percent-encoded proxy password); only the JSDoc names this repo's own
