@@ -89,11 +89,18 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | `http-client.ts` | Proxy-aware fetch helpers with HTTPS enforcement, per-hop redirect re-validation and bounded retry |
 | `gpg-verifier.ts` | Verifies SHA256SUMS.sig against HashiCorp's GPG key |
 | `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
-| `registry-allowlist.ts` | **The mirror/registry download path's SSRF defense.** Host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* to every redirect hop, with DNS resolution — change SSRF behaviour here, not in a caller |
 | `url-path-segment.ts` | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators) |
 | `url-secret-redaction.ts` | Strips/masks `user:password@` userinfo from a URL before it can reach the build log |
 | `verification-failure.ts` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
 | `artifact-discard.ts` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
+
+**The mirror/registry download path's SSRF defense no longer lives in this repo.** It moved to
+`@4cloudguru/pipeline-task-core` (`src/egress/`), which this task consumes: host allowlist plus
+numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()`
+to the initial URL *and* to every redirect hop, with DNS resolution. Change SSRF behaviour in the
+package, not here and not in a caller. `scripts/check-egress-authorization.js` now treats an
+address-classification re-implementation anywhere in this repo as a suspect, since there is no
+longer a sanctioned in-repo home for one.
 
 - Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) and **fails closed** if that lookup fails — it never silently installs a pinned stale version (#78); registry source resolves via `/terraform/binaries/{name}/versions/latest`.
 - A cache hit is re-verified: offline against the `<binary>.sha256` integrity record written after a verified download, and — when no usable record exists — by re-downloading the release through the same source and requiring a byte match (`requireOnlineReverification` turns the "source unreachable" degradation into a hard failure). A malformed/truncated record counts as *unverifiable*, not tampering.
