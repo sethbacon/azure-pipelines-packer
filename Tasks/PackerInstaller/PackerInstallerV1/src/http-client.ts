@@ -13,9 +13,16 @@
 //   azure-pipelines-terraform is pending; do not "reconcile" by reverting either.
 import tasks = require('azure-pipelines-task-lib/task');
 import { ProxyAgent } from 'undici';
-import { createHttpClient, DOWNLOAD_TIMEOUT_MS, METADATA_TIMEOUT_MS } from '@4cloudguru/pipeline-task-core';
+import {
+    createHttpClient,
+    DOWNLOAD_TIMEOUT_MS as CORE_DOWNLOAD_TIMEOUT_MS,
+    METADATA_TIMEOUT_MS as CORE_METADATA_TIMEOUT_MS,
+} from '@4cloudguru/pipeline-task-core';
 
-export { METADATA_TIMEOUT_MS, DOWNLOAD_TIMEOUT_MS };
+// Re-exported as values rather than `export { ... }`, which compiles to getter
+// thunks that count as uncovered functions no test can meaningfully reach.
+export const METADATA_TIMEOUT_MS = CORE_METADATA_TIMEOUT_MS;
+export const DOWNLOAD_TIMEOUT_MS = CORE_DOWNLOAD_TIMEOUT_MS;
 
 function buildFetchOptions(): RequestInit {
     const proxy = tasks.getHttpProxyConfiguration();
