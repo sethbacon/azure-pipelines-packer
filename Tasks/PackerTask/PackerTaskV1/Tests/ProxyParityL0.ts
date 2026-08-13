@@ -110,8 +110,13 @@ const SITE_ROWS: SiteRow[] = [
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/http-client.ts',
-        fn: 'fetchWithTimeout', sink: 'fetch', verdict: 'PROXIED',
-        why: 'the installer transport that was already proxy-aware, and the parity this class is measured against',
+        fn: 'createDefaultClient', sink: 'createHttpClient', verdict: 'PROXIED',
+        why: 'the installer transport, now delegated to pipeline-task-core: the package cannot read the agent proxy itself, so this must inject fetchOptions from buildFetchOptions()',
+    },
+    {
+        file: 'Tasks/PackerInstaller/PackerInstallerV1/src/http-client.ts',
+        fn: 'createRegistryClient', sink: 'createHttpClient', verdict: 'PROXIED',
+        why: 'the same transport with the registry-specific failure message; a second construction is a second place the injection could be dropped',
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',

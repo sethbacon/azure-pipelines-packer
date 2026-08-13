@@ -62,17 +62,27 @@ const injected = {
 
 const insecureUrl = (url: string) => tasks.loc("InsecureUrlRejected", url);
 
-const client = createHttpClient({
-    ...injected,
-    messages: { insecureUrl, requestFailed: (url, status) => `Failed to fetch ${url}: HTTP ${status}` },
-});
+// Each client gets its own factory so the proxy-parity signature can name which
+// construction it is reporting; two bare module-level calls are indistinguishable
+// to it, and an unnamed site is the one thing that gate exists to avoid.
+function createDefaultClient() {
+    return createHttpClient({
+        ...injected,
+        messages: { insecureUrl, requestFailed: (url, status) => `Failed to fetch ${url}: HTTP ${status}` },
+    });
+}
 
 // Registry metadata gets its own message: "Registry request failed" is wrong on a
 // releases.hashicorp.com SHA256SUMS fetch, which is not a registry request at all.
-const registryClient = createHttpClient({
-    ...injected,
-    messages: { insecureUrl, requestFailed: (url, status) => tasks.loc("RegistryRequestFailed", url, status) },
-});
+function createRegistryClient() {
+    return createHttpClient({
+        ...injected,
+        messages: { insecureUrl, requestFailed: (url, status) => tasks.loc("RegistryRequestFailed", url, status) },
+    });
+}
+
+const client = createDefaultClient();
+const registryClient = createRegistryClient();
 
 export const fetchWithTimeout = client.fetchWithTimeout;
 export const fetchText = client.fetchText;
