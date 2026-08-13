@@ -86,11 +86,11 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | --- | --- |
 | `index.ts` | Entry point — installs Packer, prepends PATH, verifies |
 | `packer-installer.ts` | Download strategies (hashicorp / registry / mirror), version resolution, SHA256 verify |
-| `http-client.ts` | Proxy-aware fetch helpers with HTTPS enforcement, per-hop redirect re-validation and bounded retry |
-| `gpg-verifier.ts` | Verifies SHA256SUMS.sig against HashiCorp's GPG key |
+| `http-client.ts` | Constructs the shared HTTP client and injects what the package will not own: proxy dispatch, secret masking, localized message text |
+| `gpg-verifier.ts` | Fetches SHA256SUMS.sig and delegates the cryptographic decision, keeping the trust root, the 404-vs-transient rule and the `VerificationFailure` typing |
 | `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
 
-**Five defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
+**Seven defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
 which this task consumes:
 
 | Was | Now | What it does |
@@ -100,13 +100,20 @@ which this task consumes:
 | `url-secret-redaction.ts` | `src/url/redaction.ts` | Strips/masks `user:password@` userinfo and pre-signed query tokens from a URL before either can reach the build log |
 | `verification-failure.ts` | `src/verification/` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
 | `artifact-discard.ts` | `src/verification/` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
+| the openpgp call in `gpg-verifier.ts` | `./gpg` (`verifyDetached`) | Verifies a detached signature against a key set, reporting `reasons` on failure so a key-rotation miss reads differently from a tampered file. A separate entry point so a task that never verifies does not vendor `openpgp` |
+| the client in `http-client.ts` | `src/http/` (`createHttpClient`) | HTTPS-pinned fetch with per-hop redirect re-authorization, bounded in-memory bodies, 429/Retry-After, and a retry-safe streaming download. The union of this repo's copy and terraform's three — the task gained `MAX_RESPONSE_BYTES`, 429 handling and deterministic non-JSON classification, none of which this copy had |
 
 Change any of those in the package, not here and not in a caller.
 `scripts/check-egress-authorization.js` now treats an address-classification re-implementation
 anywhere in this repo as a suspect, since there is no longer a sanctioned in-repo home for one.
 `discardArtifactOnFailure` takes its debug sink as a parameter (the package does not import the
 ADO task lib), so call sites pass one — and they must keep calling it by that name, because
-`scripts/check-artifact-trust.js` recognises the discard by call-site name.
+`scripts/check-artifact-trust.js` recognises the discard by call-site name. The same injection
+rule applies to the HTTP client: the package imports neither `azure-pipelines-task-lib` nor
+`undici`, so `http-client.ts` supplies `fetchOptions` (the undici `ProxyAgent` dispatcher plus
+masking of both the raw and percent-encoded proxy password), `debug`, and the `tasks.loc`
+message text. Dropping the `fetchOptions` injection fails two L0 tests, so that wiring is
+enforced rather than assumed.
 
 - Downloads `packer_{version}_{os}_{arch}.zip`. `latest` resolves via the HashiCorp checkpoint API (`v1/check/packer`) and **fails closed** if that lookup fails — it never silently installs a pinned stale version (#78); registry source resolves via `/terraform/binaries/{name}/versions/latest`.
 - A cache hit is re-verified: offline against the `<binary>.sha256` integrity record written after a verified download, and — when no usable record exists — by re-downloading the release through the same source and requiring a byte match (`requireOnlineReverification` turns the "source unreachable" degradation into a hard failure). A malformed/truncated record counts as *unverifiable*, not tampering.

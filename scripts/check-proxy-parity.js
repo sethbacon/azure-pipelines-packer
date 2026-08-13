@@ -26,10 +26,15 @@
 //   1. Every `fetch()` call in a task's src/ tree must supply proxy options --
 //      either an explicit `dispatcher`, or a spread of one of the repo's proxy
 //      option builders (buildFetchOptions / buildProxyFetchOptions).
-//   2. Every `https.request` / `https.get` / `http.request` / `http.get` call
+//   2. Every `createHttpClient()` call must inject `fetchOptions` referencing one
+//      of those builders. The shared package imports neither the ADO task lib nor
+//      undici, so it CANNOT proxy on its own -- delegating the transport moves
+//      the real `fetch()` out of this repo's src/ tree, and without this rule the
+//      gate would simply stop seeing the call site and pass vacuously.
+//   3. Every `https.request` / `https.get` / `http.request` / `http.get` call
 //      must supply an `agent`, which is how this codebase injects its
 //      CONNECT-tunnelling ProxyTunnelAgent.
-//   3. Recognised exemptions, each verified against the code they name, are
+//   4. Recognised exemptions, each verified against the code they name, are
 //      reported but do not fail:
 //        EXEMPT-TOOL-LIB        azure-pipelines-tool-lib's downloadTool builds
 //                               its HttpClient with
@@ -63,6 +68,13 @@ const PROXY_OPTION_BUILDERS = ['buildFetchOptions', 'buildProxyFetchOptions'];
 /** Transport primitives that bypass the proxy unless explicitly told not to. */
 const FETCH_SINKS = ['fetch'];
 const NODE_HTTP_SINKS = ['https.request', 'https.get', 'http.request', 'http.get'];
+
+/**
+ * Factories that own the real `fetch()` on this repo's behalf, in a package that
+ * cannot read the agent's proxy itself. The proxy decision is still made here,
+ * as an injected option, so it is still checked here.
+ */
+const DELEGATED_FETCH_SINKS = ['createHttpClient'];
 
 /** Proxy-aware by construction inside azure-pipelines-tool-lib (see header). */
 const TOOL_LIB_SINKS = ['downloadTool'];
@@ -281,6 +293,25 @@ for (const file of files) {
             const hasDispatcher = /(^|[^\w$])dispatcher\s*:/.test(args);
             record(m.index, sink, spreadsBuilder || hasDispatcher ? 'PROXIED' : 'UNPROXIED',
                 spreadsBuilder ? 'spreads a proxy option builder' : hasDispatcher ? 'supplies an undici dispatcher' : 'no dispatcher and no proxy-option spread');
+        }
+    }
+
+    for (const sink of DELEGATED_FETCH_SINKS) {
+        const re = new RegExp(`(?<![.\\w$])${sink}\\s*\\(`, 'g');
+        let m;
+        while ((m = re.exec(masked)) !== null) {
+            const call = callText(masked, m.index + m[0].length - 1);
+            // The options are commonly assembled as `{ ...injected, ... }`, so a
+            // literal read of the call text alone would miss the injection and
+            // report a correctly-proxied site as UNPROXIED. Resolve one level of
+            // local `const <ident> = { ... }` for every spread, the same way the
+            // node:http sinks resolve a hoisted options object.
+            const spreads = [...call.matchAll(/\.\.\.\s*([A-Za-z_$][\w$]*)/g)].map((s) => s[1]);
+            const options = call + spreads.map((id) => resolveOptionsText(masked, m.index, id)).join('');
+            const injects = /(^|[^\w$])fetchOptions\s*:/.test(options) &&
+                PROXY_OPTION_BUILDERS.some((b) => new RegExp(`(^|[^\\w$])${b}\\b`).test(options));
+            record(m.index, sink, injects ? 'PROXIED' : 'UNPROXIED',
+                injects ? 'injects fetchOptions from a proxy option builder' : 'no fetchOptions injection, so the delegated fetch cannot reach the agent proxy');
         }
     }
 
