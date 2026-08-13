@@ -146,6 +146,37 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail
     expectFailure('MirrorSha256MismatchFail');       // genuine mismatch is fatal even with requireChecksum=false
 
+    // --- Mirror egress refusals: assert WHICH message the operator gets, not just
+    // that the task failed. The mock task-lib renders loc() as `loc_mock_<KEY>
+    // <args>` rather than the real string, so these pin the key and its arguments.
+    // That the keys exist in task.json at all is already covered, for every key
+    // the installer uses, by the resource-key suite (#201). ---
+    it('MirrorPrivateHostRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorPrivateHostRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a private mirror host must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_MirrorDownloadHostIsPrivate 10.0.0.5'),
+                'the refusal must use MirrorDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    it('MirrorHostNotAllowedRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorHostNotAllowedRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a mirror host absent from mirrorAllowedHosts must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_MirrorDownloadHostNotAllowed artifacts.example.com mirror.corp.example.net'),
+                'the refusal must use MirrorDownloadHostNotAllowed and name both the host and the allowlist. errors: ' + issues
+            );
+        }, tr);
+    });
+
     // --- 'latest' checkpoint resolution fails closed: neither an unreachable API
     // (#78) nor a malformed response (#106) may silently install a pinned version ---
     expectFailure('HashiCorpLatestCheckpointDownFail');
