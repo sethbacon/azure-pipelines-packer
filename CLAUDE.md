@@ -90,7 +90,7 @@ Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 | `gpg-verifier.ts` | Fetches SHA256SUMS.sig and delegates the cryptographic decision, keeping the trust root, the 404-vs-transient rule and the `VerificationFailure` typing |
 | `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
 
-**Seven defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
+**Eight defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
 which this task consumes:
 
 | Was | Now | What it does |
@@ -102,6 +102,7 @@ which this task consumes:
 | `artifact-discard.ts` | `src/verification/` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
 | the openpgp call in `gpg-verifier.ts` | `./gpg` (`verifyDetached`) | Verifies a detached signature against a key set, reporting `reasons` on failure so a key-rotation miss reads differently from a tampered file. A separate entry point so a task that never verifies does not vendor `openpgp` |
 | the client in `http-client.ts` | `src/http/` (`createHttpClient`) | HTTPS-pinned fetch with per-hop redirect re-authorization, bounded in-memory bodies, 429/Retry-After, and a retry-safe streaming download. The union of this repo's copy and terraform's three — the task gained `MAX_RESPONSE_BYTES`, 429 handling and deterministic non-JSON classification, none of which this copy had |
+| the resolution in `proxy-config.ts` / `buildFetchOptions` | `src/proxy/` (`resolveProxy`) | Turns the agent's proxy settings into a dispatcher-ready URL plus every spelling of the credential that must be masked. A superset of what both copies did: it also masks userinfo embedded directly in `Agent.ProxyUrl`, which both missed because they only masked when `Agent.ProxyUsername` was separately set |
 
 Change any of those in the package, not here and not in a caller.
 `scripts/check-egress-authorization.js` now treats an address-classification re-implementation
