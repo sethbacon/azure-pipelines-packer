@@ -15,6 +15,7 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { ProxyAgent } from 'undici';
 import {
     createHttpClient,
+    resolveProxy,
     DOWNLOAD_TIMEOUT_MS as CORE_DOWNLOAD_TIMEOUT_MS,
     METADATA_TIMEOUT_MS as CORE_METADATA_TIMEOUT_MS,
 } from '@4cloudguru/pipeline-task-core';
@@ -25,39 +26,19 @@ export const METADATA_TIMEOUT_MS = CORE_METADATA_TIMEOUT_MS;
 export const DOWNLOAD_TIMEOUT_MS = CORE_DOWNLOAD_TIMEOUT_MS;
 
 function buildFetchOptions(): RequestInit {
-    const proxy = tasks.getHttpProxyConfiguration();
-    if (!proxy) return {};
+    const resolved = resolveProxy(tasks.getHttpProxyConfiguration());
+    if (!resolved) return {};
 
-    let proxyUrl = proxy.proxyUrl;
-    if (proxy.proxyUsername) {
-        if (proxy.proxyPassword) {
-            tasks.setSecret(proxy.proxyPassword);
-        }
-        let url: URL;
-        try {
-            url = new URL(proxy.proxyUrl);
-        } catch (err) {
-            throw new Error(`Invalid proxy URL configured on the agent: ${err instanceof Error ? err.message : err}`);
-        }
-        url.username = proxy.proxyUsername;
-        url.password = proxy.proxyPassword ?? "";
-        // url.password is now the WHATWG URL setter's PERCENT-ENCODED form (e.g.
-        // 'p@ss' -> 'p%40ss') — a byte-different string from the raw
-        // proxyPassword already setSecret()'d above. ADO's log masker matches
-        // literal registered strings, not derivations, so this encoded form
-        // (which is what url.toString() below actually embeds in proxyUrl, and
-        // therefore what an undici/ProxyAgent connection-failure message would
-        // surface) needs its own registration too. Mirrors the same fix in
-        // azure-pipelines-terraform's proxy-config.ts / https-client.ts.
-        if (url.password) {
-            tasks.setSecret(url.password);
-        }
-        proxyUrl = url.toString();
+    // Every spelling of the credential the resolver found, including the
+    // percent-encoded form the dispatcher URL actually embeds: the agent's
+    // masker matches registered literals, never derivations of them.
+    for (const secret of resolved.secrets) {
+        tasks.setSecret(secret);
     }
 
     return {
         // @ts-expect-error Node.js fetch accepts undici dispatcher
-        dispatcher: new ProxyAgent(proxyUrl)
+        dispatcher: new ProxyAgent(resolved.proxyUrl)
     };
 }
 

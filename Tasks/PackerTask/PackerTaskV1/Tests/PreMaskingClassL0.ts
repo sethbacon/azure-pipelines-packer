@@ -41,6 +41,7 @@ import { getSecureVarFileArgs, ISecureFileLoader } from '../src/secure-file-load
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const INSTALLER_SRC = path.join(REPO_ROOT, 'Tasks', 'PackerInstaller', 'PackerInstallerV1', 'src');
+const TASK_SRC = path.join(REPO_ROOT, 'Tasks', 'PackerTask', 'PackerTaskV1', 'src');
 
 function readSource(...segments: string[]): string {
     return fs.readFileSync(path.join(...segments), 'utf8').replace(/\r\n/g, '\n');
@@ -67,10 +68,21 @@ const SOURCE_SITES: SourceSite[] = [
         mechanism: 'M3',
         site: 'PackerInstallerV1/src/http-client.ts:buildFetchOptions',
         file: path.join(INSTALLER_SRC, 'http-client.ts'),
-        // The URL setter percent-encodes the password; the ENCODED form is what
-        // url.toString() embeds, so it needs its own registration.
-        guard: /url\.password = proxy\.proxyPassword \?\? "";[\s\S]{0,900}?if \(url\.password\) \{\s*\n\s*tasks\.setSecret\(url\.password\);\s*\n\s*\}\s*\n\s*proxyUrl = url\.toString\(\);/,
-        defect: /url\.password = proxy\.proxyPassword \?\? "";\s*\n\s*proxyUrl = url\.toString\(\);/,
+        // resolveProxy() returns EVERY spelling of the credential — the raw
+        // password, the percent-encoded form url.toString() embeds, and any
+        // userinfo already inside Agent.ProxyUrl. All of them must be registered
+        // before the dispatcher that carries them is constructed.
+        guard: /for \(const secret of resolved\.secrets\) \{\s*\n\s*tasks\.setSecret\(secret\);\s*\n\s*\}[\s\S]{0,400}?dispatcher: new ProxyAgent\(resolved\.proxyUrl\)/,
+        defect: /if \(!resolved\) return \{\};\s*\n\s*return \{/,
+    },
+    {
+        mechanism: 'M3',
+        site: 'PackerTaskV1/src/proxy-config.ts:buildProxyFetchOptions',
+        file: path.join(TASK_SRC, 'proxy-config.ts'),
+        // The same defect class at the WIF token-request transport. This site was
+        // not represented here before, so the masking it performs was unguarded.
+        guard: /for \(const secret of resolved\.secrets\) \{\s*\n\s*tasks\.setSecret\(secret\);\s*\n\s*\}[\s\S]{0,400}?dispatcher: new ProxyAgent\(resolved\.proxyUrl\)/,
+        defect: /if \(!resolved\) return \{\};\s*\n\s*return \{/,
     },
     {
         mechanism: 'M5',
