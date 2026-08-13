@@ -1,18 +1,20 @@
 // @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/gpg-verifier.ts)
 // @shared-module-policy: This is a copy of the sibling extension's SHA256SUMS.sig verifier.
 //   Apply verification-logic fixes to both copies. Enforced by scripts/check-shared-modules.js.
-// @shared-module-status: DIVERGED — this copy now distinguishes a genuine 404 (signature
-//   not published) from a transient/network failure via fetchBufferAllow404, so a
-//   requireGpgSignature=false opt-out only downgrades on real absence, not on a 5xx/network
-//   blip an attacker could induce (#106), and it accepts a valid signature at ANY index of
-//   a multi-signature .sig (#137). Backport to azure-pipelines-terraform is pending; do not
-//   "reconcile" by reverting either. As of 2026-08-08 it MATCHES the terraform copy in
-//   throwing a typed VerificationFailure for every "material obtained but it does not
-//   verify" / "required signature withheld by a reachable source" outcome, which is what
-//   lets the cache-hit re-verification path fail closed on a bad signature while still
-//   degrading gracefully on a transport outage.
+// @shared-module-status: DIVERGED — the CRYPTOGRAPHIC decision now comes from
+//   @4cloudguru/pipeline-task-core/gpg (verifyDetached), so the multi-signature handling
+//   (#137) and the openpgp API surface live in ONE place instead of two copies; what stays
+//   here is everything the package deliberately refuses to own. The trust root
+//   (HASHICORP_GPG_PUBLIC_KEY) stays because vendoring a signing key through a package
+//   means a compromise of that package silently replaces it. The 404-vs-transient
+//   distinction (#106) stays because only the caller knows that a missing signature MAY be
+//   downgraded on operator opt-out while a 5xx never may. The VerificationFailure typing
+//   stays because it is what lets the cache-hit re-verification path fail closed on a bad
+//   signature while degrading on a transport outage. Backport to azure-pipelines-terraform
+//   is pending; do not "reconcile" by reverting either.
 import tasks = require('azure-pipelines-task-lib/task');
-import * as openpgp from 'openpgp';
+
+import { verifyDetached } from '@4cloudguru/pipeline-task-core/gpg';
 
 import { fetchBufferAllow404 } from './http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from './hashicorp-gpg-key';
@@ -43,30 +45,19 @@ export async function verifyGpgSignature(sha256SumsContent: string, signatureUrl
 
     tasks.debug(`Verifying GPG signature from ${signatureUrl}`);
 
-    const publicKey = await openpgp.readKey({ armoredKey: HASHICORP_GPG_PUBLIC_KEY });
-    const signature = await openpgp.readSignature({ binarySignature: signatureBytes });
-    const message = await openpgp.createMessage({ text: sha256SumsContent });
-
-    const result = await openpgp.verify({
-        message,
-        signature,
-        verificationKeys: publicKey,
+    const result = await verifyDetached({
+        message: new TextEncoder().encode(sha256SumsContent),
+        signature: signatureBytes,
+        armoredPublicKeys: [HASHICORP_GPG_PUBLIC_KEY],
     });
 
-    if (!result.signatures || result.signatures.length === 0) {
-        throw new VerificationFailure(`GPG signature verification failed: no signatures found in ${signatureUrl}`);
-    }
-    // A detached .sig file can carry more than one signature (e.g. during a signing-key
-    // rotation window). Require at least one to verify successfully rather than only
-    // checking signatures[0] -- a valid signature at any other index would otherwise be
-    // silently ignored (#137).
-    const outcomes = await Promise.allSettled(result.signatures.map((sig) => sig.verified));
-    const anyVerified = outcomes.some((outcome) => outcome.status === 'fulfilled');
-    if (!anyVerified) {
-        const errors = outcomes
-            .filter((o): o is PromiseRejectedResult => o.status === 'rejected')
-            .map((o) => (o.reason instanceof Error ? o.reason.message : String(o.reason)));
-        throw new VerificationFailure(`GPG signature verification failed for SHA256SUMS: ${errors.join('; ') || 'no signature verified'}`);
+    if (!result.verified) {
+        // The reasons are why an operator can tell a key-rotation miss from a tampered
+        // file; without them this failure reads the same either way. The URL is kept
+        // because the deleted "no signatures found in <url>" branch was the only place
+        // a zero-signature .sig named which file was empty.
+        const detail = result.reasons?.join('; ') || 'no signature verified';
+        throw new VerificationFailure(`GPG signature verification failed for SHA256SUMS (${signatureUrl}): ${detail}`);
     }
 
     tasks.debug('GPG signature verification passed');
