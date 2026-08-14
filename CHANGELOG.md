@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.3.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.10...v1.3.0) (2026-08-14)
+
+
+### Features
+
+* **ci:** replace the SUITE_READ_TOKEN PAT with a GitHub App ([#243](https://github.com/sethbacon/azure-pipelines-packer/issues/243)) ([2d85f66](https://github.com/sethbacon/azure-pipelines-packer/commit/2d85f6651253d23e97602e613eabf6af7eee8a8f))
+* **installer:** consume the shared egress module from pipeline-task-core ([#239](https://github.com/sethbacon/azure-pipelines-packer/issues/239)) ([deb344f](https://github.com/sethbacon/azure-pipelines-packer/commit/deb344fb2255dfb3b9e1546848473a4a882e6538))
+* **installer:** consume the shared URL-safety modules from pipeline-task-core ([#242](https://github.com/sethbacon/azure-pipelines-packer/issues/242)) ([a683554](https://github.com/sethbacon/azure-pipelines-packer/commit/a6835545585cc458189a384bed1b2ca5a50f647b))
+* **installer:** consume the shared verification modules from pipeline-task-core ([#246](https://github.com/sethbacon/azure-pipelines-packer/issues/246)) ([1db713e](https://github.com/sethbacon/azure-pipelines-packer/commit/1db713ef5db5a4fa64087b8f7cd5eedc1f88b8a3))
+* **installer:** consume verifyDetached from pipeline-task-core/gpg ([#247](https://github.com/sethbacon/azure-pipelines-packer/issues/247)) ([b331f62](https://github.com/sethbacon/azure-pipelines-packer/commit/b331f6252e16cf58c37c3b32e4aa4575693e33cb))
+
+
+### Bug Fixes
+
+* **ci:** follow the suite-ui repo move in the replay checkout ([#240](https://github.com/sethbacon/azure-pipelines-packer/issues/240)) ([ec58101](https://github.com/sethbacon/azure-pipelines-packer/commit/ec5810125ebc4d68de309956fa7c8262817d9971))
+* **ci:** spend the replay credential on the one private checkout only ([#244](https://github.com/sethbacon/azure-pipelines-packer/issues/244)) ([56ee107](https://github.com/sethbacon/azure-pipelines-packer/commit/56ee1075c946ff478c20d608093e946fc89cf2c8))
+
+
+### Dependencies
+
+* bump pipeline-task-core to ^0.5.0 ([#252](https://github.com/sethbacon/azure-pipelines-packer/issues/252)) ([157a0a8](https://github.com/sethbacon/azure-pipelines-packer/commit/157a0a8b6b53e096162cd453bff8eea88f673d4b))
+
+
+### Refactor
+
+* consume resolveProxy from pipeline-task-core, closing a masking gap ([#250](https://github.com/sethbacon/azure-pipelines-packer/issues/250)) ([d512061](https://github.com/sethbacon/azure-pipelines-packer/commit/d512061a4567e94e6cc50797082e46b9872b73a1))
+* **installer:** consume the shared HTTP client from pipeline-task-core ([#248](https://github.com/sethbacon/azure-pipelines-packer/issues/248)) ([b59a9e4](https://github.com/sethbacon/azure-pipelines-packer/commit/b59a9e41994c4d5c7043d0e5360a75f2a641723e))
+
 ## [1.2.10](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.9...v1.2.10) (2026-08-10)
 
 
