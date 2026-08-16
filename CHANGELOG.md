@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.0...v1.3.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* pin pipeline-task-ado 0.3.0 and gate the transitive core version ([#267](https://github.com/sethbacon/azure-pipelines-packer/issues/267)) ([7187d6f](https://github.com/sethbacon/azure-pipelines-packer/commit/7187d6f92a3195f3061d0deedc5612b24afbe0d8))
+
+
+### Refactor
+
+* consume the ADO HTTP client from pipeline-task-ado ([#265](https://github.com/sethbacon/azure-pipelines-packer/issues/265)) ([a7bb409](https://github.com/sethbacon/azure-pipelines-packer/commit/a7bb409387122e3779638287a034423735050f9e))
+
 ## [1.3.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.2.10...v1.3.0) (2026-08-14)
 
 
