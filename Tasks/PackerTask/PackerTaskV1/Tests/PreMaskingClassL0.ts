@@ -63,18 +63,23 @@ interface SourceSite {
     defect: RegExp;
 }
 
+/**
+ * M3 no longer has a source row for the INSTALLER transport. Assembling the
+ * proxy URL, registering every spelling it produced, and constructing the
+ * dispatcher all moved into @4cloudguru/pipeline-task-ado's buildAdoFetchOptions,
+ * so the regexes that used to pin that ordering here now match nothing - and a
+ * source assertion that cannot fail is worse than no assertion, because it reads
+ * as coverage. What is still checkable from here is PROVENANCE: that the
+ * installer depends on a version of the package known to contain the wiring AND
+ * the test asserting its ordering. The floor below is that check.
+ *
+ * The PackerTaskV1 proxy-config.ts row survives unchanged - that transport was
+ * not migrated and still does its own masking inline.
+ */
+const ADO_PACKAGE = '@4cloudguru/pipeline-task-ado';
+const ADO_PACKAGE_FLOOR = '0.2.0';
+
 const SOURCE_SITES: SourceSite[] = [
-    {
-        mechanism: 'M3',
-        site: 'PackerInstallerV1/src/http-client.ts:buildFetchOptions',
-        file: path.join(INSTALLER_SRC, 'http-client.ts'),
-        // resolveProxy() returns EVERY spelling of the credential — the raw
-        // password, the percent-encoded form url.toString() embeds, and any
-        // userinfo already inside Agent.ProxyUrl. All of them must be registered
-        // before the dispatcher that carries them is constructed.
-        guard: /for \(const secret of resolved\.secrets\) \{\s*\n\s*tasks\.setSecret\(secret\);\s*\n\s*\}[\s\S]{0,400}?dispatcher: new ProxyAgent\(resolved\.proxyUrl\)/,
-        defect: /if \(!resolved\) return \{\};\s*\n\s*return \{/,
-    },
     {
         mechanism: 'M3',
         site: 'PackerTaskV1/src/proxy-config.ts:buildProxyFetchOptions',
@@ -176,6 +181,31 @@ describe('Pre-mask defect class — credential emitted before it was registered 
                 );
             });
         }
+    });
+
+    // The installer's M3 source row is gone: the proxy URL assembly and the
+    // secret registration that must precede it now live in pipeline-task-ado.
+    // Deleting it without this would quietly retire that site from the class, so
+    // what replaces it is the one thing still checkable here - that the
+    // installer consuming the wiring pins a version known to contain it, and the
+    // test that asserts its ordering.
+    describe('M3 — delegated to pipeline-task-ado, checked by version floor', () => {
+        it(`PackerInstallerV1 pins ${ADO_PACKAGE} >= ${ADO_PACKAGE_FLOOR}`, () => {
+            const manifest = path.join(INSTALLER_SRC, '..', 'package.json');
+            const json = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+            const range: string | undefined = (json.dependencies || {})[ADO_PACKAGE];
+            assert.ok(range, `PackerInstallerV1 does not depend on ${ADO_PACKAGE}, so the proxy masking wiring has no declared source`);
+
+            // Only a caret or exact range pins a floor that can be reasoned
+            // about; `*` or a git URL cannot be shown to include the fix.
+            const parsed = /^\^?(\d+)\.(\d+)\.(\d+)/.exec(range!.trim());
+            assert.ok(parsed, `PackerInstallerV1 pins ${ADO_PACKAGE} as ${range}, which cannot be shown to include the masking fix`);
+
+            const actual = parsed!.slice(1, 4).map(Number);
+            const floor = ADO_PACKAGE_FLOOR.split('.').map(Number);
+            const ordered = actual[0] - floor[0] || actual[1] - floor[1] || actual[2] - floor[2];
+            assert.ok(ordered >= 0, `PackerInstallerV1 pins ${ADO_PACKAGE}@${range}, below the ${ADO_PACKAGE_FLOOR} floor that carries the pre-mask ordering`);
+        });
     });
 
     // ------------------------------------------------------- behavioural rows
