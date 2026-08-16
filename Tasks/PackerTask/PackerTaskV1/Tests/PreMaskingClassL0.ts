@@ -77,7 +77,7 @@ interface SourceSite {
  * not migrated and still does its own masking inline.
  */
 const ADO_PACKAGE = '@4cloudguru/pipeline-task-ado';
-const ADO_PACKAGE_FLOOR = '0.2.0';
+const ADO_PACKAGE_FLOOR = '0.3.0';
 
 const SOURCE_SITES: SourceSite[] = [
     {
