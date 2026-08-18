@@ -7,6 +7,12 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
+    # codeql-action's init/analyze are separate Dependabot dependencies but are
+    # version-locked at runtime, so they have to move in a single PR.
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
 
   # npm — PackerTaskV1
   - package-ecosystem: "npm"
