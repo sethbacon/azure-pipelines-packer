@@ -187,6 +187,10 @@ jobs:
       # observe the egress those `run:` steps make. Matching the siblings rather
       # than claiming an exemption: nothing about counting footers needs a
       # narrower policy than counting anything else here.
+      # hardening-exception: egress-audit — this job calls the GitHub API;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
       - name: Harden the runner
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
