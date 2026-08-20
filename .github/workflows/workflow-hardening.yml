@@ -1,0 +1,40 @@
+---
+# Workflow-hardening gate, delegated to 4cloudguru/shared-workflows.
+#
+# This repository is where the gate learned that WHERE a per-task install is
+# declared is not the property -- that it refuses dependency scripts is. The
+# gate demanded scripts/for-each-task.js, which this repo does not have; it
+# declares its per-task installs as package.json scripts instead. So the gate
+# reported the install as ABSENT in a repository that has two of them.
+#
+# Generalising it exposed a real gap that had been invisible: both per-task
+# installs ran `npm ci` WITHOUT --ignore-scripts, while the sibling
+# azure-pipelines-terraform has used --ignore-scripts for the same operation
+# since its #502. Those are the dependencies copied into the packaged .vsix.
+#
+# Pinned at v1.5.0, which carries that fix.
+#
+# script-ref MUST equal the pin on the `uses:` line: the checker is taken from
+# shared-workflows at that commit, so this repo cannot weaken its own gate by
+# editing a local copy -- there is no local copy.
+name: Workflow Hardening
+
+"on":
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-hardening-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-hardening:
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-hardening.yml@c4e3ee5ac1fd8d5c396ba4b66b9eee09f84f1a7c # v1.5.0
+    with:
+      script-ref: c4e3ee5ac1fd8d5c396ba4b66b9eee09f84f1a7c

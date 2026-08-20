@@ -18,10 +18,20 @@ jobs:
   osv-scan:
     name: OSV Vulnerability Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       issues: write
     steps:
+      # hardening-exception: egress-audit — this job queries the OSV vulnerability
+      #   database, calls the GitHub API, and clones this repository; harden-runner
+      #   has never run in this repository, so no endpoint baseline exists and a block
+      #   policy written without one fails closed on its first run; audit is what
+      #   produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -106,10 +116,19 @@ jobs:
   gpg-key-freshness:
     name: Check embedded HashiCorp GPG key is current
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: Tasks/PackerInstaller/PackerInstallerV1
     steps:
+      # hardening-exception: egress-audit — this job installs from the npm registry
+      #   and clones this repository; harden-runner has never run in this repository,
+      #   so no endpoint baseline exists and a block policy written without one fails
+      #   closed on its first run; audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,7 +137,11 @@ jobs:
         with:
           node-version: "24"
       - name: Install dependencies
-        run: npm ci
+        # --ignore-scripts: npm runs dependency preinstall/install/postinstall
+        # hooks by default. Verified rather than assumed for this repo -- the only
+        # dependency declaring one is libxmljs2 (a native module under tfx-cli), and
+        # both `tfx extension create` and the marketplace publish work without it.
+        run: npm ci --ignore-scripts
       - name: Compile
         run: npm run compile
       - name: Compare embedded key against HashiCorp's published key
@@ -128,9 +151,18 @@ jobs:
   stale-dependabot:
     name: Flag stale Dependabot PRs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pull-requests: write
     steps:
+      # hardening-exception: egress-audit — this job calls the GitHub API;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Label PRs open > 14 days
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,11 +181,20 @@ jobs:
   notify-on-failure:
     name: Create issue on failure
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [ci, osv-scan, gpg-key-freshness, stale-dependabot]
     if: failure() && github.event_name == 'schedule'
     permissions:
       issues: write
     steps:
+      # hardening-exception: egress-audit — this job calls the GitHub API;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Create failure issue
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
