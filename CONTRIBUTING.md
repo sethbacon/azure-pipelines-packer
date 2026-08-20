@@ -80,7 +80,7 @@ npm install --include=dev
    - `Build and Test Packer Installer V1` — same, for the installer task.
    - `Lint GitHub Actions` — actionlint, plus the self-test that proves the
      breaking-change footer guard in `.github/workflows/pr-checks.yml` still
-     rejects what it claims to (`scripts/test-breaking-change-footers.js`).
+     rejects what it claims to (`4cloudguru/shared-workflows' tests/test-breaking-change-footers.js`).
    - `Scan Workflows (zizmor)` — workflow-security scan.
    <!-- ci-jobs:end -->
 

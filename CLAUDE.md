@@ -37,7 +37,7 @@ into separate commits does not help; the squash concatenates them back. Open one
 change, or combine them into a single footer and write each one up in the upgrade guide. A footer
 plus a `!` header in the *same* commit is one declaration, not two. The `Breaking-change footers
 survive the squash` job in `pr-checks.yml` counts them across the PR;
-`scripts/test-breaking-change-footers.js` extracts that script from the workflow and proves it
+`4cloudguru/shared-workflows' tests/test-breaking-change-footers.js` extracts that script from the workflow and proves it
 still rejects, in the required `Lint GitHub Actions` job.
 
 Every task whose `src/` or `task.json` changed since the last release must have its `task.json`
