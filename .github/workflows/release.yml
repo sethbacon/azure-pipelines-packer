@@ -18,9 +18,18 @@ jobs:
   guard:
     name: Verify tag is on main
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       sha: ${{ steps.resolve-sha.outputs.sha }}
     steps:
+      # hardening-exception: egress-audit — this job clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
@@ -76,7 +85,17 @@ jobs:
     name: Build release bundle
     needs: [guard, ci]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # hardening-exception: egress-audit — this job installs from the npm registry,
+      #   transfers artifacts through the Actions API, and clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -85,7 +104,11 @@ jobs:
         with:
           node-version: '24'
       - name: Install root dependencies
-        run: npm ci
+        # --ignore-scripts: npm runs dependency preinstall/install/postinstall
+        # hooks by default. Verified rather than assumed for this repo -- the only
+        # dependency declaring one is libxmljs2 (a native module under tfx-cli), and
+        # both `tfx extension create` and the marketplace publish work without it.
+        run: npm ci --ignore-scripts
       - name: Build release
         run: npm run build:release
       - name: Upload build artifact
@@ -99,7 +122,17 @@ jobs:
     name: Package extension (.vsix)
     needs: [guard, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # hardening-exception: egress-audit — this job installs from the npm registry,
+      #   transfers artifacts through the Actions API, and clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -108,7 +141,11 @@ jobs:
         with:
           node-version: '24'
       - name: Install root dependencies
-        run: npm ci
+        # --ignore-scripts: npm runs dependency preinstall/install/postinstall
+        # hooks by default. Verified rather than assumed for this repo -- the only
+        # dependency declaring one is libxmljs2 (a native module under tfx-cli), and
+        # both `tfx extension create` and the marketplace publish work without it.
+        run: npm ci --ignore-scripts
       - name: Download build artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -131,7 +168,17 @@ jobs:
       id-token: write
       attestations: write   # required by attest-build-provenance / attest-sbom
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
+      # hardening-exception: egress-audit — this job installs from the npm registry,
+      #   transfers artifacts through the Actions API, and clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -196,9 +243,18 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       release_id: ${{ steps.create_release.outputs.id }}
     steps:
+      # hardening-exception: egress-audit — this job transfers artifacts through the
+      #   Actions API and clones this repository; harden-runner has never run in this
+      #   repository, so no endpoint baseline exists and a block policy written
+      #   without one fails closed on its first run; audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -228,11 +284,21 @@ jobs:
     name: Publish to VS Marketplace
     needs: [guard, draft-release]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: marketplace
     permissions:
       id-token: write   # GitHub OIDC -> Microsoft Entra federated credential
       contents: read
     steps:
+      # hardening-exception: egress-audit — this job installs from the npm registry,
+      #   transfers artifacts through the Actions API, and clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -287,7 +353,16 @@ jobs:
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
+      # hardening-exception: egress-audit — this job calls the GitHub API;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Undraft the release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
