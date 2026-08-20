@@ -180,6 +180,17 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # Every job in this workflow starts here, including this guard's own pair
+      # (release-please-can-read-the-commit). The job runs no action of its own
+      # -- it reads commits through `gh api` -- but the shared workflow-hardening
+      # gate asserts that every job reaches harden-runner, and harden-runner does
+      # observe the egress those `run:` steps make. Matching the siblings rather
+      # than claiming an exemption: nothing about counting footers needs a
+      # narrower policy than counting anything else here.
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
       - name: Count breaking-change declarations across this PR's commits
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
