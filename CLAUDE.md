@@ -28,6 +28,18 @@ Azure DevOps extension providing HashiCorp Packer integration for Azure Pipeline
 4. PR to `main` with a conventional-commit title; CI runs version check → shared-module provenance check → build/test (Ubuntu + Windows) → actionlint → zizmor, plus PR-title/dependency-review checks and CodeQL.
 5. Squash-merge when green.
 
+**One merged commit announces exactly ONE breaking change.** This repo squashes with
+`squash_merge_commit_message=COMMIT_MESSAGES`, so every commit body in a PR is concatenated into
+one merge commit — and release-please keeps only the **first** `BREAKING CHANGE:` footer, reading a
+`!` marker only from the header. A second declaration anywhere in the PR ships with no changelog
+entry and no notice (terraform-registry-backend v4.0.0 shipped two that way). Moving the footers
+into separate commits does not help; the squash concatenates them back. Open one PR per breaking
+change, or combine them into a single footer and write each one up in the upgrade guide. A footer
+plus a `!` header in the *same* commit is one declaration, not two. The `Breaking-change footers
+survive the squash` job in `pr-checks.yml` counts them across the PR;
+`scripts/test-breaking-change-footers.js` extracts that script from the workflow and proves it
+still rejects, in the required `Lint GitHub Actions` job.
+
 Every task whose `src/` or `task.json` changed since the last release must have its `task.json`
 `Minor` bumped — ADO caches tasks by `Major.Minor`, so an un-bumped fix reaches the Marketplace but
 never a running agent. This is **no longer a manual step**: it is applied and enforced in three
@@ -70,7 +82,9 @@ azure-pipelines-packer/
 └── .github/workflows/
     ├── unit-test.yml         # CI: version/provenance/discipline checks, build/test (Node 24 + a
     │                         #     Node 20 load-only smoke per task), actionlint, zizmor
-    ├── pr-checks.yml         # PR title convention, dependency review, Release PR Minor Bumps gate
+    ├── pr-checks.yml         # PR title convention, dependency review, Release PR Minor Bumps gate,
+    │                         #     and the two release-parsing guards (release-please can parse the
+    │                         #     squash; at most ONE breaking-change declaration across its commits)
     ├── release.yml           # Tag-triggered: build, sign, attest, publish, draft/undraft release
     ├── release-please.yml    # main-triggered: version-bump PR automation
     ├── release-pr-minor-bumps.yml # Release-PR-triggered: auto-applies per-task Minor bumps
