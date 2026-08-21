@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // Auto-bumps each task's task.json Minor for every task whose src/ changed since
-// the previous release without a Minor increase — the manual step CLAUDE.md
-// documents ("Before tagging a release, bump the Minor field in task.json for
-// every task whose code changed"), automated (#192). ADO agents cache tasks by Major.Minor, so a code
+// the previous release without a Minor increase — the manual step in CLAUDE.md's
+// Release Process, automated. ADO agents cache tasks by Major.Minor, so a code
 // (especially security) fix that ships without a Minor bump would reach the
 // Marketplace but never running agents. Run on the release-please Release PR by
 // .github/workflows/release-pr-minor-bumps.yml; also runnable locally.

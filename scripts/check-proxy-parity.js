@@ -26,15 +26,14 @@
 //   1. Every `fetch()` call in a task's src/ tree must supply proxy options --
 //      either an explicit `dispatcher`, or a spread of one of the repo's proxy
 //      option builders (buildFetchOptions / buildProxyFetchOptions).
-//   2. Every `createHttpClient()` call must inject `fetchOptions` referencing one
-//      of those builders. The shared package imports neither the ADO task lib nor
-//      undici, so it CANNOT proxy on its own -- delegating the transport moves
-//      the real `fetch()` out of this repo's src/ tree, and without this rule the
-//      gate would simply stop seeing the call site and pass vacuously.
-//   3. Every `https.request` / `https.get` / `http.request` / `http.get` call
+//   2. Every `https.request` / `https.get` / `http.request` / `http.get` call
 //      must supply an `agent`, which is how this codebase injects its
-//      CONNECT-tunnelling ProxyTunnelAgent.
-//   4. Recognised exemptions, each verified against the code they name, are
+//      CONNECT-tunnelling ProxyTunnelAgent. When that call has been delegated to
+//      a shared package (`httpsRequest`), the site is still checked HERE, on the
+//      `agent` it passes and the package version the task declares — a delegated
+//      call that leaves the inventory is how this gate goes green by seeing
+//      nothing.
+//   3. Recognised exemptions, each verified against the code they name, are
 //      reported but do not fail:
 //        EXEMPT-TOOL-LIB        azure-pipelines-tool-lib's downloadTool builds
 //                               its HttpClient with
@@ -71,24 +70,27 @@ const NODE_HTTP_SINKS = ['https.request', 'https.get', 'http.request', 'http.get
 
 /**
  * Factories that own the real `fetch()` on this repo's behalf, in a package that
- * cannot read the agent's proxy itself. The proxy decision is still made here,
- * as an injected option, so it is still checked here.
+ * cannot read the agent's proxy itself. Delegating the transport moves the real
+ * fetch() out of this tree, so without this rule the gate simply stops seeing
+ * the call site and passes vacuously. The proxy decision is still made here, as
+ * an injected option, so it is still checked here.
  */
 const DELEGATED_FETCH_SINKS = ['createHttpClient'];
-
-/** Proxy-aware by construction inside azure-pipelines-tool-lib (see header). */
-const TOOL_LIB_SINKS = ['downloadTool'];
 
 /**
  * Factories where the proxy DECISION itself has left this repo, not just the
  * fetch() call: @4cloudguru/pipeline-task-ado reads the agent proxy, registers
  * every spelling of the credential and builds the dispatcher internally, so
- * there is no fetchOptions here to inspect and the shape check cannot apply.
+ * there is no fetchOptions here to inspect and the shape check above cannot
+ * apply.
  *
  * A site that cannot be shape-checked must still be checked, or it silently
- * leaves the inventory and this gate passes by seeing nothing. What is
- * verifiable here is PROVENANCE: that the task depends on a version of the
- * package known to carry the wiring and the test asserting its ordering.
+ * leaves the inventory and the gate passes by seeing nothing — the exact
+ * failure this file exists to prevent, and one this repo has now hit twice
+ * (#949, and again on the move to the ado package). What is verifiable here is
+ * PROVENANCE: that the task depends on a version of the package known to carry
+ * the wiring and the tests that assert its ordering. So the assertion becomes a
+ * version floor, and the site stays in the report either way.
  */
 const PACKAGE_DELEGATED_SINKS = {
     createAdoHttpClient: {
@@ -96,13 +98,42 @@ const PACKAGE_DELEGATED_SINKS = {
         min: '0.3.0',
         // The package delegates onward to core, so the direct floor above only
         // vouches for the wiring - not for which implementation it wires up.
-        // ado@0.2.0 declared core ^0.3.1 while the task declared ^0.5.0, and
+        // ado@0.2.0 declared core ^0.3.1 while the tasks declared ^0.5.0, and
         // caret on a 0.x version is patch-only, so the ranges were disjoint,
         // npm nested a second copy, and the delegated client ran the older one.
         // Both floors passed throughout. Hence the resolved check below.
         carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.5.0' },
     },
 };
+
+/**
+ * Builders that return a CONNECT-tunnelling https.Agent for the raw-https
+ * transports. `createProxyTunnelAgent` is the package's; `buildProxyAgent` is
+ * the six-line task-side adapter that hands it the agent's proxy configuration
+ * and the log masker, and is what a call site actually names.
+ */
+const PROXY_AGENT_BUILDERS = ['buildProxyAgent', 'createProxyTunnelAgent'];
+
+/**
+ * The raw-https counterpart of DELEGATED_FETCH_SINKS. `httpsRequest` owns the
+ * real `https.request()` on this repo's behalf, so the call left this tree and
+ * the NODE_HTTP_SINKS rule below can no longer see it — six sites disappeared
+ * from the inventory the day the transport moved, and the gate would have gone
+ * green by looking at nothing. That is the third time this repo has hit that
+ * shape (#949, the ado-package move, and this one), so the site is kept in the
+ * report and checked on the two things still decided HERE: that the call
+ * supplies an `agent` built by a recognised proxy-agent builder, and that the
+ * owning task depends on a version of the package known to carry the wiring.
+ *
+ * `node:https` honours no proxy setting unless handed an `agent`, so a call
+ * without one is not a weaker proxy — it is no proxy at all.
+ */
+const DELEGATED_NODE_HTTP_SINKS = {
+    httpsRequest: { pkg: '@4cloudguru/pipeline-task-core', min: '0.6.0' },
+};
+
+/** Proxy-aware by construction inside azure-pipelines-tool-lib (see header). */
+const TOOL_LIB_SINKS = ['downloadTool'];
 
 /** The package.json of the task that owns `file`, or null above the task roots. */
 function declaredDependency(file, pkg) {
@@ -128,7 +159,8 @@ function declaredDependency(file, pkg) {
 
 /**
  * Deliberately narrow: only a caret or exact range pins a floor this gate can
- * reason about. `*`, `latest` or a git URL cannot be shown to include the fix.
+ * reason about. `*`, `latest` or a git URL cannot be shown to include the fix,
+ * so they are treated as NOT satisfying it rather than waved through.
  */
 function satisfiesFloor(range, min) {
     const parsed = /^\^?(\d+)\.(\d+)\.(\d+)/.exec(String(range).trim());
@@ -448,6 +480,26 @@ for (const file of files) {
         while ((m = re.exec(masked)) !== null) {
             const { ok, why } = packageDelegationVerdict(file, spec);
             record(m.index, sink, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED', why);
+        }
+    }
+
+    for (const [sink, spec] of Object.entries(DELEGATED_NODE_HTTP_SINKS)) {
+        const re = new RegExp(`(?<![.\\w$])${sink}\\s*\\(`, 'g');
+        let m;
+        while ((m = re.exec(masked)) !== null) {
+            const call = callText(masked, m.index + m[0].length - 1);
+            const spreads = [...call.matchAll(/\.\.\.\s*([A-Za-z_$][\w$]*)/g)].map((sp) => sp[1]);
+            const options = call + spreads.map((id) => resolveOptionsText(masked, m.index, id)).join('');
+            const hasAgent = /(^|[^\w$])agent\s*:/.test(options) &&
+                PROXY_AGENT_BUILDERS.some((b) => new RegExp(`(^|[^\\w$])${b}\\b`).test(options));
+            if (!hasAgent) {
+                record(m.index, sink, 'UNPROXIED',
+                    'no agent from a proxy-agent builder, and node:https reaches no proxy without one');
+                continue;
+            }
+            const { ok, why } = packageDelegationVerdict(file, spec);
+            record(m.index, sink, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED',
+                ok ? `supplies a CONNECT-tunnelling agent; ${why}` : why);
         }
     }
 

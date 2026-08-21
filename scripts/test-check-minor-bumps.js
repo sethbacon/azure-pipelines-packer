@@ -24,8 +24,8 @@ const scriptPath = path.join(repoRoot, 'scripts', 'check-minor-bumps.js');
 // (which derives its task list from that directory scan) actually examines a
 // change to its src/. A second, unchanged task confirms untouched tasks never
 // require a bump.
-const CHANGED_TASK = 'Tasks/PackerTask/PackerTaskV1';
-const UNCHANGED_TASK = 'Tasks/PackerInstaller/PackerInstallerV1';
+const CHANGED_TASK = 'Tasks/TerraformTask/TerraformTaskV5';
+const UNCHANGED_TASK = 'Tasks/TerraformInstaller/TerraformInstallerV1';
 
 const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-minor-bumps-selftest-'));
 let failed = false;
@@ -136,7 +136,7 @@ try {
         }
     }
 
-    // --- Case 4: a task.json-ONLY change (e.g. flipping a security-relevant
+    // --- Case 4 (#676): a task.json-ONLY change (e.g. flipping a security-relevant
     // input's defaultValue) with NO src/ touch at all must still require a Minor
     // bump -- proves the diff scope covers task.json, not just src/. ---
     {
@@ -155,11 +155,11 @@ try {
             && out.includes(CHANGED_TASK)
             && out.includes('Minor did not increase');
         if (!ok) {
-            console.error('FAIL: check-minor-bumps.js did not catch a task.json-only change without a Minor bump.');
+            console.error('FAIL: check-minor-bumps.js did not catch a task.json-only change without a Minor bump (#676).');
             console.error(`status=${res.status}`, out);
             failed = true;
         } else {
-            console.log('OK: catches a task.json-only change (no src/ touch) without a Minor bump.');
+            console.log('OK: catches a task.json-only change (no src/ touch) without a Minor bump (#676).');
         }
     }
 } finally {

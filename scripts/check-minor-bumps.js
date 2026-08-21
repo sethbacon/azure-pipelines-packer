@@ -8,14 +8,11 @@
 // Usage: node scripts/check-minor-bumps.js [prevRef] [currRef]
 //   prevRef defaults to the newest v*.*.* tag that is not the current HEAD commit
 //           (i.e. the previous release); currRef defaults to HEAD.
-// Ported from the sibling azure-pipelines-terraform repo, which has enforced
-// this in three layers since its #676 (packer #192): an auto-bump workflow on the
-// Release PR, a PR merge gate, and this tag-time guard. Changes under <task>/src
-// OR to <task>/task.json itself count -- a defaultValue-only edit in task.json
-// (e.g. flipping a security-relevant input like requireGpgSignature) carries the
-// same cached-agent staleness risk as a src/ change and must not be able to ship
-// without a Minor bump. Changes under <task>/Tests or docs elsewhere still do
-// not require a bump.
+// Changes under <task>/src OR to <task>/task.json itself count (#676 -- a
+// defaultValue-only edit in task.json, e.g. flipping a security-relevant input
+// like requireGpgSignature, carries the same cached-agent staleness risk as a
+// src/ change and must not be able to ship without a Minor bump). Changes
+// under <task>/Tests or docs elsewhere still do not require a bump.
 //
 // The analysis is also reused by scripts/bump-minor-versions.js, so the pieces
 // below are exported via module.exports and the CLI runs only under the
@@ -28,7 +25,7 @@ const { discoverTaskDirs } = require('./lib/task-dirs.js');
 // The task list is DERIVED from the Tasks/*/*/task.json directory scan (see
 // scripts/lib/task-dirs.js) relative to the current working directory — mirroring
 // how the git calls below operate on the cwd, so the self-tests can point both at
-// a throwaway repo — rather than hand-maintained here.
+// a throwaway repo — rather than hand-maintained here (issue #502).
 function getTaskDirs() {
   return discoverTaskDirs(process.cwd());
 }
@@ -152,7 +149,7 @@ function main() {
   if (failed) {
     console.error(
       '\ncheck-minor-bumps: FAILED. Every task whose src/ changed since the last release ' +
-      'must have its Minor bumped — ADO agents cache tasks by Major.Minor. See CLAUDE.md > Workflow Per Change.',
+      'must have its Minor bumped — ADO agents cache tasks by Major.Minor. See CLAUDE.md > Release Process.',
     );
     process.exit(1);
   }
