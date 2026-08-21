@@ -63,6 +63,16 @@ const SITE_ROWS: SiteRow[] = [
     { file: INSTALLER, fn: 'downloadZipFromRegistry', kind: 'VERIFY', verdict: 'DISCARDS-ON-FAILURE', why: 'registry SHA256 check (#204)' },
     { file: INSTALLER, fn: 'downloadZipFromMirror', kind: 'VERIFY', verdict: 'DISCARDS-ON-FAILURE', why: 'mirror GPG check (#204)' },
     { file: INSTALLER, fn: 'downloadZipFromMirror', kind: 'VERIFY', verdict: 'DISCARDS-ON-FAILURE', why: 'mirror SHA256 check (#204)' },
+
+    // --- #204, second half: the deletion has to leave a record ---------------
+    // The discard lives in @4cloudguru/pipeline-task-core, which cannot reach the
+    // ADO task lib, so the log line naming the deleted artifact is passed IN. That
+    // makes it an argument a call site can omit and still compile, deleting the
+    // artifact silently -- which is why the gate enumerates these separately.
+    { file: INSTALLER, fn: 'downloadZipFromHashiCorp', kind: 'DISCARD', verdict: 'REPORTS-DISCARD', why: 'hashicorp discard names the artifact it deleted (#204)' },
+    { file: INSTALLER, fn: 'downloadZipFromRegistry', kind: 'DISCARD', verdict: 'REPORTS-DISCARD', why: 'registry discard names the artifact it deleted (#204)' },
+    { file: INSTALLER, fn: 'downloadZipFromMirror', kind: 'DISCARD', verdict: 'REPORTS-DISCARD', why: 'mirror GPG discard names the artifact it deleted (#204)' },
+    { file: INSTALLER, fn: 'downloadZipFromMirror', kind: 'DISCARD', verdict: 'REPORTS-DISCARD', why: 'mirror SHA256 discard names the artifact it deleted (#204)' },
     {
         file: INSTALLER, fn: 'verifyCachedBinaryHash', kind: 'VERIFY', verdict: 'EXEMPT-CACHE-VERIFY',
         why: 'verifies the AGENT-CACHED binary, which other jobs may be using: a failed check fails the task without evicting the cache entry',
