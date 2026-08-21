@@ -42,6 +42,11 @@ jobs:
           persist-credentials: false
       - name: Validate version fields
         run: node scripts/check-versions.js
+      - name: Validate the .vsix would compose correctly
+        # Static: answers "if we composed the package right now, would it be
+        # correct?" without building one, so a misclassified file fails the
+        # pull request that adds it rather than the release that ships it.
+        run: node scripts/check-package-composition.js
       - name: Self-test check-minor-bumps.js
         run: node scripts/test-check-minor-bumps.js
       - name: Self-test bump-minor-versions.js
