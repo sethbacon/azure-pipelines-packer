@@ -21,7 +21,7 @@
     "@4cloudguru/pipeline-task-ado": "^0.4.1",
     "@4cloudguru/pipeline-task-core": "^0.6.0",
     "azure-pipelines-task-lib": "^5.279.0",
-    "azure-pipelines-tool-lib": "^2.0.12",
+    "azure-pipelines-tool-lib": "^2.279.0",
     "openpgp": "^6.0.1",
     "undici": "^8.10.0"
   },
