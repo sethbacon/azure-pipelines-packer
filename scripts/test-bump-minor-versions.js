@@ -24,9 +24,9 @@ const scriptPath = path.join(repoRoot, 'scripts', 'bump-minor-versions.js');
 // All three live under the throwaway repo's Tasks/ tree, so bump-minor-versions.js
 // (via check-minor-bumps.js's directory-derived task list) actually examines
 // their src/ changes.
-const CHANGED_TASK = 'Tasks/PackerTask/PackerTaskV1';
-const UNCHANGED_TASK = 'Tasks/PackerInstaller/PackerInstallerV1';
-const BARE_TASK = 'Tasks/PackerBare/PackerBareV1';
+const CHANGED_TASK = 'Tasks/TerraformTask/TerraformTaskV5';
+const UNCHANGED_TASK = 'Tasks/TerraformInstaller/TerraformInstallerV1';
+const BARE_TASK = 'Tasks/TerraformProviderMirror/TerraformProviderMirrorV1';
 
 const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bump-minor-versions-selftest-'));
 let failed = false;
