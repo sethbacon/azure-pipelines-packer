@@ -22,12 +22,16 @@ const FAMILIES = [];
 // The registry of modules copied from azure-pipelines-terraform. Adding a new
 // copy means adding it here AND giving it the provenance header.
 //
-// A cross-repo byte diff is neither available in CI nor correct any more --
-// http-client.ts has intentionally advanced ahead of the terraform copy (per-hop
-// redirect host/scheme re-validation, MAX_REDIRECTS, typed HttpError + withRetry,
-// fetchTextAllow404). So the invariant enforced is provenance, not identity:
-// every copy declares its upstream, its sync policy, and whether it is still
-// IN-SYNC or deliberately DIVERGED.
+// A cross-repo byte diff is neither available in CI nor meaningful any more. The
+// transport these modules used to duplicate now lives in
+// @4cloudguru/pipeline-task-core, with the Azure DevOps wiring around it in
+// @4cloudguru/pipeline-task-ado, and both extensions delegate to them. What is
+// left in each copy is the per-task wiring neither package can know: its
+// localized message text and, for http-client.ts, a deliberately NARROWER
+// redirect policy than terraform's, which opts into a GitHub release-asset
+// exception this extension has no reason to widen to. So the invariant enforced
+// is provenance, not identity: every copy declares its upstream, its sync
+// policy, and whether it is still IN-SYNC or deliberately DIVERGED.
 //
 // Entries carry their own src dir: the registry used to assume a single
 // directory (the installer's), which meant a copied module landing in the
