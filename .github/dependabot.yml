@@ -5,6 +5,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     # codeql-action's init/analyze are separate Dependabot dependencies but are
@@ -19,6 +21,8 @@ updates:
     directory: "/Tasks/PackerTask/PackerTaskV1"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     open-pull-requests-limit: 10
@@ -32,6 +36,8 @@ updates:
     directory: "/Tasks/PackerInstaller/PackerInstallerV1"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     open-pull-requests-limit: 10
@@ -44,6 +50,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore"
     open-pull-requests-limit: 5
@@ -66,6 +74,8 @@ updates:
     directory: /.github/commit-message-check
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
       day: monday
       time: "09:00"
       timezone: UTC
