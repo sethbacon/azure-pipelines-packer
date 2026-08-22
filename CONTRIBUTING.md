@@ -69,7 +69,7 @@ npm install --include=dev
    trips any of them blocks the merge, so it is worth knowing they exist before
    you are surprised by one:
 
-   <!-- ci-jobs:begin -->
+   <!-- ci-jobs:begin .github/workflows/unit-test.yml -->
    - `Check Version Consistency` — validates the version fields in each `task.json`.
    - `Check Shared Module Provenance` — every module copied from
      `azure-pipelines-terraform` must carry its `@shared-module` provenance header,
