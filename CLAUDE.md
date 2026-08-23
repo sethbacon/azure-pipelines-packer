@@ -40,10 +40,13 @@ survive the squash` job in `pr-checks.yml` counts them across the PR;
 `4cloudguru/shared-workflows' tests/test-breaking-change-footers.js` extracts that script from the workflow and proves it
 still rejects, in the required `Lint GitHub Actions` job.
 
-Every task whose `src/` or `task.json` changed since the last release must have its `task.json`
-`Minor` bumped — ADO caches tasks by `Major.Minor`, so an un-bumped fix reaches the Marketplace but
-never a running agent. This is **no longer a manual step**: it is applied and enforced in three
-layers (#192), matching the sibling `azure-pipelines-terraform` repo —
+Every task whose `src/` or `task.json` changed, or whose PRODUCTION dependency surface changed
+(`package.json`'s `dependencies`, or a non-dev-only `package-lock.json` entry — #264), since the
+last release must have its `task.json` `Minor` bumped — ADO caches tasks by `Major.Minor`, so an
+un-bumped fix reaches the Marketplace but never a running agent. A `devDependencies`-only edit is
+exempt: it never changes what `npm ci --omit=dev` bundles into the `.vsix`. This is **no longer a
+manual step**: it is applied and enforced in three layers (#192), matching the sibling
+`azure-pipelines-terraform` repo —
 
 1. `release-pr-minor-bumps.yml` applies the bumps automatically on the release-please Release PR
    (`scripts/bump-minor-versions.js`, idempotent — never hand-edit a `Minor`, and never bump an
@@ -96,27 +99,27 @@ azure-pipelines-packer/
 
 Source: `Tasks/PackerInstaller/PackerInstallerV1/src/`
 
-| File | Role |
-| --- | --- |
-| `index.ts` | Entry point — installs Packer, prepends PATH, verifies |
-| `packer-installer.ts` | Download strategies (hashicorp / registry / mirror), version resolution, SHA256 verify |
-| `http-client.ts` | Constructs the shared HTTP client and injects what the package will not own: proxy dispatch, secret masking, localized message text |
-| `gpg-verifier.ts` | Fetches SHA256SUMS.sig and delegates the cryptographic decision, keeping the trust root, the 404-vs-transient rule and the `VerificationFailure` typing |
-| `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key |
+| File                   | Role                                                                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`             | Entry point — installs Packer, prepends PATH, verifies                                                                                                  |
+| `packer-installer.ts`  | Download strategies (hashicorp / registry / mirror), version resolution, SHA256 verify                                                                  |
+| `http-client.ts`       | Constructs the shared HTTP client and injects what the package will not own: proxy dispatch, secret masking, localized message text                     |
+| `gpg-verifier.ts`      | Fetches SHA256SUMS.sig and delegates the cryptographic decision, keeping the trust root, the 404-vs-transient rule and the `VerificationFailure` typing |
+| `hashicorp-gpg-key.ts` | Embedded HashiCorp release-signing public key                                                                                                           |
 
 **Eight defences no longer live in this repo.** They moved to `@4cloudguru/pipeline-task-core`,
 which this task consumes:
 
-| Was | Now | What it does |
-| --- | --- | --- |
-| `registry-allowlist.ts` | `src/egress/` | The mirror/registry download path's SSRF defense — host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* every redirect hop, with DNS resolution |
-| `url-path-segment.ts` | `src/url/path-segment.ts` | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators) |
-| `url-secret-redaction.ts` | `src/url/redaction.ts` | Strips/masks `user:password@` userinfo and pre-signed query tokens from a URL before either can reach the build log |
-| `verification-failure.ts` | `src/verification/` | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade) |
-| `artifact-discard.ts` | `src/verification/` | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent |
-| the openpgp call in `gpg-verifier.ts` | `./gpg` (`verifyDetached`) | Verifies a detached signature against a key set, reporting `reasons` on failure so a key-rotation miss reads differently from a tampered file. A separate entry point so a task that never verifies does not vendor `openpgp` |
-| the client in `http-client.ts` | `src/http/` (`createHttpClient`) | HTTPS-pinned fetch with per-hop redirect re-authorization, bounded in-memory bodies, 429/Retry-After, and a retry-safe streaming download. The union of this repo's copy and terraform's three — the task gained `MAX_RESPONSE_BYTES`, 429 handling and deterministic non-JSON classification, none of which this copy had |
-| the resolution in `proxy-config.ts` / `buildFetchOptions` | `src/proxy/` (`resolveProxy`) | Turns the agent's proxy settings into a dispatcher-ready URL plus every spelling of the credential that must be masked. A superset of what both copies did: it also masks userinfo embedded directly in `Agent.ProxyUrl`, which both missed because they only masked when `Agent.ProxyUsername` was separately set |
+| Was                                                       | Now                              | What it does                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `registry-allowlist.ts`                                   | `src/egress/`                    | The mirror/registry download path's SSRF defense — host allowlist plus numeric private/link-local/reserved address classification, applied by `assertEgressHostAllowed()` to the initial URL *and* every redirect hop, with DNS resolution                                                                                 |
+| `url-path-segment.ts`                                     | `src/url/path-segment.ts`        | Validates operator input before it is interpolated into a URL path segment (rejects traversal, separators, percent-encoded separators)                                                                                                                                                                                     |
+| `url-secret-redaction.ts`                                 | `src/url/redaction.ts`           | Strips/masks `user:password@` userinfo and pre-signed query tokens from a URL before either can reach the build log                                                                                                                                                                                                        |
+| `verification-failure.ts`                                 | `src/verification/`              | Typed marker separating "material failed a required verification" (fail closed) from "the source could not be reached" (degrade)                                                                                                                                                                                           |
+| `artifact-discard.ts`                                     | `src/verification/`              | Deletes a freshly downloaded artifact whose checksum/signature verification failed, instead of leaving it on the agent                                                                                                                                                                                                     |
+| the openpgp call in `gpg-verifier.ts`                     | `./gpg` (`verifyDetached`)       | Verifies a detached signature against a key set, reporting `reasons` on failure so a key-rotation miss reads differently from a tampered file. A separate entry point so a task that never verifies does not vendor `openpgp`                                                                                              |
+| the client in `http-client.ts`                            | `src/http/` (`createHttpClient`) | HTTPS-pinned fetch with per-hop redirect re-authorization, bounded in-memory bodies, 429/Retry-After, and a retry-safe streaming download. The union of this repo's copy and terraform's three — the task gained `MAX_RESPONSE_BYTES`, 429 handling and deterministic non-JSON classification, none of which this copy had |
+| the resolution in `proxy-config.ts` / `buildFetchOptions` | `src/proxy/` (`resolveProxy`)    | Turns the agent's proxy settings into a dispatcher-ready URL plus every spelling of the credential that must be masked. A superset of what both copies did: it also masks userinfo embedded directly in `Agent.ProxyUrl`, which both missed because they only masked when `Agent.ProxyUsername` was separately set         |
 
 Change any of those in the package, not here and not in a caller.
 `scripts/check-egress-authorization.js` now treats an address-classification re-implementation
@@ -141,28 +144,28 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 
 `index.ts` → `ParentCommandHandler` (selects provider handler) → `BasePackerCommandHandler` (command implementations) → per-provider handlers inject auth env vars. Packer has no backend concept, so handlers implement only `handleProvider()`.
 
-| File | Role |
-| --- | --- |
-| `index.ts` | Entry point — reads `provider`/`command`, registers cleanup signals |
-| `parent-handler.ts` | Routes `provider` to a handler, runs command, clears tracked env in `finally` |
-| `base-packer-command-handler.ts` | Abstract base with all command implementations |
-| `packer.ts` | `PackerToolHandler` — locates `packer` binary, builds `ToolRunner` |
-| `packer-commands.ts` | `PackerBaseCommandInitializer`, `PackerAuthorizationCommandInitializer` |
-| `azure-packer-command-handler.ts` | AzureRM auth (WIF / MSI / Service Principal) → `PKR_VAR_arm_*` |
-| `aws-packer-command-handler.ts` | AWS auth (static keys / WIF web-identity) → `AWS_*` env |
-| `gcp-packer-command-handler.ts` | GCP auth (SA key / WIF) → `GOOGLE_APPLICATION_CREDENTIALS` |
-| `oci-packer-command-handler.ts` | OCI auth → `PKR_VAR_oci_*` env + temp key file |
-| `vsphere-packer-command-handler.ts` | vSphere auth → `PKR_VAR_vsphere_*` env |
-| `none-packer-command-handler.ts` | No cloud creds (local/hypervisor builders) |
-| `environment-variables.ts` | Tracked env var helper with `finally`-block cleanup |
-| `credential-guards.ts` | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`) |
-| `endpoint-data-secret.ts` | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted) |
-| `secure-file-loader.ts` | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600 |
-| `secure-temp.ts` | Restrictive temp-file primitives (owner-only 0600 + `O_EXCL` on Unix, a restrictive DACL on Windows; both fail closed) |
-| `secure-var-file-masking.ts` | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them |
-| `id-token-generator.ts` | Requests the ADO OIDC ID token used by every WIF provider (https-pinned, `redirect: 'error'`, 30s abort, bounded retry, proxy-aware via `proxy-config.ts`) |
-| `proxy-config.ts` | Builds `fetch()` options routing outbound HTTPS through the agent's configured proxy (`Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword`), masking both the raw and percent-encoded proxy password |
-| `pem-normalizer.ts` | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping |
+| File                                | Role                                                                                                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `index.ts`                          | Entry point — reads `provider`/`command`, registers cleanup signals                                                                                                                                          |
+| `parent-handler.ts`                 | Routes `provider` to a handler, runs command, clears tracked env in `finally`                                                                                                                                |
+| `base-packer-command-handler.ts`    | Abstract base with all command implementations                                                                                                                                                               |
+| `packer.ts`                         | `PackerToolHandler` — locates `packer` binary, builds `ToolRunner`                                                                                                                                           |
+| `packer-commands.ts`                | `PackerBaseCommandInitializer`, `PackerAuthorizationCommandInitializer`                                                                                                                                      |
+| `azure-packer-command-handler.ts`   | AzureRM auth (WIF / MSI / Service Principal) → `PKR_VAR_arm_*`                                                                                                                                               |
+| `aws-packer-command-handler.ts`     | AWS auth (static keys / WIF web-identity) → `AWS_*` env                                                                                                                                                      |
+| `gcp-packer-command-handler.ts`     | GCP auth (SA key / WIF) → `GOOGLE_APPLICATION_CREDENTIALS`                                                                                                                                                   |
+| `oci-packer-command-handler.ts`     | OCI auth → `PKR_VAR_oci_*` env + temp key file                                                                                                                                                               |
+| `vsphere-packer-command-handler.ts` | vSphere auth → `PKR_VAR_vsphere_*` env                                                                                                                                                                       |
+| `none-packer-command-handler.ts`    | No cloud creds (local/hypervisor builders)                                                                                                                                                                   |
+| `environment-variables.ts`          | Tracked env var helper with `finally`-block cleanup                                                                                                                                                          |
+| `credential-guards.ts`              | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`)                       |
+| `endpoint-data-secret.ts`           | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted)                                                                  |
+| `secure-file-loader.ts`             | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600                                                                                                               |
+| `secure-temp.ts`                    | Restrictive temp-file primitives (owner-only 0600 + `O_EXCL` on Unix, a restrictive DACL on Windows; both fail closed)                                                                                       |
+| `secure-var-file-masking.ts`        | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them                                                                                                  |
+| `id-token-generator.ts`             | Requests the ADO OIDC ID token used by every WIF provider (https-pinned, `redirect: 'error'`, 30s abort, bounded retry, proxy-aware via `proxy-config.ts`)                                                   |
+| `proxy-config.ts`                   | Builds `fetch()` options routing outbound HTTPS through the agent's configured proxy (`Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword`), masking both the raw and percent-encoded proxy password |
+| `pem-normalizer.ts`                 | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping                                                                                |
 
 ### Commands
 
@@ -205,14 +208,14 @@ The mock-runner entry must be the task's **real** `src/index.ts`, never a re-imp
 
 ## Key Dependencies
 
-| Package | Purpose |
-| --- | --- |
-| `azure-pipelines-task-lib` | ADO task SDK |
-| `azure-pipelines-tool-lib` | Tool download/cache (installer) |
-| `azure-pipelines-tasks-securefiles-common` | Secure file download (command task) |
-| `openpgp` | GPG signature verification (installer) |
-| `undici` | Proxy-aware fetch (installer) |
-| `mocha` + `ts-node` | Test framework |
+| Package                                    | Purpose                                |
+| ------------------------------------------ | -------------------------------------- |
+| `azure-pipelines-task-lib`                 | ADO task SDK                           |
+| `azure-pipelines-tool-lib`                 | Tool download/cache (installer)        |
+| `azure-pipelines-tasks-securefiles-common` | Secure file download (command task)    |
+| `openpgp`                                  | GPG signature verification (installer) |
+| `undici`                                   | Proxy-aware fetch (installer)          |
+| `mocha` + `ts-node`                        | Test framework                         |
 
 ## Initiatives
 

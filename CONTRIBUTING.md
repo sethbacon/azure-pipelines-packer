@@ -17,15 +17,15 @@ type: short description (50 chars max)
 | Type       | When to use                                  |
 | ---------- | -------------------------------------------- |
 | `feat`     | New Packer command, provider, or auth scheme |
-| `fix`      | Bug fix                                       |
-| `docs`     | Documentation only                            |
-| `refactor` | Restructure without changing behavior         |
-| `perf`     | Performance improvement                       |
-| `test`     | Adding or fixing tests                        |
-| `ci`       | CI/CD workflow changes                        |
-| `chore`    | Housekeeping                                  |
-| `deps`     | Dependency updates                            |
-| `security` | Security fix or hardening                     |
+| `fix`      | Bug fix                                      |
+| `docs`     | Documentation only                           |
+| `refactor` | Restructure without changing behavior        |
+| `perf`     | Performance improvement                      |
+| `test`     | Adding or fixing tests                       |
+| `ci`       | CI/CD workflow changes                       |
+| `chore`    | Housekeeping                                 |
+| `deps`     | Dependency updates                           |
+| `security` | Security fix or hardening                    |
 
 The PR title is what ends up in the changelog — write it as a clear, reader-facing statement.
 
@@ -128,12 +128,28 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 
 1. Merge conventional-commit PRs to `main` — release-please accumulates them.
 2. release-please opens a **Release PR** that bumps `azure-devops-extension.json` (`version`) and updates `CHANGELOG.md`.
-3. Before merging the Release PR, manually bump the `Minor` field in `task.json` for every task whose code changed since the last release. ADO agents cache tasks by `Major.Minor` and will not pick up new code until `Minor` increments.
+3. The per-task `Minor` bumps happen **automatically** on the Release PR. ADO agents cache tasks by
+   `Major.Minor` and will not pick up new code until `Minor` increments, so every task whose `src/`
+   or `task.json` changed, or whose PRODUCTION dependency surface changed (`package.json`'s
+   `dependencies`, or a non-dev-only `package-lock.json` entry — #264), since the last release must
+   have its `task.json` `Minor` incremented before the release is tagged. A `devDependencies`-only
+   change is exempt: it never changes what `npm ci --omit=dev` bundles into the `.vsix`. Three
+   layers enforce this, so in the normal case there is nothing to do by hand:
+
+   - **Auto-bump (primary):** `.github/workflows/release-pr-minor-bumps.yml` triggers on the Release
+     PR, runs `scripts/bump-minor-versions.js`, and pushes the bumps back onto it.
+   - **Merge gate (backstop):** the `Release PR Minor Bumps` required check in
+     `.github/workflows/pr-checks.yml` runs `scripts/check-minor-bumps.js` against the Release PR
+     and fails it if any bump is still missing.
+   - **Tag-time guard (final defense):** `release.yml`'s `Verify per-task Minor bumps` step re-runs
+     the same check after the tag is pushed and fails the release if anything slipped through.
+
+   **Manual fallback (only if the automation is broken):** run `node scripts/bump-minor-versions.js`
+   from the repo root — or bump `Minor` by 1 (leave `Patch` at 0) by hand in the `task.json` of every
+   task that needs it:
 
    - `Tasks/PackerTask/PackerTaskV1/task.json` — if PackerTaskV1 changed
    - `Tasks/PackerInstaller/PackerInstallerV1/task.json` — if PackerInstallerV1 changed
-
-   Increment `Minor` by 1, leave `Patch` at 0.
 
 4. Merge the Release PR. release-please creates a draft GitHub Release and pushes the `vX.Y.Z` tag.
 5. The `release.yml` workflow fires on the tag: verifies the tag is on `main` and matches the manifest version, runs full CI, builds the bundle, packages the `.vsix`, generates CycloneDX SBOMs + a cosign keyless signature, creates a draft GitHub Release, publishes to the VS Marketplace (behind the `marketplace` environment approval), then undrafts the release.
@@ -141,7 +157,7 @@ Releases are automated via [release-please](https://github.com/googleapis/releas
 **Required secrets/variables:**
 
 | Name                       | Type     | Purpose                                                                            |
-| -------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| -------------------------- | -------- | ---------------------------------------------------------------------------------- |
 | `AZDO_PUBLISH_CLIENT_ID`   | Variable | Client ID of the Entra app whose federated credential publishes to the Marketplace |
 | `AZDO_PUBLISH_TENANT_ID`   | Variable | Entra tenant ID for the publish login                                              |
 | `RELEASE_DISPATCH_APP_ID`  | Variable | GitHub App client ID for release-please                                            |
