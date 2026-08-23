@@ -69,7 +69,7 @@ npm install --include=dev
    trips any of them blocks the merge, so it is worth knowing they exist before
    you are surprised by one:
 
-   <!-- ci-jobs:begin -->
+   <!-- ci-jobs:begin .github/workflows/unit-test.yml -->
    - `Check Version Consistency` — validates the version fields in each `task.json`.
    - `Check Shared Module Provenance` — every module copied from
      `azure-pipelines-terraform` must carry its `@shared-module` provenance header,
@@ -78,10 +78,9 @@ npm install --include=dev
      `scripts/check-proxy-parity.js`, `scripts/check-docs-claims.js`).
    - `Build and Test Packer Task V1` — lint, compile and unit tests, on Ubuntu and Windows × Node 24.
    - `Build and Test Packer Installer V1` — same, for the installer task.
-   - `Lint GitHub Actions` — actionlint, plus the self-test that proves the
-     breaking-change footer guard in `.github/workflows/pr-checks.yml` still
-     rejects what it claims to (`4cloudguru/shared-workflows' tests/test-breaking-change-footers.js`).
-   - `Scan Workflows (zizmor)` — workflow-security scan.
+   - `Workflow Security` — actionlint checks the workflow schema and zizmor scans
+     for workflow-security anti-patterns, both from `4cloudguru/shared-workflows`'
+     `workflow-security.yml` rather than maintained here.
    <!-- ci-jobs:end -->
 
    This list is checked against `.github/workflows/unit-test.yml` by

@@ -1,11 +1,9 @@
 // @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/http-client.ts)
-// @shared-module-policy: This is a copy of the sibling extension's HTTP client. Until a
-//   shared cross-extension package is extracted, apply fixes to both copies and keep the
-//   provenance header current. Enforced by scripts/check-shared-modules.js.
-// @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/http-client.ts)
-// @shared-module-policy: This is a copy of the sibling extension's HTTP client. Until a
-//   shared cross-extension package is extracted, apply fixes to both copies and keep the
-//   provenance header current. Enforced by scripts/check-shared-modules.js.
+// @shared-module-policy: The transport is no longer copied — it comes from
+//   @4cloudguru/pipeline-task-core, so a fix to it belongs in that package and reaches
+//   both extensions by version bump rather than by editing two files. What is left here
+//   is this task's own wiring, which is NOT expected to match terraform's; see the status
+//   below. Enforced by scripts/check-shared-modules.js.
 // @shared-module-status: DIVERGED — both extensions now delegate, so the wiring no longer
 //   drifts: the transport comes from @4cloudguru/pipeline-task-core (which took the UNION
 //   of this copy and terraform's three), and the Azure DevOps wiring around it — proxy
