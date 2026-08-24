@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.3...v1.3.4) (2026-08-24)
+
+
+### Bug Fixes
+
+* **gates:** adopt the cross-file resolution the sibling gate already has ([#320](https://github.com/sethbacon/azure-pipelines-packer/issues/320)) ([58513d9](https://github.com/sethbacon/azure-pipelines-packer/commit/58513d92fc2897cd1abd185cf30712ec740d9841)), closes [#317](https://github.com/sethbacon/azure-pipelines-packer/issues/317)
+* **gates:** report how many source files were read, not just what was found ([#315](https://github.com/sethbacon/azure-pipelines-packer/issues/315)) ([bb070d6](https://github.com/sethbacon/azure-pipelines-packer/commit/bb070d655b13b8df85d270b1d48414321167c42b))
+
+
+### Documentation
+
+* mark the federated-credential subject as this repo's, not a template ([#313](https://github.com/sethbacon/azure-pipelines-packer/issues/313)) ([c5dd7b2](https://github.com/sethbacon/azure-pipelines-packer/commit/c5dd7b2a2507d6f1bf81c9be967a4666fd1baf70))
+
 ## [1.3.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.2...v1.3.3) (2026-08-24)
 
 
