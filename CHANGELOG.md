@@ -1,5 +1,57 @@
 # Changelog
 
+## [1.3.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.1...v1.3.2) (2026-08-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* ` spelling
+
+### chore
+
+* direct the next release to 1.3.2 ([#288](https://github.com/sethbacon/azure-pipelines-packer/issues/288)) ([1d672d5](https://github.com/sethbacon/azure-pipelines-packer/commit/1d672d5cfce3a3f8706e4df5faf24365af177f0a))
+
+
+### ci
+
+* count breaking-change declarations across the commits being squashed ([#282](https://github.com/sethbacon/azure-pipelines-packer/issues/282)) ([4fee12a](https://github.com/sethbacon/azure-pipelines-packer/commit/4fee12a70334b523e5574c1539f11233f15fd557))
+
+
+### Features
+
+* **ci:** compose the .vsix from an allowlist that refuses what it does not recognise ([#295](https://github.com/sethbacon/azure-pipelines-packer/issues/295)) ([b348fb8](https://github.com/sethbacon/azure-pipelines-packer/commit/b348fb89b7917fc991b30071386896d3677265e0))
+* **ci:** one documented-claims gate, with each section conditional on its inputs ([#305](https://github.com/sethbacon/azure-pipelines-packer/issues/305)) ([bc3df4b](https://github.com/sethbacon/azure-pipelines-packer/commit/bc3df4b716a31f0d2442ae5fac17c060841bed90))
+* **ci:** one version gate for all three extensions, with the checks each was missing ([#296](https://github.com/sethbacon/azure-pipelines-packer/issues/296)) ([753f355](https://github.com/sethbacon/azure-pipelines-packer/commit/753f3557af76964709ed59d80c5513eee922d3e9))
+* **ci:** take the shared workflow-security definition, and scan the whole repository ([#302](https://github.com/sethbacon/azure-pipelines-packer/issues/302)) ([13bbfc8](https://github.com/sethbacon/azure-pipelines-packer/commit/13bbfc8051634c020543f73284f6a9b7d5d46c4a))
+
+
+### Bug Fixes
+
+* check-minor-bumps.js now catches production dependency changes ([#307](https://github.com/sethbacon/azure-pipelines-packer/issues/307)) ([291ae96](https://github.com/sethbacon/azure-pipelines-packer/commit/291ae96e8f4333fb41be6949538e9039b295122e))
+* **ci:** refuse to run signature-replay when Dependabot edited the workflow ([#275](https://github.com/sethbacon/azure-pipelines-packer/issues/275)) ([f1a4eab](https://github.com/sethbacon/azure-pipelines-packer/commit/f1a4eab451d5750da6df1f887f0cd11abaed4c6d))
+* **ci:** reject a provenance marker declared twice, and correct one that was ([#301](https://github.com/sethbacon/azure-pipelines-packer/issues/301)) ([2cae81b](https://github.com/sethbacon/azure-pipelines-packer/commit/2cae81b701f828e5bdd0332adfd6f7a109548983))
+* **ci:** see the discard-without-a-record class this gate could not report ([#293](https://github.com/sethbacon/azure-pipelines-packer/issues/293)) ([7a14772](https://github.com/sethbacon/azure-pipelines-packer/commit/7a147727a9d091329cbdf203fc7fb5e27949549d))
+* **ci:** stop a self-test filename counting as an unguarded publish ([#291](https://github.com/sethbacon/azure-pipelines-packer/issues/291)) ([c5a9033](https://github.com/sethbacon/azure-pipelines-packer/commit/c5a9033d0c98c96eec0dab4e621a258ae227db88))
+* **ci:** take the gate copies azure-pipelines-terraform and release-docs agree on ([#292](https://github.com/sethbacon/azure-pipelines-packer/issues/292)) ([5867ea4](https://github.com/sethbacon/azure-pipelines-packer/commit/5867ea4e4fd497a32e02c7cb59c5e87e07d2526c))
+* **release:** a slow validation is not a failed publish ([#277](https://github.com/sethbacon/azure-pipelines-packer/issues/277)) ([89e865b](https://github.com/sethbacon/azure-pipelines-packer/commit/89e865b0b3837d44ad82f9a882a3fdbcf26dffe2))
+
+
+### Dependencies
+
+* move PackerInstaller to pipeline-task-ado 0.4.1 with core 0.6.0 ([#278](https://github.com/sethbacon/azure-pipelines-packer/issues/278)) ([5b35145](https://github.com/sethbacon/azure-pipelines-packer/commit/5b35145aed30a6eb508d6f142587ebe1018423c3)), closes [#273](https://github.com/sethbacon/azure-pipelines-packer/issues/273)
+
+
+### Documentation
+
+* **security:** record the shared-workflow trust relationship, and fix what it invalidated ([#287](https://github.com/sethbacon/azure-pipelines-packer/issues/287)) ([3ee1d58](https://github.com/sethbacon/azure-pipelines-packer/commit/3ee1d5863a7408592bf91c0892968065df22d4a5))
+
+
+### Refactor
+
+* **ci:** make the publish script one file again, not three headers ([#298](https://github.com/sethbacon/azure-pipelines-packer/issues/298)) ([7f4b339](https://github.com/sethbacon/azure-pipelines-packer/commit/7f4b339cc4af7e72bd34688771cb5af7ba006a52))
+* **ci:** share the shared-module gate's logic, keep its lists local ([#297](https://github.com/sethbacon/azure-pipelines-packer/issues/297)) ([93668a2](https://github.com/sethbacon/azure-pipelines-packer/commit/93668a20ec60cce6db3ba1abbd3a33c7a4b0a1a4))
+* **ci:** take release-docs' task-dirs, the one every other gate sits on ([#294](https://github.com/sethbacon/azure-pipelines-packer/issues/294)) ([6699f0d](https://github.com/sethbacon/azure-pipelines-packer/commit/6699f0d53cb8ffc3aa05221b4596c3d5c15cf24a))
+
 ## [1.3.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.0...v1.3.1) (2026-08-16)
 
 
