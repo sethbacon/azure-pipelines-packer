@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.2...v1.3.3) (2026-08-24)
+
+
+### Bug Fixes
+
+* **ci:** stop gating the required CodeQL check on repository visibility ([#311](https://github.com/sethbacon/azure-pipelines-packer/issues/311)) ([6a0e5cb](https://github.com/sethbacon/azure-pipelines-packer/commit/6a0e5cb0232820e7a684aa080cb9865f7d14119e))
+
+
+### Refactor
+
+* extract remaining [#46](https://github.com/sethbacon/azure-pipelines-packer/issues/46) shared modules to published packages ([#310](https://github.com/sethbacon/azure-pipelines-packer/issues/310)) ([e646dd2](https://github.com/sethbacon/azure-pipelines-packer/commit/e646dd21ddddaece55eeded4b0b48f8310679197))
+
 ## [1.3.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.1...v1.3.2) (2026-08-23)
 
 
