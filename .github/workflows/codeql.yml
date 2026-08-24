@@ -16,9 +16,6 @@ permissions:
 jobs:
   analyze:
     name: Analyze TypeScript
-    # Code scanning requires GitHub Advanced Security, which is unavailable on
-    # private repos. Skip while private; runs automatically once the repo is public.
-    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
