@@ -157,15 +157,26 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `oci-packer-command-handler.ts`     | OCI auth → `PKR_VAR_oci_*` env + temp key file                                                                                                                                                               |
 | `vsphere-packer-command-handler.ts` | vSphere auth → `PKR_VAR_vsphere_*` env                                                                                                                                                                       |
 | `none-packer-command-handler.ts`    | No cloud creds (local/hypervisor builders)                                                                                                                                                                   |
-| `environment-variables.ts`          | Tracked env var helper with `finally`-block cleanup                                                                                                                                                          |
 | `credential-guards.ts`              | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`)                       |
 | `endpoint-data-secret.ts`           | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted)                                                                  |
 | `secure-file-loader.ts`             | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600                                                                                                               |
-| `secure-temp.ts`                    | Restrictive temp-file primitives (owner-only 0600 + `O_EXCL` on Unix, a restrictive DACL on Windows; both fail closed)                                                                                       |
 | `secure-var-file-masking.ts`        | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them                                                                                                  |
-| `id-token-generator.ts`             | Requests the ADO OIDC ID token used by every WIF provider (https-pinned, `redirect: 'error'`, 30s abort, bounded retry, proxy-aware via `proxy-config.ts`)                                                   |
 | `proxy-config.ts`                   | Builds `fetch()` options routing outbound HTTPS through the agent's configured proxy (`Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword`), masking both the raw and percent-encoded proxy password |
-| `pem-normalizer.ts`                 | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping                                                                                |
+
+**Four modules no longer live in this repo** (#46). Three moved to `@4cloudguru/pipeline-task-ado`,
+one (crypto-shaped, no ADO dependency) to `@4cloudguru/pipeline-task-core`:
+
+| Was                        | Now                                                           | What it does                                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `environment-variables.ts` | `@4cloudguru/pipeline-task-ado` (`EnvironmentVariableHelper`) | Tracked env var helper with `finally`-block cleanup. Gained `registerSecret`/`getTrackedSecretValues` for exact-match secret redaction on build attachments, which this repo's copy was missing.                         |
+| `secure-temp.ts`           | `@4cloudguru/pipeline-task-ado`                               | Restrictive temp-file primitives. Gained Windows DACL hardening and `scrubFile` (overwrite-before-unlink), plus `replaceSecretFile` (symlink-refusing overwrite) — this repo's copy had none of the three.               |
+| `id-token-generator.ts`    | `@4cloudguru/pipeline-task-ado` (`generateIdToken`)           | Requests the ADO OIDC ID token used by every WIF provider. Gained `SYSTEM_OIDCREQUESTURI` hostname allowlisting — this repo's copy only checked the URL scheme — and routes through the package's own proxy-aware fetch. |
+| `pem-normalizer.ts`        | `@4cloudguru/pipeline-task-core` (`normalizePem`)             | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping. Was already byte-identical to the terraform copy.                                         |
+
+Change any of those in the package, not here. `scripts/check-proxy-parity.js` treats `generateIdToken`
+as a package-delegated sink (like `createAdoHttpClient`): it verifies the declared
+`@4cloudguru/pipeline-task-ado` floor and that it resolves a single `@4cloudguru/pipeline-task-core`
+copy, rather than reading a local `fetchOptions` spread that no longer exists here.
 
 ### Commands
 

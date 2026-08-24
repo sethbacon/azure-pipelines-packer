@@ -2,13 +2,10 @@ import * as assert from 'assert';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import * as path from 'path';
 import { ParentCommandHandler } from '../src/parent-handler';
-import { EnvironmentVariableHelper } from '../src/environment-variables';
-import './IdTokenGeneratorL0';
+import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 import './ProxyParityL0';
 import './PassthroughEnvClassificationL0';
 import './RoleSessionNameManifestL0';
-import './PemNormalizerL0';
-import './SecureTempL0';
 import './SecureFileLoaderL0';
 import './PreMaskingClassL0';
 import './CredentialFailClosedMatrixL0';
@@ -322,7 +319,8 @@ describe('PackerTask Test Suite', function () {
             // mode bits: chmod(0o600) succeeds but stat() reports back 0o666
             // (writable) rather than 0o600. The exact-mode assertion only holds
             // on platforms with real POSIX permissions; tightenFilePermissions's
-            // own platform-branching behavior is covered directly in SecureTempL0.ts.
+            // own platform-branching behavior is covered directly in
+            // @4cloudguru/pipeline-task-ado's own test suite.
             if (process.platform !== 'win32') {
                 assert.ok(tr.stdout.includes('mode=600'), 'the downloaded secure file should be chmod 0600 before cleanup (#103)');
             }

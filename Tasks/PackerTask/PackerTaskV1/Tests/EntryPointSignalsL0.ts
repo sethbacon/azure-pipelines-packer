@@ -6,8 +6,7 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { ParentCommandHandler } from '../src/parent-handler';
 import { BasePackerCommandHandler } from '../src/base-packer-command-handler';
 import { PackerAuthorizationCommandInitializer } from '../src/packer-commands';
-import { writeSecretFile } from '../src/secure-temp';
-import { EnvironmentVariableHelper } from '../src/environment-variables';
+import { writeSecretFile, EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * CLASS TEST — "the declared task.json execution entry point is never loaded by

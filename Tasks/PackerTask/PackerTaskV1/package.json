@@ -18,7 +18,8 @@
   },
   "minimumAgentVersion": "2.144.0",
   "dependencies": {
-    "@4cloudguru/pipeline-task-core": "^0.6.0",
+    "@4cloudguru/pipeline-task-ado": "^0.5.1",
+    "@4cloudguru/pipeline-task-core": "^0.7.0",
     "azure-pipelines-task-lib": "^5.279.0",
     "azure-pipelines-tasks-securefiles-common": "^2.272.0",
     "undici": "^8.10.0"

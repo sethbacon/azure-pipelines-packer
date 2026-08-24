@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
 import { buildProxyFetchOptions } from '../src/proxy-config';
-import { generateIdToken } from '../src/id-token-generator';
+import { generateIdToken } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * CLASS TEST — outbound proxy parity (#196).
@@ -26,9 +26,9 @@ import { generateIdToken } from '../src/id-token-generator';
  *                     with its verdict.
  *
  * Mutation-provability:
- *   - dropping `...buildProxyFetchOptions()` from id-token-generator.ts's fetch
- *     reddens the 'ADO OIDC token request' row of table B and its
- *     id-token-generator.ts row in table C, and nothing else;
+ *   - dropping the `generateIdToken` call's proxy wiring (which now lives in
+ *     @4cloudguru/pipeline-task-ado, not this repo) reddens the 'ADO OIDC
+ *     token request' row of table B and its two call-site rows in table C;
  *   - inverting `if (!proxy) return {}` in proxy-config.ts reddens exactly the
  *     'no proxy configured' rows of tables A and B.
  */
@@ -104,9 +104,14 @@ const WIF_CALL_ROWS: WifCallRow[] = [
 type SiteRow = { file: string; fn: string; sink: string; verdict: string; why: string };
 const SITE_ROWS: SiteRow[] = [
     {
-        file: 'Tasks/PackerTask/PackerTaskV1/src/id-token-generator.ts',
-        fn: 'fetchToken', sink: 'fetch', verdict: 'PROXIED',
-        why: 'the reported site of #196: spreads buildProxyFetchOptions() while keeping redirect:\'error\' and the https-only assertion',
+        file: 'Tasks/PackerTask/PackerTaskV1/src/azure-packer-command-handler.ts',
+        fn: 'handleProvider', sink: 'generateIdToken', verdict: 'PROXIED-BY-PACKAGE',
+        why: 'the proxy decision itself now lives in @4cloudguru/pipeline-task-ado (buildAdoFetchOptions), so there is no fetchOptions here to inspect and the site is held to a version floor instead',
+    },
+    {
+        file: 'Tasks/PackerTask/PackerTaskV1/src/base-packer-command-handler.ts',
+        fn: 'writeOidcTokenFile', sink: 'generateIdToken', verdict: 'PROXIED-BY-PACKAGE',
+        why: 'the same delegated token exchange, called from the AWS/GCP/OCI OIDC-file-writing path',
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/http-client.ts',

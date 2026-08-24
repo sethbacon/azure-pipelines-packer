@@ -5,7 +5,7 @@ import { PackerCommandHandlerGCP } from './gcp-packer-command-handler';
 import { PackerCommandHandlerOCI } from './oci-packer-command-handler';
 import { PackerCommandHandlerVSphere } from './vsphere-packer-command-handler';
 import { PackerCommandHandlerNone } from './none-packer-command-handler';
-import { EnvironmentVariableHelper } from './environment-variables';
+import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 
 export class ParentCommandHandler {
     private activeHandler: BasePackerCommandHandler | null = null;

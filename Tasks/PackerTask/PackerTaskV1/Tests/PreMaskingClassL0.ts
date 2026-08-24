@@ -6,7 +6,7 @@ import * as crypto from 'crypto';
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerCommandHandlerOCI } from '../src/oci-packer-command-handler';
 import { PackerAuthorizationCommandInitializer } from '../src/packer-commands';
-import { EnvironmentVariableHelper } from '../src/environment-variables';
+import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 import { getSecureVarFileArgs, ISecureFileLoader } from '../src/secure-file-loader';
 
 /**

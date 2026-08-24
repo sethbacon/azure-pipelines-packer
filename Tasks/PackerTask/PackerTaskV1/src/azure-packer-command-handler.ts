@@ -1,8 +1,7 @@
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
-import { EnvironmentVariableHelper } from './environment-variables';
-import { generateIdToken } from './id-token-generator';
+import { EnvironmentVariableHelper, generateIdToken } from '@4cloudguru/pipeline-task-ado';
 import {
     assertIdentityValue,
     neutralizeEnvironmentVariables,
