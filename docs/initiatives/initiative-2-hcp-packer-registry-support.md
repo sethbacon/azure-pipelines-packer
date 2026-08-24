@@ -96,7 +96,8 @@ HCP Packer registry is **not** a new `provider` enum value. It's an orthogonal o
   `hcpProjectId` is left blank, emit `tasks.warning(...)` explaining this fallback. `HCP_ORGANIZATION_ID` is
   optional in practice (auto-resolves via a List Organizations call that requires exactly one org, true for
   virtually all real setups) — no org-ID input needed.
-- **Critical WIF gotcha:** Azure DevOps' OIDC token generator (`id-token-generator.ts`) never sets a
+- **Critical WIF gotcha:** Azure DevOps' OIDC token generator (`generateIdToken()`, now
+  `@4cloudguru/pipeline-task-ado`) never sets a
   custom `aud` — every ADO token carries the fixed audience `api://AzureADTokenV2` (already documented
   in `docs/wif-setup.md`'s "Security note" for AWS/GCP/Azure). HCP's *default* expected audience for a
   workload identity provider is the provider's own resource name, so creating the HCP workload identity
@@ -243,7 +244,7 @@ HCP Packer registry is **not** a new `provider` enum value. It's an orthogonal o
 - `Tasks/PackerTask/PackerTaskV1/task.json` — new `hcpRegistry` input group
 - `Tasks/PackerTask/PackerTaskV1/src/base-packer-command-handler.ts` — `applyHcpPackerRegistryAuth()`, new `execWithLineScan()` helper + `build()` bounded line-scan parsing (not full-log capture), the new `/^HCP_/` `MANAGED_ENV_PATTERNS` entry **and updated collision-warning message text**, wire into `validate()`/`build()`/`inspect()`/`console()`/`custom()`
 - `Tasks/PackerTask/PackerTaskV1/src/hcp-credential-file.ts` (NEW) — pure credential-file JSON builder (`workload.env` source) + resource-name shape validation
-- `Tasks/PackerTask/PackerTaskV1/src/id-token-generator.ts` — reused as-is (`generateIdToken()`); `secure-temp.ts`/`writeTrackedSecretFile` reused for the credential-file JSON only (no longer for the JWT)
+- `@4cloudguru/pipeline-task-ado`'s `generateIdToken()` — reused as-is; its `writeSecretFile` reused for the credential-file JSON only (no longer for the JWT)
 - `azure-devops-extension.json` — new `PTPHCPServiceEndpoint` contribution
 - `docs/yaml-examples.md`, `docs/wif-setup.md`, `docs/troubleshooting.md`, `README.md`, `overview.md`, `CLAUDE.md`
 - `Tasks/PackerTask/PackerTaskV1/Tests/*` — new test pairs, **plus explicit `expectX('HcpStaticAuth')`-style

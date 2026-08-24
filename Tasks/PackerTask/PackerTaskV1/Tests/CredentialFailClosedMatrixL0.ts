@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
-import idTokenGeneratorModule = require('../src/id-token-generator');
+import idTokenGeneratorModule = require('@4cloudguru/pipeline-task-ado');
 import { PackerCommandHandlerAzureRM } from '../src/azure-packer-command-handler';
 import { PackerCommandHandlerAWS } from '../src/aws-packer-command-handler';
 import { PackerCommandHandlerGCP } from '../src/gcp-packer-command-handler';
@@ -12,7 +12,7 @@ import { PackerCommandHandlerVSphere } from '../src/vsphere-packer-command-handl
 import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
 import { BasePackerCommandHandler } from '../src/base-packer-command-handler';
 import { PackerAuthorizationCommandInitializer } from '../src/packer-commands';
-import { EnvironmentVariableHelper } from '../src/environment-variables';
+import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * THE CLASS TEST for the provider-auth fail-open defect class

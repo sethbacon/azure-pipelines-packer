@@ -2,7 +2,7 @@
 
 This guide covers the one-time cloud-side configuration needed to use Workload Identity Federation (WIF/OIDC) instead of long-lived static credentials with the **Pipeline Tasks for Packer** extension. WIF is supported for `azurerm`, `aws`, and `gcp`. OCI and vSphere authenticate with a service-connection API key / username-password and do not support WIF in this extension.
 
-WIF eliminates storing a cloud secret in Azure DevOps. Instead, the pipeline requests a short-lived OIDC token from Azure DevOps (`id-token-generator.ts`), and the target cloud exchanges that token for temporary credentials via its own federation mechanism.
+WIF eliminates storing a cloud secret in Azure DevOps. Instead, the pipeline requests a short-lived OIDC token from Azure DevOps (`generateIdToken()`, from `@4cloudguru/pipeline-task-ado`), and the target cloud exchanges that token for temporary credentials via its own federation mechanism.
 
 ## Security note: the token has ADO's default audience
 
@@ -136,7 +136,7 @@ The task writes an `external_account` credentials JSON file pointing at the ADO 
 
 The ADO OIDC ID token is **short-lived — minutes, not hours**. Azure DevOps chooses the exact lifetime and has shortened it before, so this extension does not encode a figure and neither does this guide; treat it as "expires during a long build" rather than as a number you can plan against.
 
-What this repo *can* state, because it is a property of the code rather than of ADO's issuing policy: **the token is fetched exactly once, at the start of the command, and is never refetched or refreshed for the life of the build.** `src/id-token-generator.ts` has no expiry handling and no refresh path — it acquires the token, retries only transport failures, and returns. The token is then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE` / the GCP `external_account` credential source points at). It is a client assertion, exchanged once by the cloud SDK for an access token or role session; that exchanged credential has its own, longer lifetime, and it is not refreshed from the ADO token either.
+What this repo *can* state, because it is a property of the code rather than of ADO's issuing policy: **the token is fetched exactly once, at the start of the command, and is never refetched or refreshed for the life of the build.** `generateIdToken()` (`@4cloudguru/pipeline-task-ado`) has no expiry handling and no refresh path — it acquires the token, retries only transport failures, and returns. The token is then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE` / the GCP `external_account` credential source points at). It is a client assertion, exchanged once by the cloud SDK for an access token or role session; that exchanged credential has its own, longer lifetime, and it is not refreshed from the ADO token either.
 
 A Packer build that runs longer than the exchanged credential's lifetime will start failing cloud API calls partway through. For Azure specifically, `packer-plugin-azure`'s calls to Entra will start returning **`AADSTS700024: Client assertion is not within its valid time range`** — this is a well-known failure mode for Azure DevOps-issued OIDC tokens on long-running operations (see Microsoft's WIF troubleshooting guidance for `AADSTS700024`). AWS and GCP builds can fail similarly once the assumed role session or Workload Identity Pool token expires.
 

@@ -104,6 +104,18 @@ const PACKAGE_DELEGATED_SINKS = {
         // Both floors passed throughout. Hence the resolved check below.
         carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.5.0' },
     },
+    // generateIdToken (#46 extraction): the OIDC token exchange's fetch(), and
+    // the proxy decision that wraps it (buildAdoFetchOptions), both moved into
+    // @4cloudguru/pipeline-task-ado -- there is no local fetchOptions to
+    // inspect here either. Same onward-delegation shape as createAdoHttpClient
+    // above: the package's own buildAdoFetchOptions calls resolveProxy from
+    // pipeline-task-core, so a stale nested copy of THAT package would run old
+    // proxy logic even with a fresh ado floor.
+    generateIdToken: {
+        pkg: '@4cloudguru/pipeline-task-ado',
+        min: '0.5.0',
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.6.0' },
+    },
 };
 
 /**

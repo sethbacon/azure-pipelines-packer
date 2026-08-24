@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
-import { EnvironmentVariableHelper } from '../src/environment-variables';
+import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * CLASS TEST — how a passthrough `environmentVariables` entry is classified
