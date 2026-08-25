@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.4...v1.3.5) (2026-08-25)
+
+
+### Bug Fixes
+
+* **ci:** record zizmor findings as well as blocking on them ([#323](https://github.com/sethbacon/azure-pipelines-packer/issues/323)) ([ed1110b](https://github.com/sethbacon/azure-pipelines-packer/commit/ed1110bb6716b227ae91f800c7cdeec8ebe389a1))
+* **ci:** resolve a delegated sink's origin before attributing it to a package ([#325](https://github.com/sethbacon/azure-pipelines-packer/issues/325)) ([1e9dd45](https://github.com/sethbacon/azure-pipelines-packer/commit/1e9dd458384508e342f25462f16daf4881be2d43))
+
 ## [1.3.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.3...v1.3.4) (2026-08-24)
 
 
