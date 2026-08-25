@@ -124,6 +124,35 @@ const PACKAGE_DELEGATED_SINKS = {
  * the six-line task-side adapter that hands it the agent's proxy configuration
  * and the log masker, and is what a call site actually names.
  */
+/**
+ * The identifiers this file binds to `sink` from `pkg` -- usually just `sink`
+ * itself, or its alias under `import { sink as other }`.
+ *
+ * Returning the LOCAL names rather than a boolean is what makes an aliased
+ * import visible: the call site names the alias, so a scan for the original
+ * would miss it entirely and the site would leave the inventory silently --
+ * the failure mode this file exists to prevent.
+ *
+ * A file that defines the function itself, or imports it from a relative path,
+ * binds nothing here and is correctly not treated as a package delegation.
+ */
+function packageBoundNames(source, sink, pkg) {
+    const esc = pkg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const names = new Set();
+    const named = new RegExp(`import\\s*(?:type\\s+)?\\{([^}]*)\\}\\s*from\\s*['"]${esc}['"]`, 'g');
+    const destructured = new RegExp(`(?:const|let|var)\\s*\\{([^}]*)\\}\\s*=\\s*require\\(\\s*['"]${esc}['"]`, 'g');
+    for (const re of [named, destructured]) {
+        let m;
+        while ((m = re.exec(source)) !== null) {
+            for (const part of m[1].split(',')) {
+                const [orig, alias] = part.trim().split(/\s+as\s+|:/).map((x) => (x || '').trim());
+                if (orig === sink) names.add(alias || orig);
+            }
+        }
+    }
+    return names;
+}
+
 const PROXY_AGENT_BUILDERS = ['buildProxyAgent', 'createProxyTunnelAgent'];
 
 /**
@@ -487,11 +516,30 @@ for (const file of files) {
     }
 
     for (const [sink, spec] of Object.entries(PACKAGE_DELEGATED_SINKS)) {
-        const re = new RegExp(`(?<![.\\w$])${sink}\\s*\\(`, 'g');
-        let m;
-        while ((m = re.exec(masked)) !== null) {
-            const { ok, why } = packageDelegationVerdict(file, spec);
-            record(m.index, sink, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED', why);
+        // Only the names THIS file binds to that package's export. Matching the
+        // sink name alone attributes any same-named function to the package,
+        // which is wrong in both directions: a local `generateIdToken` gets a
+        // version floor it has no relationship to, and its real sink -- the
+        // fetch() inside it -- is counted a second time under the wrapper.
+        //
+        // That is not hypothetical. azure-pipelines-terraform DEFINES
+        // generateIdToken locally in id-token-generator.ts and its callers
+        // import it from './id-token-generator'; this copy reported all six call
+        // sites UNPROXIED for "declares no dependency on @4cloudguru/pipeline-task-ado",
+        // which is true and irrelevant, while separately -- and correctly --
+        // classifying the fetch() inside that same function as PROXIED.
+        // 23 sites where the local copy found 17.
+        // Import specifiers are STRING LITERALS, so they are gone from `masked`.
+        // Bindings must be read from the raw source; the call sites are still
+        // matched against `masked` so a name inside a string or comment cannot
+        // be mistaken for a call.
+        for (const local of packageBoundNames(source, sink, spec.pkg)) {
+            const re = new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g');
+            let m;
+            while ((m = re.exec(masked)) !== null) {
+                const { ok, why } = packageDelegationVerdict(file, spec);
+                record(m.index, local, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED', why);
+            }
         }
     }
 

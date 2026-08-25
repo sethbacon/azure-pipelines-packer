@@ -61,6 +61,12 @@ jobs:
         run: node scripts/check-package-composition.js
       - name: Self-test check-minor-bumps.js
         run: node scripts/test-check-minor-bumps.js
+      # check-proxy-parity has been wrong twice -- once reporting no call sites
+      # for a task that makes them, once attributing a locally defined function
+      # to a package by name alone. Both changed the inventory silently, which
+      # is the one failure a coverage gate must not have.
+      - name: Self-test check-proxy-parity.js
+        run: node scripts/test-check-proxy-parity.js
       - name: Self-test bump-minor-versions.js
         run: node scripts/test-bump-minor-versions.js
       - name: Self-test publish-marketplace.js
