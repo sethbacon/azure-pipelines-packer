@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "14",
+        "Minor": "15",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",

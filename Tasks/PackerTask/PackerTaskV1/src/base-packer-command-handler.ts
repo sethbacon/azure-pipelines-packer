@@ -2,7 +2,7 @@ import { PackerToolHandler, IPackerToolHandler } from './packer';
 import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
 import { getSecureVarFileArgs, SecureFileLoader } from './secure-file-loader';
-import { EnvironmentVariableHelper, writeSecretFile, generateIdToken } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, writeSecretFile, generateIdToken, getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
 import path = require('path');
 import fs = require('fs');
@@ -65,17 +65,17 @@ export abstract class BasePackerCommandHandler {
     }
 
     /**
-     * Reads a boolean input, returning `defaultValue` when the input is unset.
-     * Use this for inputs that default to `true`; `tasks.getBoolInput(name, false)`
-     * always defaults to `false` and is fine for false-defaulting inputs.
-     * Intentionally duplicated as a free function in the PackerInstaller task
-     * (packer-installer.ts): the two tasks are bundled separately and share no
-     * module, mirroring the annotated http-client.ts duplication.
+     * Reads a boolean input that defaults to `true` when unset.
+     *
+     * Delegates to the shared `getBoolInputDefaultTrue` from
+     * @4cloudguru/pipeline-task-ado. The former local body compared against the
+     * lowercase literal `'true'`, so the capitalized form YAML produces for an
+     * unquoted `fmtCheck: true` read as FALSE and silently skipped the check
+     * (#331). Kept as a thin protected method so subclasses keep their call
+     * shape; the parsing itself is no longer this repo's to get wrong.
      */
-    protected getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
-        const value = tasks.getInput(name, false);
-        if (value === undefined || value === '') return defaultValue;
-        return value === 'true';
+    protected getBoolInputDefaultTrue(name: string): boolean {
+        return getBoolInputDefaultTrue(name);
     }
 
     /** Auth schemes shared by the AWS and GCP handlers (both support static-credential and WIF service connections). */
@@ -437,7 +437,7 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         // Defaults to check mode: a formatting diff fails the task.
-        if (this.getBoolInputWithDefault("fmtCheck", true)) {
+        if (this.getBoolInputDefaultTrue("fmtCheck")) {
             tool.arg('-check');
             tool.arg('-diff');
         }
@@ -484,7 +484,7 @@ export abstract class BasePackerCommandHandler {
         const command = this.createBaseCommand("fix");
         const tool = this.packerToolHandler.createToolRunner(command);
 
-        if (!this.getBoolInputWithDefault("fixValidate", true)) {
+        if (!this.getBoolInputDefaultTrue("fixValidate")) {
             tool.arg('-validate=false');
         }
         this.applyCommandOptions(tool);
