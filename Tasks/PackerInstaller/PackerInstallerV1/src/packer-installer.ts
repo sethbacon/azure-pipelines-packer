@@ -20,6 +20,7 @@ import {
     redactUrlUserInfo,
     scrubSecretsFromMessage,
 } from '@4cloudguru/pipeline-task-core';
+import { getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
 
 // The package takes the debug sink as a parameter rather than importing the ADO
 // task lib itself; passing it keeps the discard visible in the build log.
@@ -78,16 +79,16 @@ function maskOperatorUrlCredentials(url: string): void {
 }
 
 /**
- * Reads a boolean input that must fail closed even if task.json's default is not injected (e.g. headless/mock invocations).
- * Intentionally duplicated as a protected method in the PackerTask handler
- * (base-packer-command-handler.ts): the two tasks are bundled separately and
- * share no module, mirroring the annotated http-client.ts duplication.
+ * Reads a boolean input that must fail closed even if task.json's default is not
+ * injected (e.g. headless/mock invocations).
+ *
+ * Now the shared `getBoolInputDefaultTrue` from @4cloudguru/pipeline-task-ado
+ * rather than a local copy. The former local copy compared against the lowercase
+ * literal `'true'`, so the capitalized form YAML produces for an unquoted
+ * `requireChecksum: true` read as FALSE and silently disabled verification (#331).
+ * The two tasks in this extension no longer "share no module" — both depend on
+ * pipeline-task-ado — so the duplication that let this drift is gone with it.
  */
-function getBoolInputWithDefault(name: string, defaultValue: boolean): boolean {
-    const value = tasks.getInput(name, false);
-    if (value === undefined || value === '') return defaultValue;
-    return value === 'true';
-}
 
 /**
  * Races tools.downloadTool (azure-pipelines-tool-lib's typed-rest-client based
@@ -351,7 +352,7 @@ async function downloadZipFromHashiCorp(version: string): Promise<DownloadedZip>
     const sha256SumsSigUrl = `${sha256SumsUrl}.sig`;
 
     const sha256SumsContent = await fetchText(sha256SumsUrl);
-    const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
+    const requireGpg = getBoolInputDefaultTrue("requireGpgSignature");
     // Verification failures discard the zip rather than leaving a rejected —
     // possibly tampered — artifact on the agent's disk (#204).
     await discardArtifactOnFailure(zipPath, async () => {
@@ -433,7 +434,7 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
         throw new Error(tasks.loc("PackerDownloadFailed", safeUrl, safeMsg));
     }
 
-    const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
+    const requireChecksum = getBoolInputDefaultTrue("requireChecksum");
     if (data.sha256) {
         await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, data.sha256), discardLog);
         return { zipPath, verified: true };
@@ -488,8 +489,8 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
     // mirrorBaseUrl userinfo; render it credential-free (the userinfo is also
     // setSecret-masked by maskOperatorUrlCredentials above).
     const safeSha256SumsUrl = redactUrlUserInfo(sha256SumsUrl);
-    const requireChecksum = getBoolInputWithDefault("requireChecksum", true);
-    const requireGpg = getBoolInputWithDefault("requireGpgSignature", true);
+    const requireChecksum = getBoolInputDefaultTrue("requireChecksum");
+    const requireGpg = getBoolInputDefaultTrue("requireGpgSignature");
 
     // A missing SHA256SUMS (HTTP 404) means the mirror published no checksum; any
     // other fetch error (5xx / network) is transient and left to throw (fatal).
@@ -674,7 +675,7 @@ async function reverifyUnmarkedCacheEntry(
     cachedPackerPath: string,
     downloadVerifiedZip: () => Promise<string>,
 ): Promise<void> {
-    if (!getBoolInputWithDefault("requireChecksum", true)) {
+    if (!getBoolInputDefaultTrue("requireChecksum")) {
         tasks.debug(`Cache hit for ${toolLabel}: no usable cache-integrity hash and requireChecksum is false; skipping remote re-verification.`);
         return;
     }
@@ -686,7 +687,9 @@ async function reverifyUnmarkedCacheEntry(
         if (isVerificationFailure(error)) {
             throw error;
         }
-        if (getBoolInputWithDefault("requireOnlineReverification", false)) {
+        // Default-false switch: task-lib's own getBoolInput is already case-insensitive
+    // and defaults to false, which is exactly the opt-IN semantics wanted here.
+    if (tasks.getBoolInput("requireOnlineReverification", false)) {
             throw new Error(tasks.loc("CachedToolReverificationSourceUnreachable", toolLabel, error instanceof Error ? error.message : String(error)));
         }
         tasks.warning(tasks.loc("CachedToolReverificationUnavailable", toolLabel, error instanceof Error ? error.message : String(error)));

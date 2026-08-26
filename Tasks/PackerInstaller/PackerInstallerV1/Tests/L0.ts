@@ -139,6 +139,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryUrlInvalidReject');   // #139: insecure/malformed registryUrl input rejected before any fetch
     expectFailure('CacheHitHashMismatchFail');   // #136: cache-hit re-verification catches local tampering/corruption
     expectFailure('MirrorMissingChecksumFail');
+    expectFailure('MirrorChecksumCapitalTrueFail');  // #331: 'True' from unquoted YAML must keep verification ON
     expectFailure('RegistryMirrorNameInvalidReject');
     expectFailure('MirrorSumsMissingEntryFail');       // #111: SUMS published but our artifact isn't listed in it
 

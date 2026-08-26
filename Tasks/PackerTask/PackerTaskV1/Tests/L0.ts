@@ -96,6 +96,7 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('ValidateSyntaxOnly');
     expectSuccess('InitUpgrade');
     expectSuccess('FmtCheckSuccess');
+    expectFailure('FmtCheckCapitalTrueFail');  // #331: 'True' from unquoted YAML must keep -check ON
     expectSuccess('PluginsInstalled');
     expectSuccess('PluginsInstall');
     expectSuccess('VersionSuccess');
