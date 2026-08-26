@@ -178,6 +178,35 @@ describe('PackerInstaller Test Suite', function () {
         }, tr);
     });
 
+    // #330: the SAME refusal, on the registry source's own operator-supplied URL.
+    // Both legs reach the network before any registry-chosen download_url exists,
+    // which is why the existing download_url guard could not cover them.
+    it('RegistryUrlPrivateHostRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryUrlPrivateHostRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a registryUrl on the metadata address must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_RegistryDownloadHostIsPrivate 169.254.169.254'),
+                'the refusal must use RegistryDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    it('RegistryUrlLoopbackRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryUrlLoopbackRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a registryUrl on loopback must be refused even with a pinned version');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_RegistryDownloadHostIsPrivate 127.0.0.1'),
+                'the refusal must use RegistryDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
     // --- 'latest' checkpoint resolution fails closed: neither an unreachable API
     // (#78) nor a malformed response (#106) may silently install a pinned version ---
     expectFailure('HashiCorpLatestCheckpointDownFail');

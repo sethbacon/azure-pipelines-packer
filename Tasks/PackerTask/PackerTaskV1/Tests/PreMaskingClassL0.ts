@@ -102,7 +102,7 @@ const SOURCE_SITES: SourceSite[] = [
         mechanism: 'M5',
         site: 'PackerInstallerV1/src/packer-installer.ts:getValidatedRegistryUrl (operator userinfo)',
         file: path.join(INSTALLER_SRC, 'packer-installer.ts'),
-        guard: /function getValidatedRegistryUrl\(\): string \{[\s\S]{0,600}?maskOperatorUrlCredentials\(registryUrl\);[\s\S]{0,600}?tasks\.loc\("InsecureUrlRejected", redactUrlUserInfo\(registryUrl\)\)/,
+        guard: /function getValidatedRegistryUrl\(\): Promise<string> \{[\s\S]{0,900}?maskOperatorUrlCredentials\(registryUrl\);[\s\S]{0,900}?tasks\.loc\("InsecureUrlRejected", redactUrlUserInfo\(registryUrl\)\)/,
         defect: /tasks\.loc\("InsecureUrlRejected", registryUrl\)/,
     },
     {
