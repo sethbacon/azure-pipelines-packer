@@ -109,7 +109,7 @@ const SOURCE_SITES: SourceSite[] = [
         mechanism: 'M5',
         site: 'PackerInstallerV1/src/packer-installer.ts:resolveVersionFromRegistry (operator userinfo)',
         file: path.join(INSTALLER_SRC, 'packer-installer.ts'),
-        guard: /maskOperatorUrlCredentials\(registryUrl\);\s*\n\s*console\.log\(tasks\.loc\("ResolvingLatestFromRegistry", redactUrlUserInfo\(registryUrl\)\)\);/,
+        guard: /maskOperatorUrlCredentials\(registryUrl\);[\s\S]{0,600}?console\.log\(tasks\.loc\("ResolvingLatestFromRegistry", redactUrlUserInfo\(registryUrl\)\)\);/,
         defect: /console\.log\(tasks\.loc\("ResolvingLatestFromRegistry", registryUrl\)\)/,
     },
     {

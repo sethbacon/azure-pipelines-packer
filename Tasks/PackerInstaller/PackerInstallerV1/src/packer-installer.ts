@@ -218,7 +218,8 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
         case "registry": {
             const registryUrl = await getValidatedRegistryUrl();
             const mirrorName = getValidatedMirrorName();
-            resolvedVersion = await resolveVersionFromRegistry(inputVersion, registryUrl, mirrorName);
+            resolvedVersion = await resolveVersionFromRegistry(inputVersion, registryUrl, mirrorName, hostname =>
+                assertEgressHostAllowed(hostname, parseAllowedHosts(tasks.getInput("registryAllowedHosts", false)), REGISTRY_EGRESS_MESSAGES));
             break;
         }
         default: // "hashicorp" and "mirror" both use the HashiCorp checkpoint for 'latest'
@@ -335,13 +336,17 @@ async function resolveVersionFromHashiCorp(inputVersion: string): Promise<string
     return data.current_version;
 }
 
-async function resolveVersionFromRegistry(inputVersion: string, registryUrl: string, mirrorName: string): Promise<string> {
+async function resolveVersionFromRegistry(inputVersion: string, registryUrl: string, mirrorName: string, authorizeHost: (hostname: string) => Promise<void>): Promise<string> {
     if (inputVersion.toLowerCase() !== 'latest') {
         return inputVersion;
     }
     // registryUrl may embed basic-auth userinfo; mask it before it can reach a log
     // via latestUrl in the console line or error below.
     maskOperatorUrlCredentials(registryUrl);
+    // getValidatedRegistryUrl() already authorized this host, but that is a property
+    // of the caller's ordering rather than of this request. Re-asserting here keeps
+    // the guarantee local and machine-checkable (#330).
+    await authorizeHost(new URL(registryUrl).hostname);
     console.log(tasks.loc("ResolvingLatestFromRegistry", redactUrlUserInfo(registryUrl)));
     const latestUrl = `${registryUrl}/terraform/binaries/${mirrorName}/versions/latest`;
     const data = await fetchJson<{ version: string }>(latestUrl);
