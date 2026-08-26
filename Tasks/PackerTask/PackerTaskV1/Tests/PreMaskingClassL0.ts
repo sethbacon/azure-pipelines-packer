@@ -296,6 +296,18 @@ describe('Pre-mask defect class — credential emitted before it was registered 
             assert.strictEqual(process.env[PRIVATE_KEY_ENV], undefined,
                 'the ENDPOINT_DATA_* private key must be deleted from the environment once read');
 
+            // (c) Masking alone is not enough. Build ATTACHMENTS are not passed
+            //     through the agent's masker, so a value that was only setSecret()'d
+            //     is protected there by an entropy heuristic and nothing else. Each
+            //     key line must also be registered for the exact-match scrub.
+            const tracked = EnvironmentVariableHelper.getTrackedSecretValues();
+            for (const line of bodyLines) {
+                assert.ok(
+                    tracked.includes(line),
+                    'every OCI private key line must be registered for the exact-match scrub, not merely masked',
+                );
+            }
+
             handler.cleanupTempFiles();
         });
 
