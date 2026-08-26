@@ -166,13 +166,14 @@ const REGISTRY_EGRESS_MESSAGES: EgressHostMessages = {
 };
 
 /**
- * Reads and validates registryUrl: must parse as a well-formed absolute URL and use
+ * Reads and validates registryUrl: must parse as a well-formed absolute URL, use
  * HTTPS (task.json's helpMarkDown already promises this; previously nothing enforced
- * it before the raw string was interpolated into request paths — see #139). Returns
- * the input with any trailing slash(es) stripped so `${registryUrl}/terraform/...`
- * concatenation never produces a double slash.
+ * it before the raw string was interpolated into request paths — see #139), and name
+ * a host this task is authorized to reach (#330). Returns the input with any trailing
+ * slash(es) stripped so `${registryUrl}/terraform/...` concatenation never produces a
+ * double slash.
  */
-function getValidatedRegistryUrl(): string {
+async function getValidatedRegistryUrl(): Promise<string> {
     const registryUrl = tasks.getInput("registryUrl", true)!;
     // registryUrl may embed basic-auth userinfo (https://user:password@host/...,
     // a real pattern for internal artifact proxies). Mask it BEFORE the first
@@ -187,6 +188,24 @@ function getValidatedRegistryUrl(): string {
     if (parsed.protocol !== 'https:') {
         throw new Error(tasks.loc("InsecureUrlRejected", redactUrlUserInfo(registryUrl)));
     }
+    // #330: authorize registryUrl's OWN host, matching what the mirror source does
+    // to mirrorBaseUrl. Previously this guard was applied only to the download_url
+    // the registry hands back, which cannot cover the two requests made BEFORE any
+    // download_url exists (version resolution and the info fetch). Those requests
+    // went to whatever host the operator named — including the cloud metadata
+    // service — and because registryUrl explicitly supports basic-auth userinfo,
+    // the registry credential was sent along with them.
+    //
+    // Authorizing here rather than at the call sites means every present and future
+    // consumer of this URL inherits the check; there is no way to obtain the
+    // validated URL without having passed it.
+    //
+    // Default (registryAllowedHosts empty) is the baseline private/reserved refusal,
+    // so an ordinary public registry is unaffected; an operator whose registry
+    // legitimately lives on a private address pins it explicitly, exactly as the
+    // mirror source requires.
+    const registryAllowedHosts = parseAllowedHosts(tasks.getInput("registryAllowedHosts", false));
+    await assertEgressHostAllowed(parsed.hostname, registryAllowedHosts, REGISTRY_EGRESS_MESSAGES);
     return registryUrl.replace(/\/+$/, '');
 }
 
@@ -197,7 +216,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
     let resolvedVersion: string;
     switch (downloadSource) {
         case "registry": {
-            const registryUrl = getValidatedRegistryUrl();
+            const registryUrl = await getValidatedRegistryUrl();
             const mirrorName = getValidatedMirrorName();
             resolvedVersion = await resolveVersionFromRegistry(inputVersion, registryUrl, mirrorName);
             break;
@@ -227,7 +246,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
         let zipPath: string;
         switch (downloadSource) {
             case "registry": {
-                const registryUrl = getValidatedRegistryUrl();
+                const registryUrl = await getValidatedRegistryUrl();
                 const mirrorName = getValidatedMirrorName();
                 ({ zipPath, verified } = await downloadZipFromRegistry(version, registryUrl, mirrorName));
                 // Strip any embedded basic-auth userinfo before persisting the source
@@ -722,7 +741,7 @@ async function reverifyUnmarkedCacheEntry(
 async function downloadVerifiedZipForReverify(downloadSource: string, version: string): Promise<string> {
     switch (downloadSource) {
         case "registry":
-            return (await downloadZipFromRegistry(version, getValidatedRegistryUrl(), getValidatedMirrorName())).zipPath;
+            return (await downloadZipFromRegistry(version, await getValidatedRegistryUrl(), getValidatedMirrorName())).zipPath;
         case "mirror":
             return (await downloadZipFromMirror(version, tasks.getInput("mirrorBaseUrl", true)!)).zipPath;
         default: // "hashicorp"

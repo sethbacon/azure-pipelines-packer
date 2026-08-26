@@ -143,7 +143,7 @@ const SITE_ROWS: SiteRow[] = [
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',
         fn: 'resolveVersionFromRegistry', sink: 'fetchJson', verdict: 'EXEMPT-OPERATOR-DECLARED',
-        why: 'destination is the registryUrl the pipeline author typed, HTTPS-pinned, and fetchWithTimeout refuses any off-host redirect — no third party chooses this host',
+        why: 'registryUrl, now egress-authorized at its validation boundary in getValidatedRegistryUrl() (#330) — the scanner verdict is still EXEMPT because it reasons about the sink\'s own function, but the host reaching this line has already been resolved and refused if private/unpinned. NOTE: the scanner\'s EXEMPT-OPERATOR-DECLARED rule is itself unsound as a security argument — "the pipeline author typed it" is not an authorization decision, which is exactly how this site went unguarded (#330). The rule is being narrowed separately; this row must become AUTHORIZED when it is.',
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',
