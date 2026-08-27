@@ -218,6 +218,7 @@ describe('Pre-mask defect class — credential emitted before it was registered 
             warning: t.warning,
             getInput: t.getInput,
             getVariable: t.getVariable,
+            getEndpointAuthorizationParameter: t.getEndpointAuthorizationParameter,
         };
 
         let setSecretCalls: string[] = [];
@@ -265,6 +266,7 @@ describe('Pre-mask defect class — credential emitted before it was registered 
             t.warning = orig.warning;
             t.getInput = orig.getInput;
             t.getVariable = orig.getVariable;
+            t.getEndpointAuthorizationParameter = orig.getEndpointAuthorizationParameter;
             delete process.env[PRIVATE_KEY_ENV];
             for (const name of Object.keys(OCI_DATA_ENV)) delete process.env[name];
             EnvironmentVariableHelper.clearTrackedVariables();
@@ -309,6 +311,58 @@ describe('Pre-mask defect class — credential emitted before it was registered 
             }
 
             handler.cleanupTempFiles();
+        });
+
+        // #185: the privatekey descriptor moved under the endpoint's auth scheme so
+        // ADO vaults it and seeds the agent's masker at job start. Connections made
+        // before that change still deliver it as endpoint DATA, so both paths must
+        // work and neither may be silently skipped.
+        it('reads the vaulted auth parameter when the connection supplies one', async () => {
+            const pem = multilinePem();
+            // Auth-scheme delivery: nothing in ENDPOINT_DATA_*_PRIVATEKEY at all.
+            delete process.env[PRIVATE_KEY_ENV];
+            t.getEndpointAuthorizationParameter = (_id: string, key: string) =>
+                (key === 'privateKey' ? pem : undefined);
+
+            const handler = new PackerCommandHandlerOCI();
+            await handler.handleProvider(new PackerAuthorizationCommandInitializer('build', '', 'OCI'));
+
+            const tracked = EnvironmentVariableHelper.getTrackedSecretValues();
+            const bodyLines = pem.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('-----'));
+            for (const line of bodyLines) {
+                assert.ok(tracked.includes(line), 'the auth-delivered key must still be registered for the exact-match scrub');
+                assert.ok(!debugLines.some((d) => d.includes(line)), 'no ##vso[task.debug] line may contain the key');
+            }
+            handler.cleanupTempFiles();
+        });
+
+        it('prefers the auth parameter over a legacy data parameter when both are present', async () => {
+            const authPem = multilinePem();
+            const dataPem = multilinePem();
+            assert.notStrictEqual(authPem, dataPem, 'sanity: the two fixtures differ');
+            process.env[PRIVATE_KEY_ENV] = dataPem;
+            t.getEndpointAuthorizationParameter = (_id: string, key: string) =>
+                (key === 'privateKey' ? authPem : undefined);
+
+            const handler = new PackerCommandHandlerOCI();
+            await handler.handleProvider(new PackerAuthorizationCommandInitializer('build', '', 'OCI'));
+
+            const tracked = EnvironmentVariableHelper.getTrackedSecretValues();
+            const authBody = authPem.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('-----'));
+            assert.ok(authBody.every((l) => tracked.includes(l)), 'the auth-delivered key is the one that must be used');
+            handler.cleanupTempFiles();
+        });
+
+        it('fails closed when neither delivery carries the key', async () => {
+            delete process.env[PRIVATE_KEY_ENV];
+            t.getEndpointAuthorizationParameter = () => undefined;
+
+            const handler = new PackerCommandHandlerOCI();
+            await assert.rejects(
+                handler.handleProvider(new PackerAuthorizationCommandInitializer('build', '', 'OCI')),
+                /field 'privateKey' is missing or empty/,
+                'an absent key must not fall through to the agent\'s ambient credentials',
+            );
         });
 
         it('M2 — PackerTaskV1/src/oci-packer-command-handler.ts:writeKeyFile (genuine multi-line PEM)', async () => {

@@ -254,7 +254,20 @@
                         "properties": {
                             "name": "None",
                             "displayName": "OCI No authentication"
-                        }
+                        },
+                        "inputDescriptors": [
+                            {
+                                "id": "privatekey",
+                                "name": "Private key",
+                                "description": "The OCI secret private key",
+                                "inputMode": "passwordbox",
+                                "isConfidential": true,
+                                "validation": {
+                                    "isRequired": true,
+                                    "dataType": "string"
+                                }
+                            }
+                        ]
                     }
                 ],
                 "inputDescriptors": [
@@ -297,17 +310,6 @@
                         "description": "The OCI private key fingerprint",
                         "inputMode": "textbox",
                         "isConfidential": false,
-                        "validation": {
-                            "isRequired": true,
-                            "dataType": "string"
-                        }
-                    },
-                    {
-                        "id": "privatekey",
-                        "name": "Private key",
-                        "description": "The OCI secret private key",
-                        "inputMode": "passwordbox",
-                        "isConfidential": true,
                         "validation": {
                             "isRequired": true,
                             "dataType": "string"

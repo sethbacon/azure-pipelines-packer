@@ -75,14 +75,16 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
             throw new Error("An OCI service connection is required for this command. Set environmentServiceNameOCI.");
         }
 
-        // Fails closed on an absent/empty key (#199), and reads it through
-        // readSecretEndpointDataParameter rather than tasks.getEndpointDataParameter
-        // (#185/#195): the latter debug-logs the value it returns, so the raw API key
-        // would be in the build log before the first setSecret below, and leaves
-        // ENDPOINT_DATA_* in process.env for the packer child to inherit. Both guards
-        // now compose inside requireSecretField(source: 'data') -- see
-        // credential-guards.ts readSecretEndpointField and endpoint-data-secret.ts.
-        const rawPrivateKey = requireSecretField(serviceName, "privateKey", { source: 'data' });
+        // The privatekey descriptor now lives under the endpoint's auth scheme, so
+        // ADO delivers it as ENDPOINT_AUTH_PARAMETER_*: vaulted by task-lib, removed
+        // from process.env, and seeded into the agent's masker at job start. None of
+        // that is true of ENDPOINT_DATA_*, which is also debug-logged at read time by
+        // tasks.getEndpointDataParameter (#185/#195).
+        //
+        // Connections created before that change still carry the value as endpoint
+        // data, so the read falls back to the hardened readSecretEndpointDataParameter
+        // rather than failing. Fails closed on an absent/empty key either way (#199).
+        const rawPrivateKey = requireSecretField(serviceName, "privateKey", { source: 'auth-migrating-from-data' });
         const keyFilePath = this.writeKeyFile(rawPrivateKey);
 
         // The strict per-field grammars this handler pioneered now live in the
