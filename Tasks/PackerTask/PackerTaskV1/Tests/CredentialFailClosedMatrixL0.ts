@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import * as fs from 'fs';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
 import idTokenGeneratorModule = require('@4cloudguru/pipeline-task-ado');
@@ -396,11 +397,18 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             // packer-plugin-azure's UseMSI() only holds while these are ALL unset.
             // client_id is never re-set on this branch (ADO's MSI-scheme connection
             // exposes no distinct client id), so an inherited one must be cleared or
-            // it silently substitutes an identity nobody configured (#332).
+            // it silently substitutes an identity nobody configured (#332). Every
+            // branch also clears ARM_METADATA_URL (#333): unlike the PKR_VAR_arm_*
+            // fields, packer-plugin-azure reads this BARE env var directly via
+            // os.Getenv, bypassing the HCL-variable injection entirely, so an
+            // inherited value redirects where the plugin resolves the Azure cloud
+            // endpoint -- and therefore where it POSTs the client_secret/client_jwt
+            // this task just minted -- regardless of auth scheme.
             site: 'azure.ManagedServiceIdentity.competing-credential-env', handler: 'azure', base: 'azure.ManagedServiceIdentity',
             competing: [
                 'PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_tenant_id',
                 'PKR_VAR_arm_client_id', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth',
+                'ARM_METADATA_URL',
             ],
         },
         {
@@ -409,11 +417,11 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             // azurerm's OIDC-refresh or az-CLI auth paths outright, outranking the
             // freshly-minted client_jwt this branch injects.
             site: 'azure.WorkloadIdentityFederation.competing-credential-env', handler: 'azure', base: 'azure.WorkloadIdentityFederation',
-            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth'],
+            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'ARM_METADATA_URL'],
         },
         {
             site: 'azure.ServicePrincipal.competing-credential-env', handler: 'azure', base: 'azure.ServicePrincipal',
-            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth'],
+            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'ARM_METADATA_URL'],
         },
         {
             site: 'gcp.static.competing-credential-env', handler: 'gcp', base: 'gcp.static',
@@ -446,6 +454,22 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             }
         });
     }
+
+    // --- OCI access_cfg_file PIN (#333) --------------------------------------
+    // Defense in depth, not a fail-closed guard: packer-plugin-oracle's
+    // ComposingConfigurationProvider already never falls back to a config file
+    // for a field this handler supplies (verified against oci-go-sdk), but only
+    // as long as every required field stays non-empty. Pinning access_cfg_file
+    // removes the file read as a fallback path entirely, regardless of that
+    // invariant.
+
+    it('pins access_cfg_file to a path that cannot resolve to a real config file: oci.static.access_cfg_file', async () => {
+        await run('oci', clone(COMPLETE['oci.static']));
+        const pinned = process.env['PKR_VAR_oci_access_cfg_file'];
+        assert.ok(pinned, 'PKR_VAR_oci_access_cfg_file must be set');
+        assert.ok(!fs.existsSync(pinned!),
+            `the pinned access_cfg_file path must not exist on disk; found a real file at '${pinned}'`);
+    });
 
     // --- SESSION-NAME ROW (#197) ---------------------------------------------
 

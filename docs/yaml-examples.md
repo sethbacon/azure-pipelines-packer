@@ -115,7 +115,7 @@ Plugin verification and source selection are performed by Packer. Keep plugin ve
 
 ### build — Azure
 
-`packer-plugin-azure` does not read `ARM_*` environment variables — its auth fields are HCL-only. The Azure connection is exposed to the template as `PKR_VAR_arm_*` variables (`PKR_VAR_arm_client_id`, `PKR_VAR_arm_subscription_id`, and either `PKR_VAR_arm_client_jwt` for Workload Identity Federation or `PKR_VAR_arm_client_secret` for a Service Principal). Declare matching variables in your template and wire them to the `azure-arm` source.
+`packer-plugin-azure`'s credential fields (`client_id`/`client_secret`/`client_jwt`/`tenant_id`/`subscription_id`) are HCL-only, not environment variables. The Azure connection is exposed to the template as `PKR_VAR_arm_*` variables (`PKR_VAR_arm_client_id`, `PKR_VAR_arm_subscription_id`, and either `PKR_VAR_arm_client_jwt` for Workload Identity Federation or `PKR_VAR_arm_client_secret` for a Service Principal). Declare matching variables in your template and wire them to the `azure-arm` source. One exception: the plugin does read the bare `ARM_METADATA_URL` environment variable directly (to select the Azure cloud endpoint) -- this task neutralizes any inherited value before each build so it can't redirect where credentials are exchanged.
 
 ```yaml
 - task: PipelinePacker@1

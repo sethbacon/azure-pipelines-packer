@@ -43,19 +43,34 @@ const ARM_WHOLESALE_CLEAR = [
 ] as const;
 
 /**
+ * `ARM_METADATA_URL` is a BARE environment variable, not a `PKR_VAR_arm_*`
+ * one: packer-plugin-azure's `setCloudEnvironment()` reads it straight via
+ * `os.Getenv`, bypassing the HCL-variable injection this handler otherwise
+ * relies on entirely (verified against `builder/azure/common/client/config.go`
+ * upstream; #333). It selects which Azure cloud's Resource Manager/Entra
+ * endpoints the plugin resolves via `environments.FromEndpoint` -- i.e. where
+ * the client_secret/client_jwt this task just minted gets POSTed during the
+ * OAuth exchange. None of the three branches below ever sets it, so an
+ * inherited value silently redirects that exchange to an attacker-chosen host
+ * regardless of auth scheme.
+ */
+const ARM_METADATA_URL_ENV = 'ARM_METADATA_URL';
+
+/**
  * Injects Azure credentials for the packer-plugin-azure builders as
  * PKR_VAR_arm_* Packer variables, matching the authorization scheme of the
  * Azure Resource Manager service connection: Workload Identity Federation
  * (OIDC), Managed Identity, or Service Principal.
  *
- * packer-plugin-azure does NOT read ARM_* environment variables (unlike the
- * Terraform azurerm provider this handler was originally modeled on) — its
- * auth fields (client_id/client_secret/client_jwt/tenant_id/subscription_id/
- * use_azure_cli_auth) are HCL-only. Credentials are therefore injected as
- * Packer variables, following the same PKR_VAR_* convention already used for
- * OCI and vSphere: the template must declare matching `variable` blocks and
- * wire them into the `azure-arm` source block. See docs/yaml-examples.md for
- * a worked example.
+ * packer-plugin-azure's identity fields (client_id/client_secret/client_jwt/
+ * tenant_id/subscription_id/use_azure_cli_auth) are HCL-only, unlike the
+ * Terraform azurerm provider this handler was originally modeled on -- so
+ * credentials are injected as Packer variables, following the same PKR_VAR_*
+ * convention already used for OCI and vSphere: the template must declare
+ * matching `variable` blocks and wire them into the `azure-arm` source block.
+ * See docs/yaml-examples.md for a worked example. One field is the exception:
+ * `ARM_METADATA_URL` (see below) is read as a bare environment variable, not
+ * HCL -- it selects the cloud endpoint, not a credential.
  */
 export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
     constructor() {
@@ -90,7 +105,7 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
             neutralizeEnvironmentVariables(['PKR_VAR_arm_subscription_id'], "Azure");
         }
 
-        neutralizeEnvironmentVariables(ARM_WHOLESALE_CLEAR, "Azure");
+        neutralizeEnvironmentVariables([...ARM_WHOLESALE_CLEAR, ARM_METADATA_URL_ENV], "Azure");
 
         switch (authorizationScheme) {
             case AuthorizationScheme.ManagedServiceIdentity:
