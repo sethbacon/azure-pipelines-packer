@@ -21,7 +21,26 @@ const ARM_IDENTITY_SELECTORS = {
     jwt: 'PKR_VAR_arm_client_jwt',
     certPath: 'PKR_VAR_arm_client_cert_path',
     tenant: 'PKR_VAR_arm_tenant_id',
+    clientId: 'PKR_VAR_arm_client_id',
+    oidcRequestUrl: 'PKR_VAR_arm_oidc_request_url',
+    oidcRequestToken: 'PKR_VAR_arm_oidc_request_token',
+    cliAuth: 'PKR_VAR_arm_use_azure_cli_auth',
 } as const;
+
+/**
+ * Cleared unconditionally before any auth branch runs (#332): none of the
+ * three branches below ever sets oidc_request_url/oidc_request_token (this
+ * handler only mints a one-shot client_jwt, never packer-plugin-azure's OIDC-
+ * refresh mode) or use_azure_cli_auth, so an inherited value re-enables a whole
+ * auth path this task never intended -- unlike client_id, which each of the
+ * WIF/ServicePrincipal branches re-establishes right after this clear.
+ */
+const ARM_WHOLESALE_CLEAR = [
+    ARM_IDENTITY_SELECTORS.clientId,
+    ARM_IDENTITY_SELECTORS.oidcRequestUrl,
+    ARM_IDENTITY_SELECTORS.oidcRequestToken,
+    ARM_IDENTITY_SELECTORS.cliAuth,
+] as const;
 
 /**
  * Injects Azure credentials for the packer-plugin-azure builders as
@@ -70,6 +89,8 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
             // the build at a subscription this service connection never named (#187).
             neutralizeEnvironmentVariables(['PKR_VAR_arm_subscription_id'], "Azure");
         }
+
+        neutralizeEnvironmentVariables(ARM_WHOLESALE_CLEAR, "Azure");
 
         switch (authorizationScheme) {
             case AuthorizationScheme.ManagedServiceIdentity:

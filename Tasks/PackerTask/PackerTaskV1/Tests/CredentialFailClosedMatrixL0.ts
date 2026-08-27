@@ -394,16 +394,26 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         },
         {
             // packer-plugin-azure's UseMSI() only holds while these are ALL unset.
+            // client_id is never re-set on this branch (ADO's MSI-scheme connection
+            // exposes no distinct client id), so an inherited one must be cleared or
+            // it silently substitutes an identity nobody configured (#332).
             site: 'azure.ManagedServiceIdentity.competing-credential-env', handler: 'azure', base: 'azure.ManagedServiceIdentity',
-            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_tenant_id'],
+            competing: [
+                'PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_tenant_id',
+                'PKR_VAR_arm_client_id', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth',
+            ],
         },
         {
+            // oidc_request_url/token and use_azure_cli_auth are never set by ANY
+            // branch of this handler (#332) -- an inherited value re-enables
+            // azurerm's OIDC-refresh or az-CLI auth paths outright, outranking the
+            // freshly-minted client_jwt this branch injects.
             site: 'azure.WorkloadIdentityFederation.competing-credential-env', handler: 'azure', base: 'azure.WorkloadIdentityFederation',
-            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path'],
+            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth'],
         },
         {
             site: 'azure.ServicePrincipal.competing-credential-env', handler: 'azure', base: 'azure.ServicePrincipal',
-            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path'],
+            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth'],
         },
         {
             site: 'gcp.static.competing-credential-env', handler: 'gcp', base: 'gcp.static',

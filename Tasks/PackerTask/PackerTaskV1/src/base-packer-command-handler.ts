@@ -165,7 +165,7 @@ export abstract class BasePackerCommandHandler {
         /^AWS_(ACCESS_KEY_ID|SECRET_ACCESS_KEY|SESSION_TOKEN|PROFILE|SHARED_CREDENTIALS_FILE|WEB_IDENTITY_TOKEN_FILE|ROLE_ARN|ROLE_SESSION_NAME)$/,
         /^GOOGLE_(APPLICATION_CREDENTIALS|CREDENTIALS|OAUTH_ACCESS_TOKEN|GHA_CREDS_PATH)$/,
         /^CLOUDSDK_AUTH_/,
-        /^PKR_VAR_arm_(client_id|client_secret|client_jwt|client_cert_path|tenant_id|subscription_id)$/,
+        /^PKR_VAR_arm_(client_id|client_secret|client_jwt|client_cert_path|tenant_id|subscription_id|oidc_request_url|oidc_request_token|use_azure_cli_auth)$/,
         /^PKR_VAR_oci_/,
         /^PKR_VAR_vsphere_(server|user|password|insecure_connection)$/,
         /^OCI_CLI_/,
