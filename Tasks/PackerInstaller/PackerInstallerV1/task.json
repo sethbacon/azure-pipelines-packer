@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "17",
+        "Minor": "18",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -155,6 +155,7 @@
         "MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
         "RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",
         "RegistryDownloadHostNotAllowed": "Registry download host %s is not in registryAllowedHosts (%s).",
+        "RegistryTrustAnchorIsChecksumOnly": "Installed from the private registry (%s). Integrity rests on the SHA256 the registry itself asserts, delivered over the same TLS session as the archive -- no signature is verified on this path. The hashicorp and mirror sources verify SHA256SUMS against the pinned HashiCorp GPG key; requireGpgSignature does not apply to downloadSource=registry. A compromised or misconfigured registry can serve a modified archive whose recorded hash matches it. Use downloadSource hashicorp, or a mirror that publishes a signed SHA256SUMS, if you need signature-anchored trust.",
         "RegistryRequestFailed": "Registry request failed for %s. HTTP status: %s",
         "Sha256VerificationFailed": "SHA256 verification failed. Expected: %s, Got: %s",
         "ResolvingLatestFromRegistry": "Resolving latest Packer version from registry: %s",

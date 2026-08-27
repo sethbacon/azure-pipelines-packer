@@ -461,6 +461,14 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     const requireChecksum = getBoolInputDefaultTrue("requireChecksum");
     if (data.sha256) {
         await discardArtifactOnFailure(zipPath, () => verifySha256(zipPath, data.sha256), discardLog);
+        // The checksum matched, but it is the REGISTRY's own assertion about the
+        // artifact, delivered over the same TLS session -- not a signature. The
+        // hashicorp and mirror sources verify SHA256SUMS against the pinned
+        // HashiCorp GPG key; this path has no signature verifier at all, and
+        // requireGpgSignature does not apply to it (task.json hides the input via
+        // visibleRule, which is UI-only). Say so rather than reporting a bare
+        // success that reads identically to the GPG-anchored paths (#1024).
+        tasks.warning(tasks.loc("RegistryTrustAnchorIsChecksumOnly", safeInfoUrl));
         return { zipPath, verified: true };
     }
     if (requireChecksum) {
