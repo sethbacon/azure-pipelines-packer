@@ -89,6 +89,9 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
       - name: Validate shared installer modules carry a provenance header
         run: node scripts/check-shared-modules.js
       - name: Validate egress authorization (SSRF class signature)
@@ -101,6 +104,15 @@ jobs:
         run: node scripts/check-proxy-parity.js
       - name: Validate documented claims against the code
         run: node scripts/check-docs-claims.js
+      # The root package.json's devDependencies (tfx-cli, @cyclonedx/cyclonedx-npm,
+      # rimraf, typescript) are installed here and by release.yml's build/package/
+      # sbom-and-sign/publish-marketplace jobs -- unlike a typical devDependency,
+      # tfx-cli ships bundled into the signed .vsix, so this is not omit-able the
+      # way the per-task audits omit dev (#335): everything at root IS what ships.
+      - name: Install root dependencies
+        run: npm ci --ignore-scripts
+      - name: Audit root build/publish toolchain
+        run: npm audit --audit-level=high
 
   build-and-test-task-v1:
     name: Build and Test Packer Task V1 (${{ matrix.os }})
