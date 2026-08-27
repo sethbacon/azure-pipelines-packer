@@ -126,6 +126,26 @@ describe('PackerInstaller Test Suite', function () {
 
     expectSuccess('CachedInstallSuccess');
     expectSuccess('RegistrySpecificVersionSuccess');
+
+    // #1024: the hashicorp and mirror sources verify SHA256SUMS against the pinned
+    // HashiCorp GPG key; the registry source has no signature verifier at all, and
+    // requireGpgSignature is hidden on this path by a UI-only visibleRule. A
+    // checksum-verified registry install must still disclose that no signature was
+    // verified, not read identically to a GPG-anchored one.
+    it('registry specific version: should warn that the trust anchor is checksum-only even when the checksum verifies (#1024)', async () => {
+        const tp = path.join(__dirname, 'RegistrySpecificVersionSuccess.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+
+        runValidations(() => {
+            assert(tr.succeeded, 'the install still succeeds -- this is a disclosure, not a failure');
+            assert(
+                tr.warningIssues.some(w => w.includes('loc_mock_RegistryTrustAnchorIsChecksumOnly')),
+                'a checksum-verified registry install must still disclose that no signature was verified. warnings: '
+                + tr.warningIssues,
+            );
+        }, tr);
+    });
     expectSuccess('MirrorCustomUrlSuccess');
     expectSuccess('CacheHitHashMatchSuccess');   // #136: cache-hit re-verification matches recorded hash
 
