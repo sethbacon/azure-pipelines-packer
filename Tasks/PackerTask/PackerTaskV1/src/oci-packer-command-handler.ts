@@ -4,6 +4,8 @@ import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 import { normalizePem } from '@4cloudguru/pipeline-task-core';
 import { maskSecretLines } from './endpoint-data-secret';
+import os = require('os');
+import path = require('path');
 import {
     FINGERPRINT_PATTERN,
     neutralizeEnvironmentVariables,
@@ -29,6 +31,25 @@ const OCI_COMPETING_CREDENTIAL_ENV = [
     'OCI_CLI_KEY_FILE',
     'OCI_CLI_REGION',
 ] as const;
+
+/**
+ * A path that never exists (#333). packer-plugin-oracle's own
+ * `ComposingConfigurationProvider` tries providers in order and uses the
+ * first that returns no error PER FIELD (verified against upstream
+ * oci-go-sdk's `common/configuration.go`) -- the explicit values this
+ * handler injects always occupy provider index 0, so as long as they're all
+ * non-empty (guaranteed by requireIdentityField/requireSecretField below), a
+ * `~/.oci/config` on the agent is never actually consulted for any field
+ * this handler supplies. But when `access_cfg_file` is left unset (the
+ * default -- this handler injects no value for it today), the plugin's
+ * `Prepare()` still calls `getDefaultOCISettingsPath()` and, if that file
+ * exists, always attempts to read and parse it as a SECOND provider before
+ * discarding it. Pinning `access_cfg_file` to a path that can never resolve
+ * removes that read entirely rather than relying on every required field
+ * staying non-empty forever -- defense in depth against a future regression
+ * in the guards below, not a fix for a live substitution today.
+ */
+const OCI_ACCESS_CFG_FILE_DISABLED = path.join(os.tmpdir(), '.packer-task-oci-access-cfg-file-intentionally-absent');
 
 /**
  * Injects OCI credentials for the packer-plugin-oracle (oracle-oci) builder
@@ -102,5 +123,6 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_fingerprint", fingerprint);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_key_file", keyFilePath);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", OCI_ACCESS_CFG_FILE_DISABLED);
     }
 }

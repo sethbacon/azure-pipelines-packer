@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import * as fs from 'fs';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
 import idTokenGeneratorModule = require('@4cloudguru/pipeline-task-ado');
@@ -453,6 +454,22 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             }
         });
     }
+
+    // --- OCI access_cfg_file PIN (#333) --------------------------------------
+    // Defense in depth, not a fail-closed guard: packer-plugin-oracle's
+    // ComposingConfigurationProvider already never falls back to a config file
+    // for a field this handler supplies (verified against oci-go-sdk), but only
+    // as long as every required field stays non-empty. Pinning access_cfg_file
+    // removes the file read as a fallback path entirely, regardless of that
+    // invariant.
+
+    it('pins access_cfg_file to a path that cannot resolve to a real config file: oci.static.access_cfg_file', async () => {
+        await run('oci', clone(COMPLETE['oci.static']));
+        const pinned = process.env['PKR_VAR_oci_access_cfg_file'];
+        assert.ok(pinned, 'PKR_VAR_oci_access_cfg_file must be set');
+        assert.ok(!fs.existsSync(pinned!),
+            `the pinned access_cfg_file path must not exist on disk; found a real file at '${pinned}'`);
+    });
 
     // --- SESSION-NAME ROW (#197) ---------------------------------------------
 
