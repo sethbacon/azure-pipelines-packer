@@ -207,7 +207,7 @@ export abstract class BasePackerCommandHandler {
     }
 
     /** Adds `-var-file=` tokens (secure file + variableFiles) and `-var key=value` tokens. */
-    protected async applyVarArgs(tool: ToolRunner): Promise<void> {
+    protected async applyVarArgs(tool: ToolRunner, workingDirectory: string): Promise<void> {
         const secure = await getSecureVarFileArgs();
         if (secure) {
             this.secureFileId = secure.secureFileId;
@@ -218,7 +218,12 @@ export abstract class BasePackerCommandHandler {
         if (variableFiles) {
             for (const line of variableFiles.split('\n')) {
                 const trimmed = line.trim();
-                if (trimmed) tool.arg(`-var-file=${trimmed}`);
+                if (!trimmed) continue;
+                const resolved = path.resolve(workingDirectory, trimmed);
+                if (!this.isWithinWorkingDirectory(resolved, workingDirectory)) {
+                    throw new Error(`variableFiles entry '${trimmed}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
+                }
+                tool.arg(`-var-file=${trimmed}`);
             }
         }
 
@@ -374,7 +379,7 @@ export abstract class BasePackerCommandHandler {
         if (tasks.getBoolInput("syntaxOnly", false)) {
             tool.arg('-syntax-only');
         }
-        await this.applyVarArgs(tool);
+        await this.applyVarArgs(tool, command.workingDirectory);
         this.applyCommandOptions(tool);
         tool.arg(this.getTemplatePath());
 
@@ -415,7 +420,7 @@ export abstract class BasePackerCommandHandler {
             tool.arg('-color=false');
         }
 
-        await this.applyVarArgs(tool);
+        await this.applyVarArgs(tool, command.workingDirectory);
         this.applyCommandOptions(tool);
         tool.arg(this.getTemplatePath());
 
@@ -587,7 +592,7 @@ export abstract class BasePackerCommandHandler {
         const command = this.createAuthCommand(customCommand);
         const tool = this.packerToolHandler.createToolRunner(command);
 
-        await this.applyVarArgs(tool);
+        await this.applyVarArgs(tool, command.workingDirectory);
         this.applyCommandOptions(tool);
 
         await this.handleProvider(command);
