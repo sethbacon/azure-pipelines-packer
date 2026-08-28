@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.5...v1.3.6) (2026-08-27)
+
+
+### Bug Fixes
+
+* **ci:** retire the operator-declared egress exemption and fix two scanner blind spots ([#348](https://github.com/sethbacon/azure-pipelines-packer/issues/348)) ([86adcd8](https://github.com/sethbacon/azure-pipelines-packer/commit/86adcd86a0add08a0b1564cea0def76a42d42b3f))
+* **ci:** tell a broken OSV scanner from a clean one ([#352](https://github.com/sethbacon/azure-pipelines-packer/issues/352)) ([6cd1e35](https://github.com/sethbacon/azure-pipelines-packer/commit/6cd1e355dc301e0de78682f520b3af06fa1455ad))
+* **security:** add an npm audit gate for the root build/publish toolchain ([#335](https://github.com/sethbacon/azure-pipelines-packer/issues/335)) ([#354](https://github.com/sethbacon/azure-pipelines-packer/issues/354)) ([a815bbb](https://github.com/sethbacon/azure-pipelines-packer/commit/a815bbb5247755f7ecf883090315d735e56f06bc))
+* **security:** deliver the OCI private key as a vaulted auth parameter ([#350](https://github.com/sethbacon/azure-pipelines-packer/issues/350)) ([4ceaab8](https://github.com/sethbacon/azure-pipelines-packer/commit/4ceaab85f8556a373873110cdfd23ae77bba60e9))
+* **security:** disclose that the registry trust anchor is checksum-only ([#1024](https://github.com/sethbacon/azure-pipelines-packer/issues/1024)) ([#353](https://github.com/sethbacon/azure-pipelines-packer/issues/353)) ([1995906](https://github.com/sethbacon/azure-pipelines-packer/commit/1995906fee336cea361a3ff1a72676cac083eae4))
+* **security:** egress-authorize registryUrl's own host ([#347](https://github.com/sethbacon/azure-pipelines-packer/issues/347)) ([e4dba72](https://github.com/sethbacon/azure-pipelines-packer/commit/e4dba72e0b537dcf20201d73f5f5b518f7444b7a))
+* **security:** honor fail-closed switches regardless of value capitalization ([#345](https://github.com/sethbacon/azure-pipelines-packer/issues/345)) ([71d3099](https://github.com/sethbacon/azure-pipelines-packer/commit/71d3099cb15a76a06073b1c1a09b1e48573b6613))
+* **security:** neutralize ARM_METADATA_URL and pin OCI access_cfg_file ([#333](https://github.com/sethbacon/azure-pipelines-packer/issues/333)) ([#356](https://github.com/sethbacon/azure-pipelines-packer/issues/356)) ([6c1eaa3](https://github.com/sethbacon/azure-pipelines-packer/commit/6c1eaa3e306c8edfb86c6de6c9be470f1c665e74))
+* **security:** neutralize the Azure identity-selector gaps packer-plugin-azure honors ([#332](https://github.com/sethbacon/azure-pipelines-packer/issues/332)) ([#355](https://github.com/sethbacon/azure-pipelines-packer/issues/355)) ([1302f43](https://github.com/sethbacon/azure-pipelines-packer/commit/1302f43976d7b7bbd4b94ea1dc1fee62d2771227))
+* **security:** register the OCI private key for the exact-match scrub, not just the masker ([#349](https://github.com/sethbacon/azure-pipelines-packer/issues/349)) ([af4a37b](https://github.com/sethbacon/azure-pipelines-packer/commit/af4a37be4a0c3134c395e92f75d46d7bf0552fcf))
+
 ## [1.3.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.4...v1.3.5) (2026-08-25)
 
 
