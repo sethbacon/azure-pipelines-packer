@@ -170,6 +170,8 @@ describe('PackerTask Test Suite', function () {
     expectFailure('AzureUnknownSchemeRejects');                // #111
     expectFailure('Hcl2UpgradeTraversalReject');               // #100
     expectFailure('FixOutputTraversalReject');                 // #111
+    expectFailure('VariableFilesTraversalReject');             // #339
+    expectFailure('VariableFilesSymlinkReject');                // #339
     expectSuccess('ConsoleExpressionSuccess');                 // #111
     expectSuccess('VsphereServerUserinfoStripped');            // #110
     expectFailure('VsphereServerInvalidCharsetReject');        // #110

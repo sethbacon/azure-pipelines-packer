@@ -186,6 +186,24 @@ describe('Output-boundary defect class (S1 output variables / S2 path writes / S
         );
     });
 
+    it('S2 -var-file (variableFiles) — a path escaping the working directory is refused (#339)', async () => {
+        const tr = await runScenario('VariableFilesTraversalReject');
+        assert.ok(tr.failed, report(tr, 'a traversing variableFiles entry must fail the task'));
+        assert.ok(
+            tr.errorIssues.some((e) => e.includes('resolves outside the working directory')),
+            report(tr, 'the containment check must be the reason for the failure')
+        );
+    });
+
+    it('S2 -var-file (variableFiles) — an entry that only stays inside workingDirectory lexically, via a symlink, is refused (#339)', async () => {
+        const tr = await runScenario('VariableFilesSymlinkReject');
+        assert.ok(tr.failed, report(tr, 'a symlink-escaping variableFiles entry must fail the task'));
+        assert.ok(
+            tr.errorIssues.some((e) => e.includes('resolves outside the working directory')),
+            report(tr, 'the containment check must be the reason for the failure')
+        );
+    });
+
     it('S2 manifest read — a manifest resolving outside the working directory publishes nothing', async () => {
         const tr = await runScenario('BuildManifestTraversalSkipped');
         assert.ok(tr.succeeded, report(tr, 'the build itself should still succeed'));
