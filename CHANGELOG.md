@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.6...v1.3.7) (2026-08-28)
+
+
+### Bug Fixes
+
+* **gates:** bound the proxy-parity walk by ROOT, not by the script's own location ([#359](https://github.com/sethbacon/azure-pipelines-packer/issues/359)) ([221d894](https://github.com/sethbacon/azure-pipelines-packer/commit/221d894c9d64cb9f61abd26b42e154181deddcf5))
+* symlink-aware path containment for PackerTaskV1's variableFiles ([#357](https://github.com/sethbacon/azure-pipelines-packer/issues/357)) ([422472b](https://github.com/sethbacon/azure-pipelines-packer/commit/422472bc4df8395699f3c4a58f739a52783c0ae7))
+
 ## [1.3.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.5...v1.3.6) (2026-08-27)
 
 
