@@ -289,18 +289,28 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
     //
     //   1. Offline: compare the cached binary against the hash recorded when it was
     //      first downloaded AND verified. No network, so air-gapped reuse still works.
+    //      Trust-boundary note: the sidecar lives beside the binary it protects (see
+    //      verifyCachedBinaryHash), so this layer is corruption/cross-job-policy-mixing
+    //      detection, not a defense against an attacker who can already write to the
+    //      agent's tool cache.
     //   2. When no usable hash was recorded (cached before this check existed, cached
     //      by a run with verification disabled, or the record is unreadable/malformed),
     //      escalate: re-download through the same source and require a byte match.
     //
+    // forceOnlineReverification (default false) escalates to layer 2 even when layer 1
+    // passes, for an operator who does not accept the co-located sidecar's trust
+    // boundary on a given agent.
+    //
     // A hash is recorded only for an artifact this run actually verified.
     if (wasCached) {
+        const forceReverify = tasks.getBoolInput("forceOnlineReverification", false);
         const recordVerified = await verifyCachedBinaryHash(packerPath);
-        if (!recordVerified) {
+        if (!recordVerified || forceReverify) {
             await reverifyUnmarkedCacheEntry(
                 `packer ${version}`,
                 packerPath,
                 () => downloadVerifiedZipForReverify(downloadSource, version),
+                recordVerified ? 'forced' : 'unmarked',
             );
         }
     } else if (verified) {
@@ -602,9 +612,17 @@ export function getCacheHashSidecarPath(packerPath: string): string {
 
 /**
  * Records the freshly-downloaded-and-verified binary's hash so a future cache hit can
- * cheaply (no network) detect local tampering/corruption of the agent's tool cache
- * (#136). Best-effort: a write failure only debug-logs -- it must never fail an
- * otherwise successful install.
+ * cheaply (no network) detect CORRUPTION of the agent's tool cache, or an entry cached
+ * under a different verification policy, without a network round-trip (#136).
+ *
+ * Trust-boundary note (#136 reopen, 2026-08-25): the sidecar lives beside the binary
+ * it protects, so an attacker who can rewrite the cached binary under the agent
+ * account can rewrite the sidecar to match -- this is defense-in-depth against
+ * corruption and cross-job verification-policy mixing, NOT a defense against an
+ * attacker who already has write access to the agent's tool cache (who effectively
+ * owns the agent). forceOnlineReverification exists for an operator who does not
+ * accept that boundary on a given agent. Best-effort: a write failure only
+ * debug-logs -- it must never fail an otherwise successful install.
  *
  * The write is ATOMIC (temp file in the same directory, then rename). A plain
  * writeFileSync interrupted mid-write -- agent disk full, job cancellation, a
@@ -650,8 +668,10 @@ export function recordCachedBinaryHash(packerPath: string): void {
  * The record is NOT healed here -- healing happens only after the escalated
  * re-verification actually proves the cached binary.
  *
- * A genuine mismatch against a WELL-FORMED record is the one case that always throws:
- * that is real local tampering or corruption.
+ * A genuine mismatch against a WELL-FORMED record always throws -- but see the
+ * trust-boundary note on recordCachedBinaryHash: a match here proves the binary is
+ * unchanged since IT WAS LAST RECORDED, which is not the same as proving it was
+ * never tampered with by whoever could write both files together.
  */
 export async function verifyCachedBinaryHash(packerPath: string): Promise<boolean> {
     const sidecarPath = getCacheHashSidecarPath(packerPath);
@@ -706,12 +726,19 @@ async function reverifyUnmarkedCacheEntry(
     toolLabel: string,
     cachedPackerPath: string,
     downloadVerifiedZip: () => Promise<string>,
+    reason: 'unmarked' | 'forced' = 'unmarked',
 ): Promise<void> {
     if (!getBoolInputDefaultTrue("requireChecksum")) {
-        tasks.debug(`Cache hit for ${toolLabel}: no usable cache-integrity hash and requireChecksum is false; skipping remote re-verification.`);
+        tasks.debug(reason === 'forced'
+            ? `Cache hit for ${toolLabel}: forceOnlineReverification is enabled but requireChecksum is false; skipping remote re-verification.`
+            : `Cache hit for ${toolLabel}: no usable cache-integrity hash and requireChecksum is false; skipping remote re-verification.`);
         return;
     }
-    console.log(tasks.loc("ReverifyingCachedTool", toolLabel));
+    if (reason === 'forced') {
+        console.log(tasks.loc("ForcingOnlineReverification", toolLabel));
+    } else {
+        console.log(tasks.loc("ReverifyingCachedTool", toolLabel));
+    }
     let zipPath: string;
     try {
         zipPath = await downloadVerifiedZip();

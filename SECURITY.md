@@ -40,6 +40,44 @@ Two further inputs **widen** where the installer is allowed to fetch from, rathe
   - **Non-empty — an explicit operator pin.** Only the listed hosts are accepted, again on the initial URL and on every redirect hop. This is how you point the installer at a legitimately private or air-gapped mirror/storage host: the baseline private-address refusal no longer applies, because you have named the host deliberately.
   - **Residual risk.** The default-deny check resolves the hostname at check time and does not pin the resulting IP into the connection, so an attacker controlling a host's authoritative DNS could still rebind it to a private address between the check and the connection. It is defense-in-depth against a host that statically points at a private address, not a complete DNS-rebinding defense. Use `mirrorAllowedHosts`/`registryAllowedHosts` plus `requireChecksum`/`requireGpgSignature` when the mirror is not fully trusted.
 
+## Tool-cache integrity on persistent/self-hosted agents (`PipelinePackerInstaller@1`)
+
+The tool cache persists across jobs on self-hosted agents, so a Packer binary cached by one job
+is served to every later job that requests the same version. The installer closes this cross-job
+trust gap in two layers:
+
+1. **Local integrity hash.** After a checksum-verified download, the installer records the
+   downloaded binary's SHA256 in a sidecar file (`<binary>.sha256`) beside it in the cached tool
+   directory. Every later cache hit re-hashes the binary against the sidecar — a purely local,
+   offline check — and **fails closed** on a mismatch (tampering or corruption since verification).
+   A malformed record (empty, truncated, not 64 hex characters — e.g. an interrupted write) is
+   treated as unverifiable, not as tampering, and escalates to layer 2 rather than bricking the
+   cached version.
+2. **Remote re-verification for an unmarked entry.** A cache hit with **no** usable sidecar (cached
+   by an older installer version, or by a job that ran with verification disabled) is re-downloaded
+   through the same source/verification path a fresh install would use, and the cached binary must
+   byte-match the freshly verified release. A mismatch or a signature/checksum verification failure
+   **fails closed**; if the source is merely unreachable (offline/air-gapped agents), the install
+   degrades to the cached binary with a warning so air-gapped cache reuse keeps working —
+   `requireOnlineReverification: true` overrides that degrade and fails closed instead, for shared
+   persistent agents where you prefer an availability loss over trusting an entry an earlier job may
+   have populated without verification. `requireChecksum: false` skips this re-verification entirely.
+
+**Residual, and the control that addresses it.** The sidecar lives beside the binary it protects, so
+an attacker with write access to the agent's tool cache can rewrite both the binary and the sidecar
+consistently (and such an attacker can equally tamper with the agent itself). Layer 1 is
+defense-in-depth against corruption and verification-policy mixing across jobs, not a defense
+against a compromised agent account by default.
+
+An operator who does not accept that co-located trust boundary on a given agent can set
+`forceOnlineReverification: true`, which escalates **every** cache hit to layer 2's online
+re-download-and-byte-compare — even when the local sidecar is present and valid. Default `false`, so
+a pipeline that does not set it sees identical behavior to before this input existed; enabling it
+trades the sidecar's no-network performance benefit for a control that does not depend on the
+co-located sidecar at all. To force a full re-verification of one suspect cache entry (e.g. after a
+mirror compromise is discovered) without enabling it fleet-wide, delete the tool's cached-version
+directory (or just its `.sha256` sidecar) under the agent's `_work/_tool` cache and re-run.
+
 ## Release pipeline residual risk: Entra token visible via process arguments
 
 The `publish-marketplace` job in `release.yml` mints a Microsoft Entra access token, scoped only to the Azure DevOps resource app, and passes it to `tfx extension publish --token "$ENTRA_TOKEN"` to authenticate the Marketplace publish. The token is registered with `::add-mask::` so it never appears in the GitHub Actions log, but it is still visible in `/proc/<pid>/cmdline` for the lifetime of the `tfx` process — GitHub Actions runners do not hide process arguments from other processes in the same job.

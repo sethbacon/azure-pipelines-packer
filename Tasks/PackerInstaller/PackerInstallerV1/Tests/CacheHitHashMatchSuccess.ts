@@ -28,7 +28,7 @@ tr.registerMock('./gpg-verifier', {
   verifyGpgSignature: async () => { throw new Error('Should not verify on cache hit'); }
 });
 
-const MATCHING_HASH = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+const MATCHING_HASH = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 
 tr.registerMock('fs', {
   chmodSync: (_path: string, _mode: string) => { },
