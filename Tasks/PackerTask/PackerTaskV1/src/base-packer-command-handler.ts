@@ -2,7 +2,7 @@ import { PackerToolHandler, IPackerToolHandler } from './packer';
 import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
 import { getSecureVarFileArgs, SecureFileLoader } from './secure-file-loader';
-import { EnvironmentVariableHelper, writeSecretFile, generateIdToken, getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, writeSecretFile, generateIdToken, getBoolInputDefaultTrue, scrubFile } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
 import path = require('path');
 import fs = require('fs');
@@ -318,6 +318,18 @@ export abstract class BasePackerCommandHandler {
         for (const filePath of this.tempFiles) {
             try {
                 if (fs.existsSync(filePath)) {
+                    // Scrub (zero-overwrite) before unlinking, uniformly for every
+                    // tracked secret temp file -- OIDC/UPST token files, GCP/OCI
+                    // credential JSON, PEM keys alike -- so a crash between the
+                    // overwrite and the unlink is the only remaining exposure
+                    // window, matching TerraformTaskV5's temp-file-manager.ts
+                    // (#336). A scrub failure is surfaced but does not skip the
+                    // unlink attempt below.
+                    try {
+                        scrubFile(filePath);
+                    } catch (scrubErr) {
+                        tasks.warning(`Failed to scrub temp file ${filePath} before deletion: ${scrubErr}`);
+                    }
                     fs.unlinkSync(filePath);
                     tasks.debug(`Cleaned up temp file: ${filePath}`);
                 }
