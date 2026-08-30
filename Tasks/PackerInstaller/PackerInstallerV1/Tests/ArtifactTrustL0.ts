@@ -183,6 +183,11 @@ const FLOW_ROWS: FlowRow[] = [
         outcome: 'failure',
     },
     {
+        fixture: 'CacheHitUnmarkedChecksumUnavailableFail',
+        what: 'a reachable source that WITHHOLDS the checksum entirely during re-verification — fail closed, not degrade even with requireOnlineReverification off (#334)',
+        outcome: 'failure',
+    },
+    {
         fixture: 'CacheHitTruncatedSidecarDegrades',
         what: 'a truncated record + an unreachable source degrades with a warning instead of bricking the version (#198)',
         outcome: 'success',
