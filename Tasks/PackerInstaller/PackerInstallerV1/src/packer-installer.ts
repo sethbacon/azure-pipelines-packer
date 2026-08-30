@@ -55,8 +55,19 @@ type DownloadedZip = { zipPath: string; verified: boolean };
 class ChecksumMismatchError extends VerificationFailure {
     constructor(message: string) { super(message); this.name = 'ChecksumMismatchError'; }
 }
-/** No usable checksum was published for the artifact (SUMS file absent, or the file not listed in it). Downgradable when requireChecksum is off. */
-class ChecksumUnavailableError extends Error {
+/**
+ * No usable checksum was published for the artifact (SUMS file absent, or the file
+ * not listed in it). A VerificationFailure: downgradable at the point a caller
+ * explicitly catches THIS type and branches on requireChecksum (the mirror/registry
+ * fresh-install paths do exactly that) -- but otherwise fail-closed like any other
+ * VerificationFailure. That matters for the cache-hit re-verification path
+ * (reverifyUnmarkedCacheEntry), which only ever runs with requireChecksum=true and
+ * has no such catch: before this extended VerificationFailure, a reachable source
+ * that withheld its checksum fell into the same lenient branch as a genuinely
+ * UNREACHABLE source, silently keeping the stale cached binary instead of failing
+ * closed (#334).
+ */
+class ChecksumUnavailableError extends VerificationFailure {
     constructor(message: string) { super(message); this.name = 'ChecksumUnavailableError'; }
 }
 
