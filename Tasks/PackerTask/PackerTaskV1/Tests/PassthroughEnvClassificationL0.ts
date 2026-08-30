@@ -25,10 +25,16 @@ import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
  * Mutation-provability: dropping `/^ARM_/` from IDENTITY_SELECTING_ENV_PATTERNS
  * turns the `ARM_SUBSCRIPTION_ID` row RED and no other; dropping `/^AWS_/` from
  * MANAGED_ENV_PATTERNS turns the `AWS_REGION` row RED and no other.
+ *
+ * A fourth, ORTHOGONAL dimension (#108): a non-rejected entry whose KEY looks
+ * secret-shaped (TOKEN/SECRET/PASSWORD/KEY, case-insensitive) is masked via
+ * tasks.setSecret regardless of whether it also warned. `mask` is independent
+ * of `outcome` -- a WARN row can mask, an ALLOW row can mask, a REJECT row
+ * never reaches the masking code at all (it throws first).
  */
 
 type Outcome = 'REJECT' | 'WARN' | 'ALLOW';
-type Row = { entry: string; key: string; outcome: Outcome; why: string };
+type Row = { entry: string; key: string; outcome: Outcome; why: string; mask?: boolean };
 
 const ROWS: Row[] = [
     // --- REJECT: names that select an identity ---
@@ -59,6 +65,11 @@ const ROWS: Row[] = [
     // --- ALLOW: ordinary builder settings ---
     { entry: 'MY_CUSTOM_BUILD_VAR=hello', key: 'MY_CUSTOM_BUILD_VAR', outcome: 'ALLOW', why: 'not a name this task manages' },
     { entry: 'PACKER_LOG=1', key: 'PACKER_LOG', outcome: 'ALLOW', why: 'a packer setting, not a credential' },
+
+    // --- Masking (#108): secret-shaped key, unmanaged name, ALLOWed through but masked ---
+    { entry: 'DIGITALOCEAN_TOKEN=do_v1_abc123', key: 'DIGITALOCEAN_TOKEN', outcome: 'ALLOW', why: 'unmanaged name, but TOKEN-shaped -- masked as defense-in-depth, not rejected', mask: true },
+    { entry: 'PKR_VAR_ssh_password=hunter2', key: 'PKR_VAR_ssh_password', outcome: 'ALLOW', why: 'unmanaged PKR_VAR (not oci/vsphere/arm), PASSWORD-shaped -- masked, not rejected', mask: true },
+    { entry: 'MY_CUSTOM_BUILD_VAR=hello', key: 'MY_CUSTOM_BUILD_VAR', outcome: 'ALLOW', why: 'a plain builder setting must NOT be masked -- over-masking every value would hide the point of this table', mask: false },
 ];
 
 describe('passthrough environmentVariables classification (class test #187/#207)', () => {
@@ -67,19 +78,24 @@ describe('passthrough environmentVariables classification (class test #187/#207)
     const origGetInput = t.getInput;
     const origWarning = t.warning;
     const origSetVariable = t.setVariable;
+    const origSetSecret = t.setSecret;
 
     let warnings: string[] = [];
+    let maskedValues: string[] = [];
 
     beforeEach(() => {
         warnings = [];
+        maskedValues = [];
         t.warning = (m: string) => warnings.push(m);
         t.setVariable = () => { /* EnvironmentVariableHelper also mirrors to a task variable */ };
+        t.setSecret = (v: string) => maskedValues.push(v);
     });
 
     afterEach(() => {
         t.getInput = origGetInput;
         t.warning = origWarning;
         t.setVariable = origSetVariable;
+        t.setSecret = origSetSecret;
         EnvironmentVariableHelper.clearTrackedVariables();
     });
 
@@ -101,11 +117,17 @@ describe('passthrough environmentVariables classification (class test #187/#207)
             }
 
             apply();
-            assert.strictEqual(process.env[row.key], row.entry.split('=').slice(1).join('='),
+            const value = row.entry.split('=').slice(1).join('=');
+            assert.strictEqual(process.env[row.key], value,
                 `${row.key}: a non-rejected entry should be applied`);
             const warned = warnings.some((w) => w.includes(`'${row.key}'`));
             assert.strictEqual(warned, row.outcome === 'WARN',
                 `${row.key}: expected ${row.outcome === 'WARN' ? 'a' : 'no'} collision warning; got ${JSON.stringify(warnings)}`);
+            if (row.mask !== undefined) {
+                const masked = maskedValues.includes(value);
+                assert.strictEqual(masked, row.mask,
+                    `${row.key}: expected ${row.mask ? '' : 'no '}masking of its value; masked=${JSON.stringify(maskedValues)}`);
+            }
         });
     }
 

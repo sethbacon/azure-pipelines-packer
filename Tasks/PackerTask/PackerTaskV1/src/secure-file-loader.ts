@@ -16,6 +16,13 @@ export class SecureFileLoader implements ISecureFileLoader {
     private helpers: any;
 
     constructor() {
+        // #108: on a proxy-configured agent, this library's own SecureFileHelpers
+        // unconditionally sets `ignoreSslError: true` on its ADO WebApi connection
+        // whenever tl.getHttpProxyConfiguration() returns a proxy -- disabling TLS
+        // certificate validation for this download, which carries the job's
+        // SystemVssConnection token and returns the user's secret var-file. That is
+        // upstream (Microsoft) library behavior; this constructor has no override
+        // point to opt out of it. Documented in SECURITY.md, not fixed here.
         const { SecureFileHelpers } = require('azure-pipelines-tasks-securefiles-common/securefiles-common');
         this.helpers = new SecureFileHelpers();
     }

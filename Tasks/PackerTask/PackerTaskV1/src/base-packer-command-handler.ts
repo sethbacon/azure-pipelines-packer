@@ -150,6 +150,20 @@ export abstract class BasePackerCommandHandler {
     ];
 
     /**
+     * A passthrough key whose NAME looks secret-shaped, independent of whether it
+     * collides with a name this task manages (#108). An arbitrary credential under
+     * an unmanaged name -- DIGITALOCEAN_TOKEN, PKR_VAR_ssh_password -- gets neither
+     * the throw above nor the warning below, and reaches the agent unmasked. This
+     * is a heuristic, not a classification: it can both under-match (a value named
+     * plainly) and over-match (a non-secret path literally named *_KEY). Over-
+     * matching costs nothing but an unnecessary *** in the log; under-matching is
+     * the reason `environmentVariables`' own helpMarkDown tells operators not to
+     * put secrets here at all -- this is defense-in-depth on top of that guidance,
+     * not a substitute for it.
+     */
+    private static readonly SECRET_SHAPED_KEY_PATTERN = /TOKEN|SECRET|PASSWORD|KEY/i;
+
+    /**
      * The subset of managed names that SELECT AN IDENTITY rather than merely
      * configure one. These are rejected outright instead of warned about (#187).
      *
@@ -201,6 +215,9 @@ export abstract class BasePackerCommandHandler {
                 // are now rejected above; what reaches here only configures an
                 // already-chosen identity.
                 tasks.warning(`'environmentVariables' sets '${key}', a name this task also manages. A provider handler may replace it during build/validate/console/custom, and it persists unmasked for commands that don't authenticate. Use 'environmentVariables' for non-secret builder settings only.`);
+            }
+            if (value && BasePackerCommandHandler.SECRET_SHAPED_KEY_PATTERN.test(key)) {
+                tasks.setSecret(value);
             }
             EnvironmentVariableHelper.setEnvironmentVariable(key, value);
         }
