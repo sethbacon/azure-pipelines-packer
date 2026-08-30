@@ -199,6 +199,16 @@ const FLOW_ROWS: FlowRow[] = [
         what: 'a cache hit whose record matches installs offline, with no network call (#136 must not over-block)',
         outcome: 'success',
     },
+    {
+        fixture: 'CacheHitMarkedForceReverifyPass',
+        what: 'forceOnlineReverification=true escalates online even though the recorded sidecar hash is valid, and still succeeds on a genuine match — the residual #136 reopen names: the sidecar lives beside the binary it protects, so a valid match alone cannot be trusted as an adversarial control',
+        outcome: 'success',
+        // Proves this took the FORCED path, not the no-sidecar one it could be
+        // confused with if the escalation trigger regressed to only fire on a
+        // missing/invalid record.
+        expectText: 'ForcingOnlineReverification',
+        forbidText: 'ReverifyingCachedTool',
+    },
 ];
 
 describe('artifact trust (class test #65/#78/#136/#198/#204)', function () {
