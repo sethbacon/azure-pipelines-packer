@@ -80,6 +80,32 @@ co-located sidecar at all. To force a full re-verification of one suspect cache 
 mirror compromise is discovered) without enabling it fleet-wide, delete the tool's cached-version
 directory (or just its `.sha256` sidecar) under the agent's `_work/_tool` cache and re-run.
 
+## Plugin installation trust is delegated to Packer itself (`PipelinePackerTask@1`)
+
+`init` (with `-upgrade`) and `plugins install`/`plugins remove` hand off entirely to Packer's own
+plugin installer, which verifies each plugin's checksum against its published `SHA256SUMS` the same
+way this extension's own `PipelinePackerInstaller@1` verifies the Packer binary itself. This task
+layers no ADDITIONAL control on top: no task-level pinning of an explicit plugin version/checksum
+manifest, no allow-list of plugin sources, and no post-install verification step of its own. The
+`githubToken` input only raises the GitHub API rate limit for plugin downloads (`PACKER_GITHUB_API_TOKEN`)
+— it plays no role in verification.
+
+This mirrors how the Packer CLI is normally used outside of ADO: an operator who wants pinned plugin
+versions declares a `required_plugins` block with explicit version constraints in the template
+itself, and Packer enforces that constraint at `init` time on its own. There is no ADO-specific gap
+here that a template-level `required_plugins` block does not already close.
+
+**Deliberately not implemented: task-level enforcement that a template's `required_plugins` block
+exists and is pinned before allowing `init`/`plugins install` to proceed.** That would be a genuine
+value-add (catching an unpinned "install whatever's latest" template before Packer ever runs), but
+it is also a real behavior change — it would fail `init` for any existing template that does not
+already declare pinned plugin versions, silently, for every consumer of this task. Parsing a
+`required_plugins` HCL block correctly (nested blocks, version-constraint operators, multiple
+required_providers-style entries) is also nontrivial enough to warrant its own design pass rather
+than folding into a documentation fix. If wanted, this should ship as an opt-in toggle (default off,
+preserving today's behavior for every existing pipeline) — not a change to what `init`/`plugins
+install` do by default.
+
 ## Release pipeline residual risk: Entra token visible via process arguments
 
 The `publish-marketplace` job in `release.yml` mints a Microsoft Entra access token, scoped only to the Azure DevOps resource app, and passes it to `tfx extension publish --token "$ENTRA_TOKEN"` to authenticate the Marketplace publish. The token is registered with `::add-mask::` so it never appears in the GitHub Actions log, but it is still visible in `/proc/<pid>/cmdline` for the lifetime of the `tfx` process — GitHub Actions runners do not hide process arguments from other processes in the same job.
