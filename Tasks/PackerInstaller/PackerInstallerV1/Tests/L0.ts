@@ -6,9 +6,8 @@ import * as path from 'path';
 import * as openpgp from 'openpgp';
 import { fetchWithTimeout, fetchJson, fetchText, fetchTextAllow404, fetchBuffer, downloadToFile } from '../src/http-client';
 import { HASHICORP_GPG_PUBLIC_KEY } from '../src/hashicorp-gpg-key';
-import { downloadToolWithTimeout, redactUrl } from '../src/packer-installer';
+import { redactUrl } from '../src/packer-installer';
 import { parseAllowedHosts, isHostAllowed, isPrivateOrLinkLocalHost, resolvesToPrivateOrLinkLocalAddress } from '@4cloudguru/pipeline-task-core';
-import tools = require('azure-pipelines-tool-lib/tool');
 
 // Table-driven class test for the egress-authorization defect class
 // (#161/#188/#191/#200/#201). Kept in its own file so its three tables stay
@@ -223,6 +222,38 @@ describe('PackerInstaller Test Suite', function () {
             assert.ok(
                 issues.includes('loc_mock_RegistryDownloadHostIsPrivate 127.0.0.1'),
                 'the refusal must use RegistryDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    // #334: releases.hashicorp.com is a compile-time constant, so (unlike mirror/
+    // registry) the only way to exercise its isPrivate refusal is a DNS answer
+    // landing on a private address rather than a literal IP in operator input.
+    it('HashiCorpPrivateHostRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'HashiCorpPrivateHostRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a hashicorp download resolving to a private address must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_HashiCorpDownloadHostIsPrivate releases.hashicorp.com'),
+                'the refusal must use HashiCorpDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    // #334: the per-hop authorizeHost callback passed to downloadToFile is the
+    // actual fix -- a redirect hop landing on a private/metadata address must be
+    // refused even though the initial host is a benign compile-time constant.
+    it('HashiCorpRedirectPrivateHostRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'HashiCorpRedirectPrivateHostRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a redirect hop landing on a private address must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('HashiCorpDownloadHostIsPrivate') && issues.includes('169.254.169.254'),
+                'the refusal must be traceable to HashiCorpDownloadHostIsPrivate for the redirect target. errors: ' + issues
             );
         }, tr);
     });
@@ -573,21 +604,6 @@ describe('PackerInstaller Test Suite', function () {
             assert.deepStrictEqual(Array.from(buf), [1, 2, 3]);
         } finally {
             global.fetch = originalFetch;
-        }
-    });
-
-    it('downloadToolWithTimeout aborts a hung download instead of hanging indefinitely (#105)', async () => {
-        const originalDownloadTool = tools.downloadTool;
-        // Never resolves, so the race is settled entirely by the timeout branch.
-        (tools as unknown as { downloadTool: (url: string, fileName: string) => Promise<string> }).downloadTool =
-            () => new Promise<string>(() => { /* intentionally never resolves */ });
-        try {
-            await assert.rejects(
-                () => downloadToolWithTimeout('https://example.com/packer.zip', 'packer.zip', 50),
-                /timed out after 50ms/
-            );
-        } finally {
-            (tools as unknown as { downloadTool: typeof originalDownloadTool }).downloadTool = originalDownloadTool;
         }
     });
 

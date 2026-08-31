@@ -10,7 +10,8 @@ tr.setInput('downloadSource', 'hashicorp');
 
 tr.registerMock('os', {
     type: () => 'Linux',
-    arch: () => 'x64'
+    arch: () => 'x64',
+    tmpdir: () => '/tmp'
 });
 
 const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -22,6 +23,7 @@ tr.registerMock('./http-client', {
         }
         throw new Error('Unexpected fetchJson URL: ' + url);
     },
+    downloadToFile: async () => { },
     fetchText: async (url: string) => {
         if (url.includes('SHA256SUMS')) {
             return `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`;

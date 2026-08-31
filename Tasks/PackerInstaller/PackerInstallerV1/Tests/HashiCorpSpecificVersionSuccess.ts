@@ -10,7 +10,8 @@ tr.setInput('downloadSource', 'hashicorp');
 
 tr.registerMock('os', {
     type: () => 'Windows_NT',
-    arch: () => 'x64'
+    arch: () => 'x64',
+    tmpdir: () => 'C:\\Temp'
 });
 
 const EXPECTED_SHA256 = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
@@ -19,6 +20,7 @@ tr.registerMock('./http-client', {
     fetchJson: async (url: string) => {
         throw new Error('fetchJson should not be called for a specific version. Called with: ' + url);
     },
+    downloadToFile: async () => { },
     fetchText: async (url: string) => {
         if (url.includes('SHA256SUMS')) {
             return `${EXPECTED_SHA256}  packer_1.12.0_windows_amd64.zip\nother_hash  packer_1.12.0_linux_amd64.zip\n`;

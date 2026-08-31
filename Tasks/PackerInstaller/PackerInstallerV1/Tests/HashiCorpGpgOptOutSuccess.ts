@@ -19,10 +19,11 @@ tr.setInput('packerVersion', '1.12.0');
 tr.setInput('downloadSource', 'hashicorp');
 tr.setInput('requireGpgSignature', 'false');
 
-tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64' });
+tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64', tmpdir: () => '/tmp' });
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('hashicorp path should not call fetchJson: ' + url); },
+    downloadToFile: async () => { },
     fetchText: async (url: string) => {
         if (url.endsWith('SHA256SUMS')) return `${EXPECTED_SHA256}  packer_1.12.0_linux_amd64.zip\n`;
         throw new Error('Unexpected fetchText URL: ' + url);

@@ -22,6 +22,7 @@ tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64', tmpdir: () => '/
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Unexpected fetchJson: ' + url); },
+    downloadToFile: async () => { },
     // Reachable and well-formed, but lists only an unrelated file -- not our zip.
     fetchText: async (_url: string) =>
         `${'a'.repeat(64)}  packer_1.12.0_darwin_arm64.zip\n`,

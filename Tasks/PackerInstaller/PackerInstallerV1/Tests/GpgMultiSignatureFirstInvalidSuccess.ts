@@ -45,11 +45,13 @@ async function main() {
 
   tr.registerMock('os', {
     type: () => 'Linux',
-    arch: () => 'x64'
+    arch: () => 'x64',
+    tmpdir: () => '/tmp'
   });
 
   tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Should not fetchJson on hashicorp path: ' + url); },
+    downloadToFile: async () => { },
     fetchText: async (url: string) => {
       if (url.endsWith('SHA256SUMS')) return sha256SumsContent;
       throw new Error('Unexpected fetchText URL: ' + url);
