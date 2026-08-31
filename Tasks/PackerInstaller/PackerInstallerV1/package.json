@@ -18,7 +18,7 @@
   },
   "minimumAgentVersion": "2.144.0",
   "dependencies": {
-    "@4cloudguru/pipeline-task-ado": "^0.5.3",
+    "@4cloudguru/pipeline-task-ado": "^0.7.0",
     "@4cloudguru/pipeline-task-core": "^0.7.1",
     "azure-pipelines-task-lib": "^5.279.0",
     "azure-pipelines-tool-lib": "^2.279.0",
