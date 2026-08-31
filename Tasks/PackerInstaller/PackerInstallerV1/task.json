@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "20",
+        "Minor": "21",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -46,7 +46,7 @@
             "defaultValue": "",
             "required": true,
             "visibleRule": "downloadSource = registry",
-            "helpMarkDown": "Base URL of your terraform-registry-backend instance. Must use HTTPS. Example: https://registry.example.com"
+            "helpMarkDown": "Base URL of your terraform-registry-backend instance. Must use HTTPS. Example: https://registry.example.com. Note on trust model: this source has no independent signature verification -- integrity rests on the SHA256 the registry itself asserts, delivered over the same TLS session as the archive. requireGpgSignature does not apply here (hidden above). Use downloadSource hashicorp, or a mirror that publishes a signed SHA256SUMS, if you need signature-anchored trust."
         },
         {
             "name": "registryMirrorName",
