@@ -1,9 +1,8 @@
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
-import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, maskSecretLines } from '@4cloudguru/pipeline-task-ado';
 import { normalizePem } from '@4cloudguru/pipeline-task-core';
-import { maskSecretLines } from './endpoint-data-secret';
 import os = require('os');
 import path = require('path');
 import {

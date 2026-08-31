@@ -114,7 +114,7 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         // channel, not only through the getEndpointDataParameter stub above: a
         // SECRET data field is read by readSecretEndpointDataParameter straight from
         // process.env, because task-lib's accessor debug-logs the value at read time
-        // and leaves it for the child to inherit (#185/#195, endpoint-data-secret.ts).
+        // and leaves it for the child to inherit (#185/#195, @4cloudguru/pipeline-task-ado).
         // Stubbing only the accessor would make the absent-credential rows below pass
         // against a channel production never uses. Same provisioning as
         // OciMultilinePemAuth.ts; the `without(..., 'data', k)` mutation drops the
