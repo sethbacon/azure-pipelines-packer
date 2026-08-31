@@ -263,6 +263,51 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('HashiCorpLatestCheckpointDownFail');
     expectFailure('HashiCorpLatestCheckpointInvalidResponseFail');
 
+    // --- Finding 0 of #342: checkpoint/registry JSON fields were validated only
+    // for truthiness, never type -- {"current_version": 12345} passed the old
+    // "!data.current_version" guard. These assert the SAME "invalid response"
+    // message a genuinely-missing field produces, and that no download/fetch
+    // past the guard is ever attempted, distinguishing a fired type guard from
+    // the request simply failing later for an unrelated reason. ---
+    it('HashiCorpLatestCheckpointTypeConfusionFail', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'HashiCorpLatestCheckpointTypeConfusionFail.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a checkpoint response with a non-string current_version must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('HashiCorp checkpoint API returned invalid response: missing current_version'),
+                'a non-string current_version must fail the SAME typed-response guard as a missing one. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    it('RegistryLatestVersionTypeConfusionFail', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryLatestVersionTypeConfusionFail.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a registry versions/latest response with a non-string version must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('Registry API returned invalid response: missing version field'),
+                'a non-string version must fail the SAME typed-response guard as a missing one, before any per-version fetch. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    it('RegistryDownloadUrlTypeConfusionFail', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryDownloadUrlTypeConfusionFail.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a registry info response with a non-string download_url must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('Registry API returned invalid response: missing download_url'),
+                'a non-string download_url must fail the SAME typed-response guard as a missing one, before any download is attempted. errors: ' + issues
+            );
+        }, tr);
+    });
+
     // --- GPG fetch-failure classification: only a genuine 404 may downgrade when
     // requireGpgSignature=false; a transient failure stays fatal (#106) ---
     expectFailure('GpgSigTransientErrorFail');
