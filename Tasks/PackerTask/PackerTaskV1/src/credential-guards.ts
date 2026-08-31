@@ -49,6 +49,29 @@ export const FINGERPRINT_PATTERN = /^([0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}$/;
 /** AWS's own `RoleSessionName` grammar for AssumeRoleWithWebIdentity (2-64 chars). */
 export const ROLE_SESSION_NAME_PATTERN = /^[\w+=,.@-]{2,64}$/;
 
+/**
+ * GCP's own per-field grammars for the values the GCP handler's Workload
+ * Identity Federation branch interpolates into the audience and impersonation
+ * URLs it writes to the credentials file (#339, same class as OCID_PATTERN /
+ * REGION_PATTERN / FINGERPRINT_PATTERN above). Confirmed against Google's
+ * current published documentation rather than guessed:
+ *  - project number: Resource Manager docs describe it as a Google-assigned
+ *    numeric identifier ("Project number consists of digits"); bounded to 20
+ *    digits (uint64 range) since no fixed length is published.
+ *  - workload identity pool/provider ID: the gcloud SDK reference for
+ *    `iam workload-identity-pools providers update-oidc` states the pool ID
+ *    "should be 4-32 characters, and may contain the characters [a-z0-9-]" --
+ *    the pool and provider ID share the same resource-ID grammar.
+ *  - service account email: `docs.cloud.google.com/iam/docs/service-accounts-create`
+ *    states the account ID "must be between 6 and 30 characters, and can
+ *    contain lowercase alphanumeric characters and dashes"; the project ID half
+ *    of the domain additionally "must start with a letter" and "cannot end
+ *    with a hyphen" per `docs.cloud.google.com/resource-manager/docs/creating-managing-projects`.
+ */
+export const GCP_PROJECT_NUMBER_PATTERN = /^[0-9]{1,20}$/;
+export const GCP_WORKLOAD_IDENTITY_ID_PATTERN = /^[a-z0-9-]{4,32}$/;
+export const GCP_SERVICE_ACCOUNT_EMAIL_PATTERN = /^[a-z0-9-]{6,30}@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$/;
+
 /** Which task-lib accessor family a service-connection field lives in. */
 export type EndpointSource = 'auth' | 'data' | 'auth-migrating-from-data';
 
