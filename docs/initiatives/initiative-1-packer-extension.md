@@ -44,7 +44,7 @@ Carry over with renames:
 - Docs skeleton: `overview.md`, `README.md`, `docs/yaml-examples.md`, `docs/troubleshooting.md`, `CONTRIBUTING.md`, `SECURITY.md`, LICENSE/attribution notes.
 - New repo CLAUDE.md derived from the Terraform one.
 
-Required secrets/variables: `TFX_PAT`, `RELEASE_DISPATCH_APP_ID`, `RELEASE_DISPATCH_APP_KEY` (same roles as the Terraform repo).
+Required secrets/variables: ~~`TFX_PAT`~~ — superseded by GitHub OIDC → Entra federated credential, see CONTRIBUTING.md, `RELEASE_DISPATCH_APP_ID`, `RELEASE_DISPATCH_APP_KEY` (same roles as the Terraform repo).
 
 Not carried over: the Terraform Plan results tab (a Packer build tab is a possible later initiative, not in scope here).
 
