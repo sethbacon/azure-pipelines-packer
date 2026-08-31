@@ -219,14 +219,16 @@ The mock-runner entry must be the task's **real** `src/index.ts`, never a re-imp
 
 ## Key Dependencies
 
-| Package                                    | Purpose                                |
-| ------------------------------------------ | -------------------------------------- |
-| `azure-pipelines-task-lib`                 | ADO task SDK                           |
-| `azure-pipelines-tool-lib`                 | Tool download/cache (installer)        |
-| `azure-pipelines-tasks-securefiles-common` | Secure file download (command task)    |
-| `openpgp`                                  | GPG signature verification (installer) |
-| `undici`                                   | Proxy-aware fetch (installer)          |
-| `mocha` + `ts-node`                        | Test framework                         |
+| Package                                    | Purpose                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `azure-pipelines-task-lib`                 | ADO task SDK                                                                               |
+| `azure-pipelines-tool-lib`                 | Tool download/cache (installer)                                                            |
+| `azure-pipelines-tasks-securefiles-common` | Secure file download (command task)                                                        |
+| `@4cloudguru/pipeline-task-ado`            | Shared ADO task primitives — env var tracking, secure temp files, OIDC token generation    |
+| `@4cloudguru/pipeline-task-core`           | Shared crypto/HTTP/egress primitives — HTTP client, PEM normalization, verification typing |
+| `openpgp`                                  | GPG signature verification (installer)                                                     |
+| `undici`                                   | Proxy-aware fetch (installer)                                                              |
+| `mocha` + `ts-node`                        | Test framework                                                                             |
 
 ## Initiatives
 
