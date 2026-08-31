@@ -10,7 +10,6 @@
 //            provenance header naming their upstream and sync status.
 
 const INSTALLER_SRC = 'Tasks/PackerInstaller/PackerInstallerV1/src';
-const TASK_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 // No module is duplicated WITHIN this repository: each of the modules below
 // exists in exactly one task, so there is no second in-repo copy to diff
@@ -50,12 +49,11 @@ const PROVENANCE = [
     // parity — the version pin is what enforces it now. The terraform copies stay
     // gated by THEIR OWN check until that repo takes the dependency too; until then
     // the two repos are deliberately no longer symmetrical.
-    // The agent-proxy fetch options builder (#196). Body byte-identical to
-    // TerraformTaskV5/src/proxy-config.ts, including both setSecret calls (raw
-    // and percent-encoded proxy password); only the JSDoc names this repo's own
-    // call site. scripts/check-proxy-parity.js enforces that every outbound call
-    // actually uses it.
-    { dir: TASK_SRC, file: 'proxy-config.ts', upstream: UPSTREAM },
+    // proxy-config.ts (the agent-proxy fetch options builder, #196) is GONE too
+    // (#337): every outbound call site now proxies via generateIdToken()/
+    // createAdoHttpClient() in @4cloudguru/pipeline-task-ado, confirmed by
+    // check-proxy-parity.js reporting all 4 sites PROXIED-BY-PACKAGE with zero
+    // local proxy-config.ts callers left -- it was dead code, not a live gate.
 ];
 
 module.exports = { FAMILIES, PROVENANCE };

@@ -2,7 +2,6 @@ import * as assert from 'assert';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
-import { buildProxyFetchOptions } from '../src/proxy-config';
 import { generateIdToken } from '@4cloudguru/pipeline-task-ado';
 
 /**
@@ -14,9 +13,7 @@ import { generateIdToken } from '@4cloudguru/pipeline-task-ado';
  * HTTPS_PROXY and every agent setting unless handed an undici dispatcher, so
  * "honours the proxy" is a property of the CALL, not of the environment.
  *
- * Three tables, each covering the class rather than one call site:
- *   A. BUILDER_ROWS — the proxy-options builder itself, including the two
- *                     setSecret registrations (raw + percent-encoded password).
+ * Two tables, each covering the class rather than one call site:
  *   B. WIF_CALL_ROWS — every WIF outbound call this task makes, driven through
  *                      its REAL entry point with a stubbed fetch, asserting a
  *                      dispatcher arrives when a proxy is configured and does
@@ -28,9 +25,7 @@ import { generateIdToken } from '@4cloudguru/pipeline-task-ado';
  * Mutation-provability:
  *   - dropping the `generateIdToken` call's proxy wiring (which now lives in
  *     @4cloudguru/pipeline-task-ado, not this repo) reddens the 'ADO OIDC
- *     token request' row of table B and its two call-site rows in table C;
- *   - inverting `if (!proxy) return {}` in proxy-config.ts reddens exactly the
- *     'no proxy configured' rows of tables A and B.
+ *     token request' row of table B and its two call-site rows in table C.
  */
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
@@ -39,48 +34,6 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
 const t = tasks as any;
 
 type ProxyConfig = { proxyUrl: string; proxyUsername?: string; proxyPassword?: string };
-
-/**
- * Table A. `undefined` proxy rows go RED if the no-proxy early return is
- * inverted; the credential rows go RED if either setSecret registration is
- * dropped; the malformed row goes RED if the URL parse stops being guarded.
- */
-type BuilderRow = {
-    what: string;
-    proxy: ProxyConfig | undefined;
-    dispatcher: boolean;
-    masks?: string[];
-    throws?: RegExp;
-};
-const BUILDER_ROWS: BuilderRow[] = [
-    { what: 'no proxy configured', proxy: undefined, dispatcher: false },
-    {
-        what: 'an unauthenticated proxy',
-        proxy: { proxyUrl: 'http://proxy.example.com:8080', proxyUsername: '', proxyPassword: '' },
-        dispatcher: true,
-    },
-    {
-        what: 'an authenticated proxy (raw password masked)',
-        proxy: { proxyUrl: 'http://proxy.example.com:8080', proxyUsername: 'user', proxyPassword: 'p@ss' },
-        dispatcher: true,
-        masks: ['p@ss'],
-    },
-    {
-        // 'p@ss' -> 'p%40ss': the WHATWG URL password setter percent-encodes '@',
-        // and that encoded string -- not the raw password -- is what the proxy URL
-        // actually embeds. ADO masks literal registered strings only.
-        what: 'an authenticated proxy (percent-encoded password also masked)',
-        proxy: { proxyUrl: 'http://proxy.example.com:8080', proxyUsername: 'user', proxyPassword: 'p@ss' },
-        dispatcher: true,
-        masks: ['p@ss', 'p%40ss'],
-    },
-    {
-        what: 'a malformed proxy URL',
-        proxy: { proxyUrl: 'not a url', proxyUsername: 'user', proxyPassword: 'p@ss' },
-        dispatcher: false,
-        throws: /Invalid proxy URL/,
-    },
-];
 
 /**
  * Table B. Every outbound call this task makes on a WIF path, exercised through
@@ -150,28 +103,6 @@ describe('outbound proxy parity (class test #196)', function () {
         t.debug = origDebug;
         t.getEndpointAuthorizationParameter = origGetEndpointAuthorizationParameter;
         t.loc = origLoc;
-    });
-
-    describe('A. the proxy-options builder', () => {
-        for (const row of BUILDER_ROWS) {
-            it(`${row.throws ? 'rejects' : 'handles'} ${row.what}`, () => {
-                const masked: string[] = [];
-                t.setSecret = (v: string) => masked.push(v);
-                t.getHttpProxyConfiguration = () => row.proxy;
-
-                if (row.throws) {
-                    assert.throws(() => buildProxyFetchOptions(), row.throws);
-                    return;
-                }
-                const options = buildProxyFetchOptions();
-                assert.strictEqual('dispatcher' in options, row.dispatcher,
-                    `expected dispatcher presence to be ${row.dispatcher} for ${row.what}`);
-                for (const secret of row.masks ?? []) {
-                    assert.ok(masked.includes(secret),
-                        `expected '${secret}' to be registered with setSecret; got ${JSON.stringify(masked)}`);
-                }
-            });
-        }
     });
 
     describe('B. every WIF outbound call, driven through its real entry point', () => {
