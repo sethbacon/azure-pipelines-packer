@@ -5,6 +5,9 @@ import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
 import { normalizePem } from '@4cloudguru/pipeline-task-core';
 import {
     assertIdentityValue,
+    GCP_PROJECT_NUMBER_PATTERN,
+    GCP_SERVICE_ACCOUNT_EMAIL_PATTERN,
+    GCP_WORKLOAD_IDENTITY_ID_PATTERN,
     neutralizeEnvironmentVariables,
     requireIdentityField,
     requireSecretField,
@@ -102,11 +105,15 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
 
         // Every one of these is interpolated into the audience / impersonation
         // URLs written to the credentials file, so each is charset-validated
-        // rather than trusted as free text (#199).
-        const projectNumber = assertIdentityValue(tasks.getInput("gcpProjectNumber", true), "Input 'gcpProjectNumber'");
-        const poolId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityPoolId", true), "Input 'gcpWorkloadIdentityPoolId'");
-        const providerId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityProviderId", true), "Input 'gcpWorkloadIdentityProviderId'");
-        const serviceAccountEmail = assertIdentityValue(tasks.getInput("gcpServiceAccountEmail", true), "Input 'gcpServiceAccountEmail'");
+        // rather than trusted as free text (#199). Each also now carries the
+        // field-specific grammar GCP itself publishes, the same idiom the OCI
+        // handler already applies via OCID_PATTERN/REGION_PATTERN/
+        // FINGERPRINT_PATTERN -- generic IDENTITY_FIELD_PATTERN alone would still
+        // accept a syntactically-valid-looking but structurally wrong value (#339).
+        const projectNumber = assertIdentityValue(tasks.getInput("gcpProjectNumber", true), "Input 'gcpProjectNumber'", GCP_PROJECT_NUMBER_PATTERN, 'GCP project number (digits only)');
+        const poolId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityPoolId", true), "Input 'gcpWorkloadIdentityPoolId'", GCP_WORKLOAD_IDENTITY_ID_PATTERN, 'workload identity pool ID (4-32 characters from [a-z0-9-])');
+        const providerId = assertIdentityValue(tasks.getInput("gcpWorkloadIdentityProviderId", true), "Input 'gcpWorkloadIdentityProviderId'", GCP_WORKLOAD_IDENTITY_ID_PATTERN, 'workload identity provider ID (4-32 characters from [a-z0-9-])');
+        const serviceAccountEmail = assertIdentityValue(tasks.getInput("gcpServiceAccountEmail", true), "Input 'gcpServiceAccountEmail'", GCP_SERVICE_ACCOUNT_EMAIL_PATTERN, 'GCP service account email');
 
         const audience = `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
         const credentials = {

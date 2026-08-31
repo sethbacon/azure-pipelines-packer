@@ -65,6 +65,31 @@ describe('PackerTask Test Suite', function () {
     }
 
     /**
+     * Like expectFailure, but also pins WHY it failed. Some entrypoints (e.g.
+     * GcpWifValidationOnlyL0.js's sibling GcpWifAuthL0.js) can fail for a reason
+     * unrelated to the guard under test (an unrelated hardcoded golden-value
+     * mismatch), which would make a bare expectFailure pass even under a
+     * mutation that deletes the guard. Asserting the specific message text
+     * closes that gap.
+     */
+    function expectFailureContains(file: string, substrings: string[]) {
+        it(file, async () => {
+            const tp = path.join(__dirname, `${file}.js`);
+            const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+            await tr.runAsync();
+            runValidations(() => {
+                assert.ok(tr.failed, 'task should have failed');
+                for (const substring of substrings) {
+                    assert.ok(
+                        tr.errorIssues.some((e) => e.includes(substring)),
+                        `expected an error issue containing '${substring}'. errors: ${tr.errorIssues}`
+                    );
+                }
+            }, tr);
+        });
+    }
+
+    /**
      * Like expectSuccess, but also proves the credential was masked -- not just
      * that it landed in process.env. When `expectedSecrets` is given, asserts
      * that EACH exact value was registered via tasks.setSecret (not just that
@@ -100,6 +125,7 @@ describe('PackerTask Test Suite', function () {
     expectFailure('FmtCheckCapitalTrueFail');  // #331: 'True' from unquoted YAML must keep -check ON
     expectSuccess('PluginsInstalled');
     expectSuccess('PluginsInstall');
+    expectSuccess('OnErrorValidValueSuccess');           // #339: negative control for OnErrorInjectionReject
     expectSuccess('VersionSuccess');
     expectSuccess('Hcl2UpgradeSuccess');
     expectSuccess('InspectSuccess');
@@ -182,6 +208,16 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('VsphereServerUserinfoStripped');            // #110
     expectFailure('VsphereServerInvalidCharsetReject');        // #110
     expectFailure('EnvironmentVariablesIdentityReject');        // #187
+    expectFailure('PluginsSubCommandInjectionReject');          // #339: pickList is UI-only
+    expectFailure('OnErrorInjectionReject');                    // #339: pickList is UI-only
+    // #339: field-specific grammar. Pinned to the specific validation message
+    // (not just "the task failed") so a mutation that deletes the pattern
+    // argument can't hide behind GcpWifValidationOnlyL0.js failing for some
+    // other reason.
+    expectFailureContains('GcpWifProjectNumberInvalidReject', ["Input 'gcpProjectNumber'", 'not a valid']);
+    expectFailureContains('GcpWifPoolIdInvalidReject', ["Input 'gcpWorkloadIdentityPoolId'", 'not a valid']);
+    expectFailureContains('GcpWifProviderIdInvalidReject', ["Input 'gcpWorkloadIdentityProviderId'", 'not a valid']);
+    expectFailureContains('GcpWifServiceAccountEmailInvalidReject', ["Input 'gcpServiceAccountEmail'", 'not a valid']);
 
     it('VsphereInsecureConnectionWarns', async () => {
         const tp = path.join(__dirname, 'VsphereInsecureConnectionWarns.js');

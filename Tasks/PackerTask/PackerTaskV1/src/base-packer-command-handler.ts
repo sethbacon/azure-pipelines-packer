@@ -87,6 +87,31 @@ export abstract class BasePackerCommandHandler {
         }
     }
 
+    /**
+     * `pluginsSubCommand`'s task.json declaration is `type: pickList`, which is
+     * a UI-only affordance -- a YAML pipeline can still supply any string, and
+     * that value is interpolated into `createBaseCommand()`'s command name and
+     * eventually reaches `packer.ts`'s `toolRunner.line(command.name)`, which
+     * word-splits on whitespace. An unvalidated value like `install --extra-flag`
+     * therefore tokenizes into extra argv entries (#339).
+     */
+    protected static readonly VALID_PLUGINS_SUBCOMMANDS = ["install", "installed", "remove", "required"] as const;
+
+    protected validatePluginsSubCommand(subCommand: string): void {
+        if (!(BasePackerCommandHandler.VALID_PLUGINS_SUBCOMMANDS as readonly string[]).includes(subCommand)) {
+            throw new Error(`Unrecognized plugins sub-command '${subCommand}' for input 'pluginsSubCommand'. Valid values: ${BasePackerCommandHandler.VALID_PLUGINS_SUBCOMMANDS.join(", ")}`);
+        }
+    }
+
+    /** Same UI-only-pickList gap as pluginsSubCommand above, for task.json's `onError` (#339). */
+    protected static readonly VALID_ON_ERROR_VALUES = ["default", "cleanup", "abort", "ask", "run-cleanup-provisioner"] as const;
+
+    protected validateOnError(value: string): void {
+        if (!(BasePackerCommandHandler.VALID_ON_ERROR_VALUES as readonly string[]).includes(value)) {
+            throw new Error(`Unrecognized onError value '${value}' for input 'onError'. Valid values: ${BasePackerCommandHandler.VALID_ON_ERROR_VALUES.join(", ")}`);
+        }
+    }
+
     /** Maps a provider id (this.providerName) to its input-name suffix (environmentServiceName<Suffix>). */
     private static readonly PROVIDER_SUFFIX: Record<string, string> = {
         azurerm: "AzureRM",
@@ -188,6 +213,13 @@ export abstract class BasePackerCommandHandler {
         /^PKR_VAR_vsphere_(server|user|password|insecure_connection)$/,
         /^OCI_CLI_/,
         /^ARM_/,
+        // applyEnvironmentVariables() runs before any command dispatch, and every
+        // dispatched command resolves its packer binary via packer.ts's
+        // createToolRunner() -> tasks.which("packer", true), which searches
+        // process.env.PATH at call time. A passthrough PATH therefore selects
+        // WHICH packer binary this task's own tool resolution finds -- the same
+        // class of identity selection as the other entries above (#339).
+        /^PATH$/i,
     ];
 
     /** Sets any user-provided passthrough environment variables (tracked for cleanup). */
@@ -438,6 +470,7 @@ export abstract class BasePackerCommandHandler {
 
         const onError = tasks.getInput("onError", false);
         if (onError && onError !== 'default') {
+            this.validateOnError(onError);
             tool.arg(`-on-error=${onError}`);
         }
 
@@ -570,6 +603,7 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         const outputFile = tasks.getInput("hclOutputFile", false);
+        let resolvedOutputFile: string | undefined;
         if (outputFile) {
             // Same containment guard as fixOutputFile/manifestFile (#100): packer
             // resolves a relative -output-file against its cwd (workingDirectory),
@@ -580,17 +614,32 @@ export abstract class BasePackerCommandHandler {
                 throw new Error(`hclOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
             }
             tool.arg(`-output-file=${outputFile}`);
+            resolvedOutputFile = resolved;
         }
         if (tasks.getBoolInput("withAnnotations", false)) tool.arg('-with-annotations');
 
         this.applyCommandOptions(tool);
         tool.arg(this.getTemplatePath());
 
-        return tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory });
+        const code = await tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory });
+
+        // Re-validate after packer writes the file (TOCTOU guard, #339, mirroring
+        // fix()'s own post-exec re-check above): hcl2_upgrade's run is an
+        // arbitrarily long window during which a symlink could be planted at
+        // `resolvedOutputFile`, which the pre-exec lexical check above cannot
+        // itself detect. There is no write of our own to withhold here -- packer
+        // has already written the file by the time execAsync resolves -- so this
+        // fails the task to surface the escape rather than silently succeeding.
+        if (resolvedOutputFile && fs.existsSync(resolvedOutputFile) && !this.isWithinWorkingDirectory(resolvedOutputFile, command.workingDirectory)) {
+            throw new Error(`hclOutputFile '${outputFile}' resolves outside the working directory (${resolvedOutputFile}) after packer hcl2_upgrade ran.`);
+        }
+
+        return code;
     }
 
     public async plugins(): Promise<number> {
         const subCommand = tasks.getInput("pluginsSubCommand", true)!;
+        this.validatePluginsSubCommand(subCommand);
         const command = this.createBaseCommand(`plugins ${subCommand}`);
         const tool = this.packerToolHandler.createToolRunner(command);
 

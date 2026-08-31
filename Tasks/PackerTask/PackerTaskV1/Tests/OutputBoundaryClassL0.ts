@@ -186,6 +186,23 @@ describe('Output-boundary defect class (S1 output variables / S2 path writes / S
         );
     });
 
+    it('S2 hclOutputFile — the containment check runs AGAIN after packer hcl2_upgrade returns (TOCTOU, #339)', () => {
+        // Same class as the fix() row above: the pre-exec lexical check cannot see
+        // a symlink planted at the target while packer hcl2_upgrade runs. Unlike
+        // fix(), this handler has no write of its own to withhold -- packer writes
+        // -output-file directly -- so the re-check fails the task rather than
+        // refusing a write. Pinned structurally for the same reason as fix()'s row:
+        // no mock-runner scenario can reproduce a race between two awaits inside
+        // one synchronous call. Deleting the second check turns this row RED.
+        const src = handlerSource();
+        const hclBody = src.slice(src.indexOf('public async hcl2Upgrade('), src.indexOf('public async plugins('));
+        const checks = (hclBody.match(/isWithinWorkingDirectory\(/g) || []).length;
+        assert.strictEqual(checks, 2, `hcl2Upgrade() must contain a pre-exec AND a post-exec containment check; found ${checks}`);
+        const execAt = hclBody.indexOf('tool.execAsync(');
+        const secondCheckAt = hclBody.indexOf('isWithinWorkingDirectory(', hclBody.indexOf('isWithinWorkingDirectory(') + 1);
+        assert.ok(execAt > 0 && secondCheckAt > execAt, 'the re-check must come after the exec that opens the TOCTOU window');
+    });
+
     it('S2 -var-file (variableFiles) — a path escaping the working directory is refused (#339)', async () => {
         const tr = await runScenario('VariableFilesTraversalReject');
         assert.ok(tr.failed, report(tr, 'a traversing variableFiles entry must fail the task'));

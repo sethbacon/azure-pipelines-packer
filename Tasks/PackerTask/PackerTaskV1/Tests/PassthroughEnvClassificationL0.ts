@@ -131,6 +131,27 @@ describe('passthrough environmentVariables classification (class test #187/#207)
         });
     }
 
+    it("REJECTs 'PATH' without disturbing the ambient value (#339)", () => {
+        // PATH doesn't fit the ROWS table above: unlike every other REJECT row,
+        // it is legitimately already present in process.env before this test
+        // ever runs (the real search path node itself was launched with), so
+        // asserting it becomes `undefined` after rejection -- the ROWS loop's
+        // assertion for every other row -- would be wrong. What actually matters
+        // is that applyEnvironmentVariables() throws before EnvironmentVariableHelper
+        // ever gets a chance to overwrite it with the passthrough value: #339,
+        // applyEnvironmentVariables() runs before dispatch, and every command
+        // resolves its packer binary via tasks.which('packer', true), which
+        // searches process.env.PATH at call time -- a passthrough PATH selects
+        // which packer binary this task's own tool resolution finds.
+        const ambientPath = process.env['PATH'];
+        t.getInput = (name: string) => (name === 'environmentVariables' ? 'PATH=/tmp/evil:/usr/bin' : undefined);
+        const handler = new PackerCommandHandlerNone();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- protected member under test
+        const apply = () => (handler as any).applyEnvironmentVariables();
+        assert.throws(apply, /'PATH'/, "a PATH passthrough must be rejected outright, like the other identity-selecting names");
+        assert.strictEqual(process.env['PATH'], ambientPath, 'PATH must be left exactly as it was; the malicious passthrough must never be applied');
+    });
+
     it('never promises an overwrite it cannot deliver (#207)', () => {
         t.getInput = (name: string) => (name === 'environmentVariables' ? 'AWS_REGION=eu-west-1' : undefined);
         const handler = new PackerCommandHandlerNone();
