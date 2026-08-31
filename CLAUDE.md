@@ -160,10 +160,9 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `credential-guards.ts`              | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`)                       |
 | `secure-file-loader.ts`             | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600                                                                                                               |
 | `secure-var-file-masking.ts`        | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them                                                                                                  |
-| `proxy-config.ts`                   | Builds `fetch()` options routing outbound HTTPS through the agent's configured proxy (`Agent.ProxyUrl`/`Agent.ProxyUsername`/`Agent.ProxyPassword`), masking both the raw and percent-encoded proxy password |
 
-**Five modules no longer live in this repo** (#46, #380). Four moved to `@4cloudguru/pipeline-task-ado`,
-one (crypto-shaped, no ADO dependency) to `@4cloudguru/pipeline-task-core`:
+**Six modules no longer live in this repo** (#46, #380, #337). Four moved to `@4cloudguru/pipeline-task-ado`,
+two (crypto/proxy-shaped) to `@4cloudguru/pipeline-task-core`:
 
 | Was                        | Now                                                           | What it does                                                                                                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -172,6 +171,7 @@ one (crypto-shaped, no ADO dependency) to `@4cloudguru/pipeline-task-core`:
 | `id-token-generator.ts`    | `@4cloudguru/pipeline-task-ado` (`generateIdToken`)           | Requests the ADO OIDC ID token used by every WIF provider. Gained `SYSTEM_OIDCREQUESTURI` hostname allowlisting — this repo's copy only checked the URL scheme — and routes through the package's own proxy-aware fetch. |
 | `endpoint-data-secret.ts`  | `@4cloudguru/pipeline-task-ado` (`readSecretEndpointDataParameter`, `maskSecretLines`) | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted). Was already byte-for-byte functionally identical to the shared version — this repo's copy already used `registerSecret`, not the buggy `setSecret` (#349 fixed that half locally before the migration).                        |
 | `pem-normalizer.ts`        | `@4cloudguru/pipeline-task-core` (`normalizePem`)             | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping. Was already byte-identical to the terraform copy.                                         |
+| `proxy-config.ts`          | `@4cloudguru/pipeline-task-ado`/`@4cloudguru/pipeline-task-core` (`generateIdToken`, `createAdoHttpClient`) | Built `fetch()` options routing outbound HTTPS through the agent's proxy. Its only remaining callers (the WIF token exchange, the installer's HTTP client) both already delegated their own proxy dispatch to the package -- confirmed dead via `check-proxy-parity.js` reporting zero local callers, deleted rather than migrated (#337). |
 
 Change any of those in the package, not here. `scripts/check-proxy-parity.js` treats `generateIdToken`
 as a package-delegated sink (like `createAdoHttpClient`): it verifies the declared

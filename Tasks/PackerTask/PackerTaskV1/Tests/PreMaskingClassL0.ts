@@ -41,7 +41,6 @@ import { getSecureVarFileArgs, ISecureFileLoader } from '../src/secure-file-load
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const INSTALLER_SRC = path.join(REPO_ROOT, 'Tasks', 'PackerInstaller', 'PackerInstallerV1', 'src');
-const TASK_SRC = path.join(REPO_ROOT, 'Tasks', 'PackerTask', 'PackerTaskV1', 'src');
 
 function readSource(...segments: string[]): string {
     return fs.readFileSync(path.join(...segments), 'utf8').replace(/\r\n/g, '\n');
@@ -64,31 +63,20 @@ interface SourceSite {
 }
 
 /**
- * M3 no longer has a source row for the INSTALLER transport. Assembling the
- * proxy URL, registering every spelling it produced, and constructing the
- * dispatcher all moved into @4cloudguru/pipeline-task-ado's buildAdoFetchOptions,
- * so the regexes that used to pin that ordering here now match nothing - and a
- * source assertion that cannot fail is worse than no assertion, because it reads
- * as coverage. What is still checkable from here is PROVENANCE: that the
- * installer depends on a version of the package known to contain the wiring AND
- * the test asserting its ordering. The floor below is that check.
- *
- * The PackerTaskV1 proxy-config.ts row survives unchanged - that transport was
- * not migrated and still does its own masking inline.
+ * M3 no longer has a source row for the INSTALLER transport, nor for the
+ * PackerTaskV1 WIF transport (#337): assembling the proxy URL, registering
+ * every spelling it produced, and constructing the dispatcher all moved into
+ * @4cloudguru/pipeline-task-ado's buildAdoFetchOptions, so the regexes that
+ * used to pin that ordering here now match nothing -- and a source assertion
+ * that cannot fail is worse than no assertion, because it reads as coverage.
+ * What is still checkable from here is PROVENANCE: that the installer depends
+ * on a version of the package known to contain the wiring AND the test
+ * asserting its ordering. The floor below is that check.
  */
 const ADO_PACKAGE = '@4cloudguru/pipeline-task-ado';
 const ADO_PACKAGE_FLOOR = '0.3.0';
 
 const SOURCE_SITES: SourceSite[] = [
-    {
-        mechanism: 'M3',
-        site: 'PackerTaskV1/src/proxy-config.ts:buildProxyFetchOptions',
-        file: path.join(TASK_SRC, 'proxy-config.ts'),
-        // The same defect class at the WIF token-request transport. This site was
-        // not represented here before, so the masking it performs was unguarded.
-        guard: /for \(const secret of resolved\.secrets\) \{\s*\n\s*tasks\.setSecret\(secret\);\s*\n\s*\}[\s\S]{0,400}?dispatcher: new ProxyAgent\(resolved\.proxyUrl\)/,
-        defect: /if \(!resolved\) return \{\};\s*\n\s*return \{/,
-    },
     {
         mechanism: 'M5',
         site: 'PackerInstallerV1/src/packer-installer.ts:downloadZipFromRegistry (pre-signed download_url)',
