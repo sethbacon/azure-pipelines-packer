@@ -158,6 +158,11 @@ describe('PackerTask Test Suite', function () {
     // handleProvider() call) actually clears env vars and removes temp files. ---
     expectSuccess('OciValidateCleanupSuccess');
 
+    // --- Cleanup on a FAILING command (#336 finding 4): the finally-block
+    // guarantee must hold even when packer's own exec rejects, not just on the
+    // happy path the fixture above exercises. ---
+    expectSuccess('OciValidateCleanupFail');
+
     // --- Fail-closed / hardening regressions ---
     expectFailure('AwsStaticIncompleteCredsReject');
     expectFailure('OciTenancyInvalidReject');
