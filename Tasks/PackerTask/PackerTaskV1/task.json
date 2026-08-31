@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "20",
+        "Minor": "21",
         "Patch": "0"
     },
     "instanceNameFormat": "Packer $(command)",

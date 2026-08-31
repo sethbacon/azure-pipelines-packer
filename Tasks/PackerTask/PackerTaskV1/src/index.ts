@@ -7,7 +7,23 @@ async function run() {
 
     const parentHandler = new ParentCommandHandler();
 
-    // Register process-level cleanup as defense-in-depth for unexpected termination
+    // Register process-level cleanup as defense-in-depth for unexpected termination.
+    //
+    // Residual risk (#336): SIGTERM/SIGINT/uncaughtException/unhandledRejection are
+    // the only termination paths this process can intercept. None of them fire on
+    // SIGKILL, an agent out-of-memory kill, or the underlying container/VM being
+    // torn down mid-job -- on any of those, cleanup()/emergencyCleanup() never runs
+    // and the OIDC JWT / GCP credentials JSON / OCI private-key temp file this job
+    // wrote is left on disk. Writing under Agent.TempDirectory (rather than a bare
+    // os.tmpdir()) only helps if the agent's own temp-directory purge is actually
+    // configured to run between jobs -- true by default for Microsoft-hosted
+    // agents, but NOT guaranteed on a self-hosted agent, where a killed job's
+    // credential files can persist indefinitely for the next job (or a co-tenant
+    // one) on that same machine to read. Operators of self-hosted/persistent
+    // agents should configure their own periodic temp-directory purge (or a
+    // per-job ephemeral/containerized agent) as a compensating control; this task
+    // has no mechanism of its own to sweep a PRIOR run's leftover credential files
+    // at startup.
     const cleanup = () => parentHandler.emergencyCleanup();
     // Registering a listener for SIGTERM/SIGINT suppresses Node's default
     // terminate-on-signal behavior, so re-raise the signal (with the listener
