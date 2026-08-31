@@ -43,3 +43,7 @@ steps:
 ```
 
 See the [GitHub repository](https://github.com/sethbacon/azure-pipelines-packer) for full documentation.
+
+## Trademarks
+
+"Packer" is a trademark of HashiCorp. This extension is an independent, community-built extension and is not affiliated with, endorsed by, or sponsored by HashiCorp. Amazon Web Services, Google Cloud, Oracle Cloud Infrastructure, and VMware vSphere are trademarks of their respective owners; this project is not affiliated with, endorsed by, or sponsored by any of them. Product names are used under nominative fair use solely to describe compatibility.

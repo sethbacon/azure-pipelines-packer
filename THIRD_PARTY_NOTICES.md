@@ -54,6 +54,19 @@ SOFTWARE.
 
 ---
 
+## @4cloudguru/pipeline-task-ado, @4cloudguru/pipeline-task-core
+
+**Repository:** https://github.com/4cloudguru/pipeline-task-ado, https://github.com/4cloudguru/pipeline-task-core
+**Used by:** both tasks (`Tasks/PackerInstaller/PackerInstallerV1`, `Tasks/PackerTask/PackerTaskV1`) — `pipeline-task-ado` provides shared ADO task primitives (env var tracking, secure temp files, OIDC token generation); `pipeline-task-core` provides shared crypto/HTTP/egress primitives (HTTP client, PEM normalization, verification typing)
+**License:** Apache License 2.0 (Apache-2.0)
+
+Both packages are used unmodified as library dependencies (no source changes). The full
+Apache-2.0 license text is available at https://www.apache.org/licenses/LICENSE-2.0.txt and is
+also included verbatim in `node_modules/@4cloudguru/pipeline-task-ado/LICENSE` and
+`node_modules/@4cloudguru/pipeline-task-core/LICENSE` in each task's packaged extension output.
+
+---
+
 ## undici
 
 **Repository:** https://github.com/nodejs/undici
