@@ -7,6 +7,7 @@ import {
     neutralizeEnvironmentVariables,
     requireIdentityField,
     requireSecretField,
+    requireServiceConnection,
     resolveRoleSessionName,
 } from './credential-guards';
 
@@ -56,10 +57,7 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
             return;
         }
 
-        const serviceName = command.serviceProviderName;
-        if (!serviceName) {
-            throw new Error("An AWS service connection is required for this command. Set environmentServiceNameAWS.");
-        }
+        const serviceName = requireServiceConnection(command.serviceProviderName, 'AWS', 'environmentServiceNameAWS');
 
         // Fail closed rather than injecting an empty credential: the AWS SDK
         // treats a missing AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY as "not set"
@@ -94,13 +92,11 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
     }
 
     private async handleProviderWIF(command: PackerAuthorizationCommandInitializer): Promise<void> {
-        if (!command.serviceProviderName) {
-            // Fail closed like the static path: an empty service connection would
-            // otherwise POST to the ADO OIDC endpoint with an empty id and surface
-            // a cryptic downstream error instead of a clear misconfiguration.
-            throw new Error("An AWS service connection is required for Workload Identity Federation. Set environmentServiceNameAWS.");
-        }
-        const tokenFilePath = await this.writeOidcTokenFile(command.serviceProviderName, 'aws-oidc-token');
+        // Fail closed like the static path: an empty service connection would
+        // otherwise POST to the ADO OIDC endpoint with an empty id and surface
+        // a cryptic downstream error instead of a clear misconfiguration.
+        const serviceName = requireServiceConnection(command.serviceProviderName, 'AWS', 'environmentServiceNameAWS', 'for Workload Identity Federation');
+        const tokenFilePath = await this.writeOidcTokenFile(serviceName, 'aws-oidc-token');
 
         // Clear the static keys FIRST: the SDK matches them before the
         // web-identity token file, so leaving an inherited pair in place would

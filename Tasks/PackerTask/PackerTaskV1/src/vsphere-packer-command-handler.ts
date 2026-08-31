@@ -2,7 +2,15 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
-import { assertIdentityValue, neutralizeEnvironmentVariables, requireSecretField } from './credential-guards';
+import { assertIdentityValue, neutralizeEnvironmentVariables, requireSecretField, requireServiceConnection } from './credential-guards';
+
+/**
+ * The vSphere builder's competing-credential env var: an inherited or
+ * passed-through PKR_VAR_vsphere_insecure_connection=true would disable
+ * vCenter TLS verification for a build whose operator never asked for it,
+ * exposing the password this handler injects to on-path interception (#44/#187).
+ */
+const VSPHERE_COMPETING_CREDENTIAL_ENV = ['PKR_VAR_vsphere_insecure_connection'] as const;
 
 /**
  * Injects vCenter credentials for the packer-plugin-vsphere (vsphere-iso /
@@ -19,10 +27,7 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
     private static readonly HOST_PATTERN = /^[A-Za-z0-9.-]+(:[0-9]+)?$/;
 
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
-        const serviceName = command.serviceProviderName;
-        if (!serviceName) {
-            throw new Error("A vSphere service connection is required for this command. Set environmentServiceNameVSphere.");
-        }
+        const serviceName = requireServiceConnection(command.serviceProviderName, 'vSphere', 'environmentServiceNameVSphere');
 
         // The vsphere builder's vcenter_server expects a bare hostname[:port]. A
         // lexical scheme-strip left userinfo and any path/query segment intact
@@ -68,7 +73,7 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
             // would disable vCenter TLS verification for a build whose operator
             // never asked for it, exposing the password set below to on-path
             // interception (#44/#187). The toggle is off, so the variable must be off.
-            neutralizeEnvironmentVariables(['PKR_VAR_vsphere_insecure_connection'], "vSphere");
+            neutralizeEnvironmentVariables(VSPHERE_COMPETING_CREDENTIAL_ENV, "vSphere");
         }
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username);

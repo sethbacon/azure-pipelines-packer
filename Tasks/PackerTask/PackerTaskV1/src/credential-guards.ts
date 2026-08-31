@@ -168,6 +168,20 @@ export function requireSecretField(serviceName: string, key: string, options: Re
 }
 
 /**
+ * Fails closed when a handler's service connection input was left unset --
+ * the identical guard that was hand-copied, one throw per call site, across
+ * the AWS/OCI/GCP/vSphere/Azure handlers. `providerLabel` and `inputName`
+ * reproduce each handler's existing message verbatim; `context` swaps in the
+ * WIF-specific wording those handlers' WIF branches used.
+ */
+export function requireServiceConnection(name: string | undefined, providerLabel: string, inputName: string, context = 'for this command'): string {
+    if (!name) {
+        throw new Error(`${/^[AEIOU]/i.test(providerLabel) ? 'An' : 'A'} ${providerLabel} service connection is required ${context}. Set ${inputName}.`);
+    }
+    return name;
+}
+
+/**
  * Removes environment variables that select a DIFFERENT identity than the one
  * this branch is about to inject (#187).
  *
