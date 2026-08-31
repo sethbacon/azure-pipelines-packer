@@ -3,8 +3,17 @@ import { ParentCommandHandler } from './parent-handler';
 import path = require('path');
 
 async function run() {
-    tasks.setResourcePath(path.join(__dirname, '..', 'task.json'));
-
+    // Finding 2 of #342: everything from here down to the first `await` runs
+    // synchronously, so a throw anywhere in it previously bypassed this task's
+    // own cleanup/Failed-result path entirely -- the process.on(...)
+    // registrations below did not exist yet at that instant. ParentCommandHandler
+    // construction, the cleanup/handleTerminationSignal definitions, and all four
+    // registrations now happen FIRST, before tasks.setResourcePath(...) or
+    // anything else that could throw, so the narrow early-startup window is
+    // covered too. ParentCommandHandler's constructor is a pure field
+    // initializer (no side effects), and neither handleTerminationSignal nor the
+    // uncaughtException/unhandledRejection handlers use tasks.loc(...) -- both
+    // work identically whether or not setResourcePath has run yet.
     const parentHandler = new ParentCommandHandler();
 
     // Register process-level cleanup as defense-in-depth for unexpected termination.
@@ -48,6 +57,8 @@ async function run() {
         tasks.setResult(tasks.TaskResult.Failed, `Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
         process.exit(1);
     });
+
+    tasks.setResourcePath(path.join(__dirname, '..', 'task.json'));
 
     try {
         await parentHandler.execute(tasks.getInput("provider") || "none", tasks.getInput("command", true)!);

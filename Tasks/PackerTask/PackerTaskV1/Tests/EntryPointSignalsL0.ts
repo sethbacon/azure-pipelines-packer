@@ -232,4 +232,50 @@ describe('index.ts abnormal-termination listeners — emergency cleanup then ter
             'the handler must removeListener() itself before process.kill, or the re-raise is swallowed and the process lingers',
         );
     });
+
+    /**
+     * Finding 2 of #342: run() previously did real synchronous work --
+     * tasks.setResourcePath(...), `new ParentCommandHandler()` -- BEFORE
+     * registering any of the four listeners exercised above. A throw during
+     * that early window (e.g. tasks.setResourcePath failing to read task.json)
+     * bypassed this task's own cleanup/Failed-result path entirely: no
+     * unhandledRejection listener existed yet to catch it, so Node's default
+     * (uncontrolled process termination, no credential-temp-file scrub, no ADO
+     * Failed result) would have applied instead.
+     *
+     * This asserts the ordering invariant directly rather than actually
+     * triggering an unhandled rejection (which would be fatal to the whole
+     * mocha process if unfixed): by the moment tasks.setResourcePath is
+     * invoked, all four listeners must already be attached. The SITES table
+     * above and the listener-removal test already regression-cover that
+     * normal (non-throwing) startup behavior is unaffected by the reorder --
+     * this test targets only the early-throw window itself.
+     */
+    it('registers all four termination listeners before tasks.setResourcePath -- the first thing in run() that could throw', () => {
+        const beforeLoadCounts = new Map(TRACKED_EVENTS.map(event => [event, process.listenerCount(event)]));
+        const countsAtResourcePathCall = new Map<string, number>();
+        const origSetResourcePath = tasks.setResourcePath;
+
+        t.setResourcePath = (...args: unknown[]) => {
+            for (const event of TRACKED_EVENTS) {
+                countsAtResourcePathCall.set(event, process.listenerCount(event));
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- forwarding to the real implementation with its original signature
+            return (origSetResourcePath as any).apply(tasks, args);
+        };
+
+        try {
+            require('../src/index');
+        } finally {
+            t.setResourcePath = origSetResourcePath;
+        }
+
+        for (const event of TRACKED_EVENTS) {
+            assert.strictEqual(
+                countsAtResourcePathCall.get(event),
+                beforeLoadCounts.get(event)! + 1,
+                `the ${event} listener must already be registered by the time tasks.setResourcePath runs, so a throw there is not silently fatal`,
+            );
+        }
+    });
 });
