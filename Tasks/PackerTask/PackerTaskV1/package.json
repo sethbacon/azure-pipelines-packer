@@ -21,7 +21,7 @@
     "@4cloudguru/pipeline-task-ado": "^0.5.3",
     "@4cloudguru/pipeline-task-core": "^0.7.1",
     "azure-pipelines-task-lib": "^5.279.0",
-    "azure-pipelines-tasks-securefiles-common": "^2.272.0",
+    "azure-pipelines-tasks-securefiles-common": "^2.279.0",
     "undici": "^8.10.0"
   },
   "overrides": {
@@ -39,7 +39,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^24",
     "@types/uuid": "^11.0.0",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "mocha": "^11.8.0",
     "nyc": "^18.0.0",
     "ts-node": "^10.9.1",
