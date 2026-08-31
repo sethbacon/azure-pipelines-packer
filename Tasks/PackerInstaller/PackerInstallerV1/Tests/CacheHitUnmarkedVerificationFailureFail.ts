@@ -18,6 +18,7 @@ tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64', tmpdir: () => '/
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Unexpected fetchJson: ' + url); },
+    downloadToFile: async () => { },
     fetchText: async (_url: string) => `${'c'.repeat(64)}  packer_1.12.0_linux_amd64.zip\n`
 });
 

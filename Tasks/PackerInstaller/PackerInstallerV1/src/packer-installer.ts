@@ -35,10 +35,6 @@ const isWindows = os.type().match(/^Win/);
 
 const SHA256_HEX_PATTERN = /^[a-fA-F0-9]{64}$/;
 
-/** Bounded retry for the binary download itself (#78); metadata fetches retry inside http-client.ts. */
-const DOWNLOAD_ATTEMPTS = 3;
-const DOWNLOAD_RETRY_BASE_MS = 200;
-
 /**
  * A downloaded zip plus whether it ACTUALLY passed an integrity check. The mirror
  * and registry sources can legitimately return an unverified artifact when the
@@ -102,48 +98,6 @@ function maskOperatorUrlCredentials(url: string): void {
  */
 
 /**
- * Races tools.downloadTool (azure-pipelines-tool-lib's typed-rest-client based
- * downloader) against a wall-clock timeout. downloadTool applies no timeout of its
- * own, so a stalled connection would otherwise hang the zip download — the largest
- * and slowest fetch of the install — until the pipeline's own job-timeout kills the
- * whole task with no specific diagnostic. Reuses the same DOWNLOAD_TIMEOUT_MS ceiling
- * the GPG signature fetch uses. `timeoutMs` is a parameter (default DOWNLOAD_TIMEOUT_MS)
- * purely so it can be exercised directly in a unit test without a 10-minute wait; every
- * real call site uses the default. See #105.
- *
- * Note: Promise.race cannot cancel the underlying request if it loses the race — the
- * download continues in the background — but the task has already failed and the
- * process exits shortly after, so this is an accepted, low-cost limitation rather
- * than a full re-architecture onto the hardened http-client (see #105 deferred notes).
- */
-export async function downloadToolWithTimeout(url: string, fileName: string, timeoutMs: number = DOWNLOAD_TIMEOUT_MS): Promise<string> {
-    // Bounded retry (#78): tools.downloadTool performs a single HTTP GET with no
-    // retry of its own, so one transient blip during the largest fetch of the
-    // install failed the whole task. The metadata fetches already retry inside
-    // http-client.ts's withRetry; this brings the binary download to parity.
-    // Verification is deliberately OUTSIDE this loop — a checksum/signature
-    // failure is deterministic and must never be retried.
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
-        let timer!: ReturnType<typeof setTimeout>;
-        const timeout = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error(`Download of ${redactUrl(url)} timed out after ${timeoutMs}ms.`)), timeoutMs);
-        });
-        try {
-            return await Promise.race([tools.downloadTool(url, `${fileName}${attempt > 1 ? `.retry${attempt}` : ''}`), timeout]);
-        } catch (error) {
-            lastError = error;
-            if (attempt === DOWNLOAD_ATTEMPTS) break;
-            tasks.debug(`Download attempt ${attempt} of ${redactUrl(url)} failed (${error instanceof Error ? error.message : error}); retrying...`);
-            await new Promise(resolve => setTimeout(resolve, DOWNLOAD_RETRY_BASE_MS * Math.pow(2, attempt - 1)));
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-    throw lastError;
-}
-
-/**
  * Reads registryMirrorName and validates it as a single URL path segment before
  * it is interpolated into the registry API path. Delegates to the shared
  * validateUrlPathSegment() so the traversal rejection can never drift between
@@ -174,6 +128,20 @@ const MIRROR_EGRESS_MESSAGES: EgressHostMessages = {
 const REGISTRY_EGRESS_MESSAGES: EgressHostMessages = {
     notAllowed: (hostname, allowedHosts) => tasks.loc('RegistryDownloadHostNotAllowed', hostname, allowedHosts),
     isPrivate: (hostname) => tasks.loc('RegistryDownloadHostIsPrivate', hostname),
+};
+
+/**
+ * Localized rejection text for the default HashiCorp download source's egress
+ * authorization. There is no operator-configurable allowlist input for this
+ * source -- the initial host is always releases.hashicorp.com -- so
+ * notAllowed is unreachable in practice (assertEgressHostAllowed only calls it
+ * when the allowlist is non-empty); isPrivate is the one that matters, guarding
+ * against a redirect hop resolving to a private/link-local/metadata address
+ * (#334).
+ */
+const HASHICORP_EGRESS_MESSAGES: EgressHostMessages = {
+    notAllowed: (hostname, allowedHosts) => tasks.loc('HashiCorpDownloadHostNotAllowed', hostname, allowedHosts),
+    isPrivate: (hostname) => tasks.loc('HashiCorpDownloadHostIsPrivate', hostname),
 };
 
 /**
@@ -383,9 +351,25 @@ async function resolveVersionFromRegistry(inputVersion: string, registryUrl: str
 async function downloadZipFromHashiCorp(version: string): Promise<DownloadedZip> {
     const downloadUrl = getHashiCorpDownloadUrl(version);
     const fileName = `${packerToolName}-${version}-${uuidV4()}.zip`;
+    // Egress authorization for the download destination -- the SAME decision
+    // (assertEgressHostAllowed) applied to the initial URL and, via
+    // downloadToFile, to every redirect hop. Previously this used
+    // downloadToolWithTimeout -> tools.downloadTool(), which follows redirects
+    // with no way to re-validate or disable that -- so a compromised CDN edge
+    // or a MITM'd redirect chain could steer the download to an arbitrary host
+    // (including a private/link-local/metadata address) and this task would
+    // follow it, unlike the mirror/registry sources, which already guard every
+    // hop (#334). There is no allowlist input for this source (the host is
+    // always releases.hashicorp.com), so this always runs in DEFAULT-DENY mode:
+    // any legitimate public redirect target is still allowed, only private/
+    // link-local/reserved resolution is refused.
+    const initialHost = new URL(downloadUrl).hostname;
+    await assertEgressHostAllowed(initialHost, [], HASHICORP_EGRESS_MESSAGES);
     let zipPath: string;
     try {
-        zipPath = await downloadToolWithTimeout(downloadUrl, fileName);
+        zipPath = path.join(tasks.getVariable('Agent.TempDirectory') || os.tmpdir(), fileName);
+        await downloadToFile(downloadUrl, zipPath, DOWNLOAD_TIMEOUT_MS, hostname =>
+            assertEgressHostAllowed(hostname, [], HASHICORP_EGRESS_MESSAGES));
     } catch (exception) {
         throw new Error(tasks.loc("PackerDownloadFailed", downloadUrl, exception));
     }

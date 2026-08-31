@@ -49,10 +49,6 @@ const INSTALLER = 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.
 
 const SITE_ROWS: SiteRow[] = [
     // --- acquisition: every path that pulls a binary off the network ---
-    {
-        file: INSTALLER, fn: 'downloadToolWithTimeout', kind: 'ACQUIRE', verdict: 'EXEMPT-DELEGATES-TO-CALLER',
-        why: 'pure timeout/retry wrapper around tools.downloadTool; its URL is a parameter, so its callers own verification',
-    },
     { file: INSTALLER, fn: 'downloadZipFromHashiCorp', kind: 'ACQUIRE', verdict: 'VERIFIED', why: 'GPG-signed SHA256SUMS from releases.hashicorp.com' },
     { file: INSTALLER, fn: 'downloadZipFromRegistry', kind: 'ACQUIRE', verdict: 'VERIFIED', why: 'registry-provided sha256, mandatory under requireChecksum' },
     { file: INSTALLER, fn: 'downloadZipFromMirror', kind: 'ACQUIRE', verdict: 'VERIFIED', why: 'mirror SHA256SUMS + its GPG signature' },

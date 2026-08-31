@@ -13,7 +13,7 @@
     "demands": [],
     "version": {
         "Major": "1",
-        "Minor": "19",
+        "Minor": "20",
         "Patch": "0"
     },
     "instanceNameFormat": "Install Packer $(packerVersion)",
@@ -158,6 +158,8 @@
         "PackerDownloadFailed": "Failed to download Packer from url %s. Error: %s",
         "PackerVersionNotFound": "Unable to resolve the latest Packer version from the HashiCorp checkpoint API. Pin an explicit 'packerVersion' instead of 'latest', or retry — refusing to silently fall back to a stale pinned version.",
         "GettingLatestPackerVersion": "Getting latest Packer version.",
+        "HashiCorpDownloadHostIsPrivate": "HashiCorp download host %s is private or link-local and was rejected.",
+        "HashiCorpDownloadHostNotAllowed": "HashiCorp download host %s is not allowed (%s).",
         "InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
         "MirrorDownloadHostIsPrivate": "Mirror download host %s is private or link-local and was rejected. Configure mirrorAllowedHosts to explicitly allow a trusted private mirror.",
         "MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",

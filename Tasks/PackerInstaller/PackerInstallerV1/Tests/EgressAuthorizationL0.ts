@@ -152,8 +152,8 @@ const SITE_ROWS: SiteRow[] = [
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',
-        fn: 'downloadZipFromHashiCorp', sink: 'downloadToolWithTimeout', verdict: 'EXEMPT-CONSTANT-HOST',
-        why: 'releases.hashicorp.com is a compile-time constant host',
+        fn: 'downloadZipFromHashiCorp', sink: 'downloadToFile', verdict: 'AUTHORIZED',
+        why: 'releases.hashicorp.com is a compile-time constant host, but downloadToFile follows redirects and previously did so via tools.downloadTool() with no per-hop re-validation -- a compromised CDN edge or a MITM\'d redirect chain could steer the download to an arbitrary host. Authorized (empty allowlist -> default-deny) on the initial URL and every hop, same as the mirror/registry sources (#334).',
     },
     {
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',

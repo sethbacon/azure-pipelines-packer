@@ -21,6 +21,7 @@ const CACHED_HASH = 'b'.repeat(64);
 
 tr.registerMock('./http-client', {
     fetchJson: async (url: string) => { throw new Error('Unexpected fetchJson: ' + url); },
+    downloadToFile: async () => { },
     // The freshly downloaded zip verifies cleanly against the published SHA256SUMS...
     fetchText: async (_url: string) => `${CACHED_HASH}  packer_1.12.0_linux_amd64.zip\n`
 });

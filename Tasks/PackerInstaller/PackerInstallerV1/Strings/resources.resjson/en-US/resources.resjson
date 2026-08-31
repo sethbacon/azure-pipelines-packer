@@ -29,6 +29,8 @@
     "loc.messages.PackerDownloadFailed": "Failed to download Packer from url %s. Error: %s",
     "loc.messages.PackerVersionNotFound": "Unable to resolve the latest Packer version from the HashiCorp checkpoint API. Pin an explicit 'packerVersion' instead of 'latest', or retry — refusing to silently fall back to a stale pinned version.",
     "loc.messages.GettingLatestPackerVersion": "Getting latest Packer version.",
+    "loc.messages.HashiCorpDownloadHostIsPrivate": "HashiCorp download host %s is private or link-local and was rejected.",
+    "loc.messages.HashiCorpDownloadHostNotAllowed": "HashiCorp download host %s is not allowed (%s).",
     "loc.messages.InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
     "loc.messages.MirrorDownloadHostIsPrivate": "Mirror download host %s is private or link-local and was rejected. Configure mirrorAllowedHosts to explicitly allow a trusted private mirror.",
     "loc.messages.MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
