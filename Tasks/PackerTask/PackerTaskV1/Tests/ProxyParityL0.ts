@@ -123,11 +123,6 @@ const SITE_ROWS: SiteRow[] = [
         fn: 'createRegistryClient', sink: 'createAdoHttpClient', verdict: 'PROXIED-BY-PACKAGE',
         why: 'the same transport with the registry-specific failure message; a second construction is a second site the floor has to cover',
     },
-    {
-        file: 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts',
-        fn: 'downloadToolWithTimeout', sink: 'downloadTool', verdict: 'EXEMPT-TOOL-LIB',
-        why: 'azure-pipelines-tool-lib/tool.js constructs its HttpClient with proxy: tl.getHttpProxyConfiguration(), so the proxy is applied inside the library',
-    },
 ];
 
 describe('outbound proxy parity (class test #196)', function () {
