@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "pipeline-tasks-packer",
     "name": "Pipeline Tasks for Packer",
-    "version": "1.3.7",
+    "version": "1.4.0",
     "publisher": "sethbacon",
     "targets": [
         {
