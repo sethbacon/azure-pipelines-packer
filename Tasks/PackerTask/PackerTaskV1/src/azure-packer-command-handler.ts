@@ -7,6 +7,7 @@ import {
     neutralizeEnvironmentVariables,
     requireIdentityField,
     requireSecretField,
+    requireServiceConnection,
 } from './credential-guards';
 
 /**
@@ -78,8 +79,8 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
         this.providerName = "azurerm";
     }
 
-    public async handleProvider(_command: PackerAuthorizationCommandInitializer): Promise<void> {
-        const serviceConnectionID = tasks.getInput("environmentServiceNameAzureRM", true)!;
+    public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
+        const serviceConnectionID = requireServiceConnection(command.serviceProviderName, 'Azure', 'environmentServiceNameAzureRM');
         const authorizationScheme = this.mapAuthorizationScheme(
             tasks.getEndpointAuthorizationScheme(serviceConnectionID, true),
             serviceConnectionID

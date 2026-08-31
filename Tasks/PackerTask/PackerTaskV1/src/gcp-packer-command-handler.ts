@@ -11,6 +11,7 @@ import {
     neutralizeEnvironmentVariables,
     requireIdentityField,
     requireSecretField,
+    requireServiceConnection,
 } from './credential-guards';
 
 /**
@@ -133,21 +134,16 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
         this.validateAuthScheme(authScheme, "environmentAuthSchemeGCP");
 
         if (authScheme === "WorkloadIdentityFederation") {
-            if (!command.serviceProviderName) {
-                // Fail closed like the service-connection path rather than requesting
-                // an OIDC token for an empty service connection id.
-                throw new Error("A GCP service connection is required for Workload Identity Federation. Set environmentServiceNameGCP.");
-            }
-            const credentialsFilePath = await this.writeWifCredentials(command.serviceProviderName);
+            // Fail closed like the service-connection path rather than requesting
+            // an OIDC token for an empty service connection id.
+            const wifServiceName = requireServiceConnection(command.serviceProviderName, 'GCP', 'environmentServiceNameGCP', 'for Workload Identity Federation');
+            const credentialsFilePath = await this.writeWifCredentials(wifServiceName);
             neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP Workload Identity Federation");
             EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsFilePath);
             return;
         }
 
-        const serviceName = command.serviceProviderName;
-        if (!serviceName) {
-            throw new Error("A GCP service connection is required for this command. Set environmentServiceNameGCP.");
-        }
+        const serviceName = requireServiceConnection(command.serviceProviderName, 'GCP', 'environmentServiceNameGCP');
         const keyFilePath = this.writeServiceAccountKey(serviceName);
         neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP service account key");
         EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", keyFilePath);

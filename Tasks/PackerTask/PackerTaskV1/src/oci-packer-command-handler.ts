@@ -13,6 +13,7 @@ import {
     REGION_PATTERN,
     requireIdentityField,
     requireSecretField,
+    requireServiceConnection,
 } from './credential-guards';
 
 /**
@@ -91,10 +92,7 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
     }
 
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
-        const serviceName = command.serviceProviderName;
-        if (!serviceName) {
-            throw new Error("An OCI service connection is required for this command. Set environmentServiceNameOCI.");
-        }
+        const serviceName = requireServiceConnection(command.serviceProviderName, 'OCI', 'environmentServiceNameOCI');
 
         // The privatekey descriptor now lives under the endpoint's auth scheme, so
         // ADO delivers it as ENDPOINT_AUTH_PARAMETER_*: vaulted by task-lib, removed

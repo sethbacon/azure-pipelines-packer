@@ -156,12 +156,14 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
 
     const COMPLETE: Record<string, Fixture> = {
         'azure.WorkloadIdentityFederation': {
+            serviceConnection: 'AzureRM',
             inputs: { environmentServiceNameAzureRM: 'AzureRM' },
             scheme: 'WorkloadIdentityFederation',
             auth: { serviceprincipalid: 'e7a1b2c3-0000-4444-8888-99990000aaaa', tenantid: '11112222-3333-4444-5555-666677778888' },
             data: { subscriptionid: 'aaaabbbb-cccc-dddd-eeee-ffff00001111' },
         },
         'azure.ServicePrincipal': {
+            serviceConnection: 'AzureRM',
             inputs: { environmentServiceNameAzureRM: 'AzureRM' },
             scheme: 'ServicePrincipal',
             auth: {
@@ -172,6 +174,7 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             data: { subscriptionid: 'aaaabbbb-cccc-dddd-eeee-ffff00001111' },
         },
         'azure.ManagedServiceIdentity': {
+            serviceConnection: 'AzureRM',
             inputs: { environmentServiceNameAzureRM: 'AzureRM' },
             scheme: 'ManagedServiceIdentity',
             data: { subscriptionid: 'aaaabbbb-cccc-dddd-eeee-ffff00001111' },
@@ -279,6 +282,12 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
     }
 
     const REJECT_ROWS: Row[] = [
+        // packer#341: handleProvider previously ignored command.serviceProviderName
+        // and re-read environmentServiceNameAzureRM directly via tasks.getInput, so
+        // an empty service connection resolved through the SAME path every other
+        // provider handler uses (the `command` argument this test drives) went
+        // unchecked here specifically.
+        { site: 'azure.ServicePrincipal.serviceConnection', handler: 'azure', fixture: () => without('azure.ServicePrincipal', 'serviceConnection') },
         // #97 -- the reopened cell and its siblings. The WIF branch is the one
         // whose guard was missing while ServicePrincipal's was present.
         { site: 'azure.WorkloadIdentityFederation.serviceprincipalid', handler: 'azure', fixture: () => without('azure.WorkloadIdentityFederation', 'auth', 'serviceprincipalid') },
