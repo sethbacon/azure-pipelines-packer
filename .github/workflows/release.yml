@@ -30,6 +30,61 @@ jobs:
         uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
         with:
           egress-policy: audit
+      # Preventive, release-time mirror of weekly-security.yml's
+      # verify-marketplace-environment-protection job (which is only a weekly
+      # DETECTIVE canary): assert the 'marketplace' environment that gates
+      # publish-marketplace still has a required-reviewer rule, as an early
+      # BLOCKING step so a silently removed/misconfigured reviewer rule fails
+      # THIS release instead of going unnoticed until the next Monday scan.
+      # Same GET /repos/.../environments/{name} call and same contents:read
+      # token (inherited from the workflow-level permissions) as the weekly job;
+      # the only deliberate divergence is fail-closed error handling (setFailed,
+      # not the weekly canary's soft warning) — a release must not publish past
+      # a gate it could not verify.
+      - name: Verify marketplace environment protection
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const ENVIRONMENT = 'marketplace';
+            let env;
+            try {
+              const response = await github.request('GET /repos/{owner}/{repo}/environments/{environment_name}', {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment_name: ENVIRONMENT,
+              });
+              env = response.data;
+            } catch (err) {
+              if (err.status === 404) {
+                core.setFailed(`The '${ENVIRONMENT}' GitHub Environment does not exist — publish-marketplace in release.yml references an environment with no protection rules at all.`);
+                return;
+              }
+              core.setFailed(`Could not verify the '${ENVIRONMENT}' environment's protection rules (HTTP ${err.status ?? 'unknown'}): ${err.message}. Failing the release rather than publishing past an unverifiable gate.`);
+              return;
+            }
+            const rules = env.protection_rules ?? [];
+            const requiredReviewersRule = rules.find((rule) => rule.type === 'required_reviewers');
+            const hasRequiredReviewers = Boolean(requiredReviewersRule && Array.isArray(requiredReviewersRule.reviewers) && requiredReviewersRule.reviewers.length > 0);
+            if (!hasRequiredReviewers) {
+              core.setFailed(
+                `The '${ENVIRONMENT}' GitHub Environment has no required-reviewer protection rule configured. ` +
+                `Configure it under Settings -> Environments -> ${ENVIRONMENT} -> Required reviewers.`
+              );
+              return;
+            }
+            const branchPolicy = env.deployment_branch_policy;
+            const hasDeploymentBranchPolicy = Boolean(
+              branchPolicy && (branchPolicy.protected_branches === true || branchPolicy.custom_branch_policies === true)
+            );
+            if (!hasDeploymentBranchPolicy) {
+              core.setFailed(
+                `The '${ENVIRONMENT}' GitHub Environment has no deployment branch/ref policy configured, ` +
+                `so a marketplace publish could run from an unapproved ref even with reviewer approval. ` +
+                `Configure it under Settings -> Environments -> ${ENVIRONMENT} -> Deployment branches and tags.`
+              );
+              return;
+            }
+            core.info(`OK: '${ENVIRONMENT}' environment has ${requiredReviewersRule.reviewers.length} required reviewer(s) and a deployment branch/ref policy configured.`);
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}

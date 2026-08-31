@@ -198,6 +198,73 @@ jobs:
       - name: Compare embedded key against HashiCorp's published key
         run: node scripts/check-gpg-key-freshness.cjs
 
+  # ── Marketplace environment protection canary ─────────
+  verify-marketplace-environment-protection:
+    name: Verify marketplace environment protection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # hardening-exception: egress-audit — this job calls the GitHub API;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
+      - name: Harden the runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - name: Check required reviewers on the marketplace environment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const ENVIRONMENT = 'marketplace';
+            let env;
+            try {
+              const response = await github.request('GET /repos/{owner}/{repo}/environments/{environment_name}', {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                environment_name: ENVIRONMENT,
+              });
+              env = response.data;
+            } catch (err) {
+              if (err.status === 404) {
+                core.setFailed(`The '${ENVIRONMENT}' GitHub Environment does not exist — publish-marketplace in release.yml references an environment with no protection rules at all.`);
+                return;
+              }
+              // Confirmed against GitHub's REST API docs: reading environment
+              // protection rules only requires ordinary repo read access (unlike
+              // branch-protection/admin-settings endpoints, which need the
+              // `administration` permission -- a scope GITHUB_TOKEN cannot grant
+              // at all). A failure here is therefore unexpected; surface it
+              // distinctly from a real policy gap so the two aren't confused.
+              core.warning(`Could not verify the '${ENVIRONMENT}' environment's protection rules (HTTP ${err.status ?? 'unknown'}): ${err.message}. Verify manually via Settings -> Environments.`);
+              return;
+            }
+            const rules = env.protection_rules ?? [];
+            const requiredReviewersRule = rules.find((rule) => rule.type === 'required_reviewers');
+            const hasRequiredReviewers = Boolean(requiredReviewersRule && Array.isArray(requiredReviewersRule.reviewers) && requiredReviewersRule.reviewers.length > 0);
+            if (!hasRequiredReviewers) {
+              core.setFailed(
+                `The '${ENVIRONMENT}' GitHub Environment has no required-reviewer protection rule configured. ` +
+                `Configure it under Settings -> Environments -> ${ENVIRONMENT} -> Required reviewers.`
+              );
+              return;
+            }
+            const branchPolicy = env.deployment_branch_policy;
+            const hasDeploymentBranchPolicy = Boolean(
+              branchPolicy && (branchPolicy.protected_branches === true || branchPolicy.custom_branch_policies === true)
+            );
+            if (!hasDeploymentBranchPolicy) {
+              core.setFailed(
+                `The '${ENVIRONMENT}' GitHub Environment has no deployment branch/ref policy configured, ` +
+                `so a marketplace publish could run from an unapproved ref even with reviewer approval. ` +
+                `Configure it under Settings -> Environments -> ${ENVIRONMENT} -> Deployment branches and tags.`
+              );
+              return;
+            }
+            core.info(`OK: '${ENVIRONMENT}' environment has ${requiredReviewersRule.reviewers.length} required reviewer(s) and a deployment branch/ref policy configured.`);
+
   # ── Stale Dependabot PRs ──────────────────────────────
   stale-dependabot:
     name: Flag stale Dependabot PRs
@@ -233,7 +300,14 @@ jobs:
     name: Create issue on failure
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [ci, osv-scan, gpg-key-freshness, stale-dependabot]
+    needs:
+      [
+        ci,
+        osv-scan,
+        gpg-key-freshness,
+        verify-marketplace-environment-protection,
+        stale-dependabot,
+      ]
     if: failure() && github.event_name == 'schedule'
     permissions:
       issues: write
