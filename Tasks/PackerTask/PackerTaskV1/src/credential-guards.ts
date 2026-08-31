@@ -1,5 +1,5 @@
 import tasks = require('azure-pipelines-task-lib/task');
-import { readSecretEndpointDataParameter } from './endpoint-data-secret';
+import { readSecretEndpointDataParameter } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * Fail-closed credential primitives shared by EVERY provider handler.
