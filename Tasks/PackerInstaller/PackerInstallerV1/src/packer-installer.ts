@@ -319,7 +319,7 @@ async function resolveVersionFromHashiCorp(inputVersion: string): Promise<string
     } catch (err) {
         throw new Error(`${tasks.loc("PackerVersionNotFound")} (${err instanceof Error ? err.message : err})`);
     }
-    if (!data.current_version) {
+    if (typeof data.current_version !== 'string' || !data.current_version) {
         throw new Error("HashiCorp checkpoint API returned invalid response: missing current_version");
     }
     return data.current_version;
@@ -339,7 +339,7 @@ async function resolveVersionFromRegistry(inputVersion: string, registryUrl: str
     console.log(tasks.loc("ResolvingLatestFromRegistry", redactUrlUserInfo(registryUrl)));
     const latestUrl = `${registryUrl}/terraform/binaries/${mirrorName}/versions/latest`;
     const data = await fetchJson<{ version: string }>(latestUrl);
-    if (!data.version) {
+    if (typeof data.version !== 'string' || !data.version) {
         throw new Error(`Registry API returned invalid response: missing version field from ${redactUrlUserInfo(latestUrl)}`);
     }
     console.log(tasks.loc("ResolvedVersionFromRegistry", data.version));
@@ -402,7 +402,7 @@ async function downloadZipFromRegistry(version: string, registryUrl: string, mir
     const safeInfoUrl = redactUrlUserInfo(infoUrl);
 
     const data = await fetchJson<{ download_url: string; sha256: string }>(infoUrl);
-    if (!data.download_url) {
+    if (typeof data.download_url !== 'string' || !data.download_url) {
         throw new Error(`Registry API returned invalid response: missing download_url from ${safeInfoUrl}`);
     }
     // data.download_url = pre-signed storage URL (time-limited)
