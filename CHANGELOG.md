@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.4.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.7...v1.4.0) (2026-08-31)
+
+
+### Features
+
+* **ci:** adopt the shared Dependabot CI-health check ([#378](https://github.com/sethbacon/azure-pipelines-packer/issues/378)) ([8dd7d1d](https://github.com/sethbacon/azure-pipelines-packer/commit/8dd7d1d0877ae2c9995a42ccd38f7d9260d00add))
+
+
+### Bug Fixes
+
+* **security:** adopt readSecretEndpointDataParameter from pipeline-task-ado ([#381](https://github.com/sethbacon/azure-pipelines-packer/issues/381)) ([ef8af33](https://github.com/sethbacon/azure-pipelines-packer/commit/ef8af338722b358be0ed60a907047d4cf508813f))
+* **security:** annotate stale TFX_PAT doc reference, verify marketplace environment protection ([#340](https://github.com/sethbacon/azure-pipelines-packer/issues/340) findings 0+1) ([#373](https://github.com/sethbacon/azure-pipelines-packer/issues/373)) ([3699da6](https://github.com/sethbacon/azure-pipelines-packer/commit/3699da6fc8911e382bd42a9f60e7bfdac8c5e29f))
+* **security:** dedupe the service-connection guard, wire Azure through command.serviceProviderName ([#370](https://github.com/sethbacon/azure-pipelines-packer/issues/370)) ([a1cada8](https://github.com/sethbacon/azure-pipelines-packer/commit/a1cada83282d3c9858d15cdbe32d5607804fef57))
+* **security:** delete dead proxy-config.ts, add minimumAgentVersion to both tasks ([#337](https://github.com/sethbacon/azure-pipelines-packer/issues/337), [#344](https://github.com/sethbacon/azure-pipelines-packer/issues/344)) ([#383](https://github.com/sethbacon/azure-pipelines-packer/issues/383)) ([0f59104](https://github.com/sethbacon/azure-pipelines-packer/commit/0f591048080f3e9fa2727e537ed877418fa78dbe))
+* **security:** delete endpoint-data-secret.ts, import from @4cloudguru/pipeline-task-ado ([#380](https://github.com/sethbacon/azure-pipelines-packer/issues/380)) ([#382](https://github.com/sethbacon/azure-pipelines-packer/issues/382)) ([04530cc](https://github.com/sethbacon/azure-pipelines-packer/commit/04530cc71348b7acc44b3b5ec56cbf167d5ba6e9))
+* **security:** document SIGKILL residual risk, add a credential-cleanup-on-failure test ([#336](https://github.com/sethbacon/azure-pipelines-packer/issues/336) findings 3+4) ([#369](https://github.com/sethbacon/azure-pipelines-packer/issues/369)) ([b85f297](https://github.com/sethbacon/azure-pipelines-packer/commit/b85f297f476c7d844e0e6a1136a0682ae50ed85b))
+* **security:** don't trust a cache-hit's sidecar hash as an adversarial control, and stop calling it one ([#360](https://github.com/sethbacon/azure-pipelines-packer/issues/360)) ([1cb378b](https://github.com/sethbacon/azure-pipelines-packer/commit/1cb378b188131da0f070c8052f1e846e186e7407))
+* **security:** fail closed when a cache re-verification source withholds the checksum ([#334](https://github.com/sethbacon/azure-pipelines-packer/issues/334)) ([#366](https://github.com/sethbacon/azure-pipelines-packer/issues/366)) ([2736c5f](https://github.com/sethbacon/azure-pipelines-packer/commit/2736c5f90912c22f70a2f07f392836b0d216a386))
+* **security:** mask secret-shaped environmentVariables passthrough, document the proxy TLS residual ([#361](https://github.com/sethbacon/azure-pipelines-packer/issues/361)) ([223e55a](https://github.com/sethbacon/azure-pipelines-packer/commit/223e55a98b02f6ed936a874aa68e69737a31c1ff))
+* **security:** route the HashiCorp binary download through the redirect-safe egress-authorized client ([#334](https://github.com/sethbacon/azure-pipelines-packer/issues/334)) ([#367](https://github.com/sethbacon/azure-pipelines-packer/issues/367)) ([9d4ee88](https://github.com/sethbacon/azure-pipelines-packer/commit/9d4ee8870d3d255d85d68371f879a6a698d08a1a))
+* **security:** scrub credential temp files before unlinking them ([#336](https://github.com/sethbacon/azure-pipelines-packer/issues/336)) ([#365](https://github.com/sethbacon/azure-pipelines-packer/issues/365)) ([bf05a24](https://github.com/sethbacon/azure-pipelines-packer/commit/bf05a24a9bc47e7e334e26858e71614ae035e22b))
+* **security:** type-validate checkpoint/registry JSON fields, register termination listeners before any throw ([#342](https://github.com/sethbacon/azure-pipelines-packer/issues/342) error-handling roundup) ([#372](https://github.com/sethbacon/azure-pipelines-packer/issues/372)) ([470a25f](https://github.com/sethbacon/azure-pipelines-packer/commit/470a25fd4683e48bad52c2021ea1a4eaec754745))
+* **security:** validate pluginsSubCommand/onError against their pickLists, add hcl2_upgrade TOCTOU re-check, apply GCP field grammars, block PATH passthrough ([#371](https://github.com/sethbacon/azure-pipelines-packer/issues/371)) ([a1c3a81](https://github.com/sethbacon/azure-pipelines-packer/commit/a1c3a813bab2f8349681f56f9f662f7f7a0aafdd))
+
+
+### Documentation
+
+* fill four documentation gaps found in the docs domain roundup ([#343](https://github.com/sethbacon/azure-pipelines-packer/issues/343)) ([#374](https://github.com/sethbacon/azure-pipelines-packer/issues/374)) ([5d6f0fa](https://github.com/sethbacon/azure-pipelines-packer/commit/5d6f0fa455165afdeeb99e5cc602e7a989071458))
+* **security:** document that plugin installation trust is delegated to Packer itself ([#362](https://github.com/sethbacon/azure-pipelines-packer/issues/362)) ([e358329](https://github.com/sethbacon/azure-pipelines-packer/commit/e35832955655e60a0057232a20c1de3233a9f24e))
+* **security:** surface the registry trust model at design time ([#334](https://github.com/sethbacon/azure-pipelines-packer/issues/334)) ([#368](https://github.com/sethbacon/azure-pipelines-packer/issues/368)) ([c2dd203](https://github.com/sethbacon/azure-pipelines-packer/commit/c2dd20327e81a0d4ba762d75deeca2d57d9404e6))
+
+
+### Security
+
+* block egress in sbom-and-sign and publish-marketplace ([#335](https://github.com/sethbacon/azure-pipelines-packer/issues/335)) ([#384](https://github.com/sethbacon/azure-pipelines-packer/issues/384)) ([234fc5f](https://github.com/sethbacon/azure-pipelines-packer/commit/234fc5ff2c33f1045231bb5598375119e2cf0e7f))
+
 ## [1.3.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.6...v1.3.7) (2026-08-28)
 
 
