@@ -12,7 +12,7 @@
     "scopes": [
         "vso.build"
     ],
-    "description": "Install Packer and run Packer commands to build machine images on Azure, AWS, GCP, OCI, and vSphere.",
+    "description": "Install Packer and run Packer commands to build machine images on Azure, AWS, GCP, OCI, vSphere, and local builders.",
     "public": false,
     "categories": [
         "Azure Pipelines"
