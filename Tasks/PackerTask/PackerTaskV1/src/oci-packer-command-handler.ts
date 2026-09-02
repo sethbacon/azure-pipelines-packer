@@ -1,11 +1,19 @@
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
-import { EnvironmentVariableHelper, maskSecretLines } from '@4cloudguru/pipeline-task-ado';
+import {
+    EnvironmentVariableHelper,
+    exchangeOidcForUpst,
+    generateIdToken,
+    maskSecretLines,
+    validateIdentityDomainUrl,
+} from '@4cloudguru/pipeline-task-ado';
 import { normalizePem } from '@4cloudguru/pipeline-task-core';
+import crypto = require('crypto');
 import os = require('os');
 import path = require('path');
 import {
+    assertIdentityValue,
     FINGERPRINT_PATTERN,
     neutralizeEnvironmentVariables,
     OCID_PATTERN,
@@ -13,6 +21,7 @@ import {
     requireIdentityField,
     requireSecretField,
     requireServiceConnection,
+    TENANCY_OCID_PATTERN,
 } from './credential-guards';
 
 /**
@@ -50,6 +59,35 @@ const OCI_COMPETING_CREDENTIAL_ENV = [
  * in the guards below, not a fix for a live substitution today.
  */
 const OCI_ACCESS_CFG_FILE_DISABLED = path.join(os.tmpdir(), '.packer-task-oci-access-cfg-file-intentionally-absent');
+
+/**
+ * The API-key branch's own PKR_VAR_* selectors, cleared by the WIF branch.
+ *
+ * WIF authenticates entirely through the synthetic config file, and the plugin
+ * resolves each field from the FIRST provider that returns no error: an
+ * inherited PKR_VAR_oci_user_ocid would be picked up by the raw provider at
+ * index 0 and defeat the fall-through to the config file that the session
+ * token depends on.
+ *
+ * PKR_VAR_oci_pass_phrase is load-bearing rather than decorative: the plugin
+ * passes the HCL pass_phrase to ConfigurationProviderFromFileWithProfile, and
+ * the ephemeral key this handler writes is unencrypted PKCS#8 -- an inherited
+ * passphrase would make the file provider try to decrypt it and fail.
+ */
+const OCI_API_KEY_VAR_ENV = [
+    'PKR_VAR_oci_tenancy_ocid',
+    'PKR_VAR_oci_user_ocid',
+    'PKR_VAR_oci_region',
+    'PKR_VAR_oci_fingerprint',
+    'PKR_VAR_oci_key_file',
+    'PKR_VAR_oci_pass_phrase',
+] as const;
+
+/** The WIF branch's own selectors, cleared by the API-key branch (the mirror image). */
+const OCI_WIF_VAR_ENV = [
+    'PKR_VAR_oci_access_cfg_file_account',
+    'PKR_VAR_oci_security_token_file',
+] as const;
 
 /**
  * Injects OCI credentials for the packer-plugin-oracle (oracle-oci) builder
@@ -90,7 +128,108 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         return this.writeTrackedSecretFile('oci-keyfile', 'pem', normalized);
     }
 
+    /**
+     * Workload Identity Federation: exchange the ADO OIDC token for an OCI User
+     * Principal Session Token (UPST) and hand the plugin a synthetic OCI config
+     * file that references it, instead of a long-lived API key.
+     *
+     * WHY A FILE, AND WHY -var. packer-plugin-oracle reads none of
+     * OCI_CLI_CONFIG_FILE / OCI_CLI_PROFILE / OCI_CLI_AUTH -- verified against
+     * builder/oci/config.go, where getDefaultOCISettingsPath() hard-codes
+     * ~/.oci/config and the only override is the `access_cfg_file` HCL field.
+     * (Its `security_token_file` HCL field is declared but never read, so it
+     * cannot be used either.) Session-token auth is still reachable, but only
+     * through the config file: ComposingConfigurationProvider resolves each
+     * field from the first provider that returns no error, rawConfigurationProvider
+     * errors on every empty field, and fileConfigurationProvider.KeyID() returns
+     * "ST$<token>" for a profile carrying security_token_file and no user. So
+     * leaving the API-key fields empty makes all five of the plugin's Prepare()
+     * gates resolve against this file.
+     *
+     * The path is delivered as `-var` (see providerVarArgs) rather than
+     * PKR_VAR_, because an undeclared PKR_VAR_ is silently skipped: a template
+     * missing `variable "oci_access_cfg_file"` would ignore the credential and
+     * fall through to whatever ambient config the agent has. `-var` makes
+     * Packer refuse the run instead.
+     */
+    private async handleProviderWIF(command: PackerAuthorizationCommandInitializer): Promise<void> {
+        // Read and validate EVERY input before minting anything. A federated
+        // assertion is a live bearer credential the instant it exists, so a
+        // config error must be caught before step 1 requests one -- not
+        // discovered afterwards with a usable token already in hand.
+        const identityDomainUrl = validateIdentityDomainUrl(
+            assertIdentityValue(tasks.getInput("ociWifIdentityDomainUrl", true), "Input 'ociWifIdentityDomainUrl'")
+        ).href;
+        const clientId = assertIdentityValue(tasks.getInput("ociWifClientId", true), "Input 'ociWifClientId'");
+        const tenancyOcid = assertIdentityValue(tasks.getInput("ociWifTenancyOcid", true), "Input 'ociWifTenancyOcid'", TENANCY_OCID_PATTERN, 'tenancy OCID');
+        const region = assertIdentityValue(tasks.getInput("ociWifRegion", true), "Input 'ociWifRegion'", REGION_PATTERN, 'region identifier');
+
+        // Fail closed like the API-key path rather than requesting an OIDC token
+        // for an empty service connection id.
+        const wifServiceName = requireServiceConnection(command.serviceProviderName, 'OCI', 'environmentServiceNameOCI', 'for Workload Identity Federation');
+
+        const oidcToken = await generateIdToken(wifServiceName);
+        tasks.setSecret(oidcToken);
+
+        // Ephemeral RSA key pair: OCI binds the issued UPST to it, and the
+        // plugin signs subsequent API requests with the private half.
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+        });
+        // ADO's masker matches within a single log line, so register the key
+        // line-wise; setSecret rejects multi-line input outright.
+        maskSecretLines(privateKey);
+
+        const upst = await exchangeOidcForUpst(oidcToken, identityDomainUrl, clientId, publicKey);
+        tasks.setSecret(upst);
+
+        // The fingerprint OCI expects for a session-token profile is the MD5 of
+        // the ephemeral public key's SPKI DER, colon-grouped.
+        const der = crypto.createPublicKey(publicKey).export({ type: 'spki', format: 'der' });
+        const md5 = crypto.createHash('md5').update(der).digest('hex');
+        const fingerprint = md5.match(/.{2}/g)!.join(':');
+
+        const privateKeyPath = this.writeTrackedSecretFile('oci-wif-key', 'pem', privateKey);
+        const upstPath = this.writeTrackedSecretFile('oci-wif-upst', 'jwt', upst);
+
+        // `fingerprint` is present only to satisfy the plugin's non-empty
+        // KeyFingerprint() gate -- it plays no part in ST$ session-token auth.
+        // Do not remove it as dead: Prepare() fails without it.
+        const configContent = [
+            '[DEFAULT]',
+            `tenancy=${tenancyOcid}`,
+            `region=${region}`,
+            `key_file=${privateKeyPath}`,
+            `fingerprint=${fingerprint}`,
+            `security_token_file=${upstPath}`,
+        ].join('\n') + '\n';
+        const configPath = this.writeTrackedSecretFile('oci-wif-config', 'ini', configContent);
+
+        neutralizeEnvironmentVariables(
+            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_API_KEY_VAR_ENV],
+            "OCI Workload Identity Federation");
+
+        // Delivered as a command-line variable, which fails closed on a template
+        // that never declared it. The account/profile name stays an environment
+        // variable: the plugin already defaults it to DEFAULT, matching this
+        // file's section header, so requiring a second declared variable would
+        // be friction with no fail-closed value.
+        this.providerVarArgs.push(`oci_access_cfg_file=${configPath}`);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", configPath);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file_account", "DEFAULT");
+    }
+
     public async handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void> {
+        const authScheme = tasks.getInput("environmentAuthSchemeOCI", false) || "ServiceConnection";
+        this.validateAuthScheme(authScheme, "environmentAuthSchemeOCI");
+
+        if (authScheme === "WorkloadIdentityFederation") {
+            await this.handleProviderWIF(command);
+            return;
+        }
+
         const serviceName = requireServiceConnection(command.serviceProviderName, 'OCI', 'environmentServiceNameOCI');
 
         // The privatekey descriptor now lives under the endpoint's auth scheme, so
@@ -114,7 +253,9 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         const region = requireIdentityField(serviceName, "region", { source: 'data', pattern: REGION_PATTERN, description: 'region identifier' });
         const fingerprint = requireIdentityField(serviceName, "fingerprint", { source: 'data', pattern: FINGERPRINT_PATTERN, description: 'key fingerprint' });
 
-        neutralizeEnvironmentVariables(OCI_COMPETING_CREDENTIAL_ENV, "OCI API key");
+        neutralizeEnvironmentVariables(
+            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_WIF_VAR_ENV],
+            "OCI API key");
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);

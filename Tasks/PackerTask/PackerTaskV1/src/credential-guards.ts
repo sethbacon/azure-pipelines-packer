@@ -44,6 +44,17 @@ export const IDENTITY_FIELD_PATTERN = /^[A-Za-z0-9._:@\/=+-]+$/;
 /** Strict per-field grammars, applied on top of IDENTITY_FIELD_PATTERN. */
 export const OCID_PATTERN = /^ocid1\.[a-z0-9_]+\.[a-z0-9._-]*$/;
 export const REGION_PATTERN = /^[a-z0-9-]+$/;
+
+/**
+ * A TENANCY OCID specifically, not any OCID. OCID_PATTERN above accepts every
+ * resource type (`ocid1.user...`, `ocid1.compartment...`), which is too loose
+ * for the OCI WIF `tenancy` field: that value is interpolated into the
+ * `[DEFAULT]` block of the synthetic OCI config file, where the wrong resource
+ * type produces a confusing auth failure rather than a clear rejection.
+ * IDENTITY_FIELD_PATTERN already excludes the CR/LF/quote characters that would
+ * let a value inject an additional config key, so this adds shape, not escaping.
+ */
+export const TENANCY_OCID_PATTERN = /^ocid1\.tenancy\.[a-z0-9.-]+$/;
 export const FINGERPRINT_PATTERN = /^([0-9a-fA-F]{2}:){15}[0-9a-fA-F]{2}$/;
 
 /** AWS's own `RoleSessionName` grammar for AssumeRoleWithWebIdentity (2-64 chars). */

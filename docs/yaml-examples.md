@@ -249,6 +249,44 @@ source "oracle-oci" "instance" {
 }
 ```
 
+### build — Oracle Cloud (OCI) with Workload Identity Federation
+
+No API key is stored: the task exchanges the pipeline's OIDC token for a short-lived OCI User Principal Session Token and writes a generated OCI config file referencing it. Setup steps are in [wif-setup.md](wif-setup.md#oracle-cloud-oci).
+
+```yaml
+- task: PipelinePacker@1
+  inputs:
+    command: 'build'
+    provider: 'oci'
+    environmentServiceNameOCI: 'my-oci-connection'
+    environmentAuthSchemeOCI: 'WorkloadIdentityFederation'
+    ociWifTenancyOcid: 'ocid1.tenancy.oc1..aaaa...'
+    ociWifRegion: 'us-ashburn-1'
+    ociWifIdentityDomainUrl: 'https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com'
+    ociWifClientId: 'abc123def456'
+    templatePath: './images/oci'
+```
+
+The template must declare `oci_access_cfg_file` and wire it to `access_cfg_file`. The task passes it with `-var`, so a missing declaration is a hard Packer error rather than a silent fall-through to the agent's ambient OCI config.
+
+```hcl
+# images/oci/variables.pkr.hcl
+variable "oci_access_cfg_file" {
+  type    = string
+  default = ""
+}
+
+source "oracle-oci" "instance" {
+  access_cfg_file = var.oci_access_cfg_file
+  # tenancy_ocid / user_ocid / fingerprint / key_file are deliberately absent.
+  # They must stay unset so the plugin falls through to the config file above;
+  # a value in any of them is resolved first and the session token is ignored.
+  # ...
+}
+```
+
+One template for both schemes: give every `oci_*` variable `default = ""` and set the API-key fields from their variables. Under WIF those resolve to `""`, the plugin's raw configuration provider errors per-field, and the chain falls through to `access_cfg_file`. Do not "fix" the empty defaults — they are what makes the fall-through work.
+
 ### build — VMware vSphere
 
 The vSphere connection is exposed as `PKR_VAR_vsphere_*` variables.

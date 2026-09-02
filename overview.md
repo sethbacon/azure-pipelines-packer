@@ -21,7 +21,7 @@ Runs any Packer CLI command — `init`, `validate`, `build`, `fmt`, `inspect`, `
 | `azurerm` | Azure Resource Manager service connection (Workload Identity Federation / Managed Identity / Service Principal) |
 | `aws` | AWS service connection (static keys or Workload Identity Federation) |
 | `gcp` | GCP service connection (service account key or Workload Identity Federation) |
-| `oci` | OCI service connection (API key) |
+| `oci` | OCI service connection (API key, or Workload Identity Federation via OIDC-to-UPST) |
 | `vsphere` | vSphere/vCenter service connection (username + password) |
 | `none` | No cloud credentials — for Docker, QEMU, VirtualBox, VMware, Hyper-V, and Vagrant builders |
 

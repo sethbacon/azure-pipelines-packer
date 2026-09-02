@@ -50,6 +50,9 @@ const ROWS: Row[] = [
     { entry: 'PKR_VAR_oci_key_file=/tmp/k.pem', key: 'PKR_VAR_oci_key_file', outcome: 'REJECT', why: 'every PKR_VAR_oci_* field participates in OCI identity' },
     { entry: 'PKR_VAR_vsphere_password=pw', key: 'PKR_VAR_vsphere_password', outcome: 'REJECT', why: 'vSphere credential' },
     { entry: 'OCI_CLI_PROFILE=other', key: 'OCI_CLI_PROFILE', outcome: 'REJECT', why: 'OCI CLI identity override' },
+    { entry: 'OCI_CLI_AUTH=security_token', key: 'OCI_CLI_AUTH', outcome: 'REJECT', why: 'selects the OCI auth METHOD, so it can redirect which credential the build uses' },
+    { entry: 'PKR_VAR_oci_access_cfg_file=/tmp/c.ini', key: 'PKR_VAR_oci_access_cfg_file', outcome: 'REJECT', why: 'names the config file the WIF branch authenticates from (#344)' },
+    { entry: 'PKR_VAR_oci_use_instance_principals=true', key: 'PKR_VAR_oci_use_instance_principals', outcome: 'REJECT', why: 'switches the builder to instance-principal auth, defeating both OCI branches' },
     {
         entry: 'ARM_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000',
         key: 'ARM_SUBSCRIPTION_ID',

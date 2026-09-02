@@ -11,6 +11,7 @@ import './PreMaskingClassL0';
 import './CredentialFailClosedMatrixL0';
 import './CredentialTempFileScrubL0';
 import './ProviderVarArgOrderingL0';
+import './OciWifBranchL0';
 import './EntryPointSignalsL0';
 import './OutputBoundaryClassL0';
 // This extension's half of azure-pipelines-terraform#867's class: a credential
@@ -147,9 +148,26 @@ describe('PackerTask Test Suite', function () {
     expectSuccessMasksSecret('GcpAuth');
     expectSuccessMasksSecret('GcpWifAuth', ['mock-gcp-oidc-jwt-12345']);
     expectSuccessMasksSecret('AwsWifAuth', ['mock-aws-oidc-jwt-12345']);
+    // Both hops masked: the ADO OIDC token and the UPST it is exchanged for.
+    expectSuccessMasksSecret('OciWifAuth', ['mock-oci-oidc-jwt-12345', 'mock-upst-token-67890']);
     expectSuccess('NoneAuth');
     expectSuccess('GcpMultilinePemAuth');   // #108: genuine multi-line PEM must not throw
     expectSuccess('OciMultilinePemAuth');   // #195: same for OCI (REST/CLI-created connections)
+
+    // Stronger than the message assertion above: prove the OIDC token was never
+    // transmitted to the look-alike host. A rejection alone could also mean the
+    // exchange ran and the response was refused -- only a zero fetch count shows
+    // the destination was validated BEFORE anything was sent.
+    it('OciWifIdentityDomainHostReject sends no request to the look-alike host', async () => {
+        const tp = path.join(__dirname, 'OciWifIdentityDomainHostReject.js');
+        const tr = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        assert.strictEqual(tr.succeeded, false, 'a look-alike identity-domain host must be refused');
+        assert.ok(
+            tr.stdout.indexOf('OciWifAuthL0 fetchCalls=0') >= 0,
+            'the OIDC token must not be transmitted to an unvalidated host; stdout: ' + tr.stdout,
+        );
+    });
 
     it('OciAuthPerLineMasking', async () => {
         const tp = path.join(__dirname, 'OciAuth.js');
@@ -215,6 +233,11 @@ describe('PackerTask Test Suite', function () {
     // (not just "the task failed") so a mutation that deletes the pattern
     // argument can't hide behind GcpWifValidationOnlyL0.js failing for some
     // other reason.
+    // The look-alike host must be refused BEFORE the JWT is transmitted. The
+    // dedicated `it` below asserts the stronger property (fetch never called);
+    // this row pins the message so a refusal for some unrelated reason is not
+    // mistaken for the realm check firing.
+    expectFailureContains('OciWifIdentityDomainHostReject', ['is not an OCI Identity Domains endpoint']);
     expectFailureContains('GcpWifProjectNumberInvalidReject', ["Input 'gcpProjectNumber'", 'not a valid']);
     expectFailureContains('GcpWifPoolIdInvalidReject', ["Input 'gcpWorkloadIdentityPoolId'", 'not a valid']);
     expectFailureContains('GcpWifProviderIdInvalidReject', ["Input 'gcpWorkloadIdentityProviderId'", 'not a valid']);

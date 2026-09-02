@@ -1,6 +1,6 @@
 # Workload Identity Federation Setup
 
-This guide covers the one-time cloud-side configuration needed to use Workload Identity Federation (WIF/OIDC) instead of long-lived static credentials with the **Pipeline Tasks for Packer** extension. WIF is supported for `azurerm`, `aws`, and `gcp`. OCI and vSphere authenticate with a service-connection API key / username-password and do not support WIF in this extension.
+This guide covers the one-time cloud-side configuration needed to use Workload Identity Federation (WIF/OIDC) instead of long-lived static credentials with the **Pipeline Tasks for Packer** extension. WIF is supported for `azurerm`, `aws`, `gcp`, and `oci`. vSphere authenticates with a service-connection username/password and does not support WIF in this extension.
 
 WIF eliminates storing a cloud secret in Azure DevOps. Instead, the pipeline requests a short-lived OIDC token from Azure DevOps (`generateIdToken()`, from `@4cloudguru/pipeline-task-ado`), and the target cloud exchanges that token for temporary credentials via its own federation mechanism.
 
@@ -131,6 +131,86 @@ You cannot set `AWS_ROLE_SESSION_NAME` through the task's `environmentVariables`
    ```
 
 The task writes an `external_account` credentials JSON file pointing at the ADO OIDC token and sets `GOOGLE_APPLICATION_CREDENTIALS` — read natively by `packer-plugin-googlecompute`, no template wiring required.
+
+## Oracle Cloud (`oci`)
+
+OCI federation is a **two-hop** flow, unlike the other three providers. The task requests the ADO OIDC token, then exchanges it at your Identity Domain for a short-lived **User Principal Session Token (UPST)**, and hands Packer a generated OCI config file that references it. No API key is stored in Azure DevOps.
+
+### 1. Create a confidential application
+
+Identity & Security → Domains → *your domain* → Applications → **Add application** → **Confidential Application**. Name it something like `azure-devops-packer-token-exchange` and activate it.
+
+Grant it **no app roles**: it is not the identity the build ends up running as, it only identifies which trust configuration a token-exchange request may use. Note its **Client ID** — that is `ociWifClientId`. The task sends `client_id` and never a client secret.
+
+### 2. Create a service user and group
+
+Create a service user (e.g. `svc-azdo-packer`) and add it to a group such as `PackerBuilders`. The UPST is issued for this user, so this is the identity your policies apply to.
+
+### 3. Create an Identity Propagation Trust — the security boundary
+
+This is the part that actually decides who may exchange a token. Register the ADO issuer against your confidential application:
+
+- `issuer`: `https://vstoken.dev.azure.com/<your-org-id>`
+- `oauthClients`: `["<client-id from step 1>"]`
+- `clientClaimName` / `clientClaimValues`: `aud` / the audience your organization's tokens carry
+- `impersonationServiceUsers`: the service user from step 2
+
+**Scope the `sub` claim to the exact service connection.** As the security note at the top of this guide explains, the token carries ADO's default audience regardless of which cloud consumes it, so the trust configuration is the real boundary. A trust that accepts any `sub` lets *any* service connection in your organization exchange a token through it.
+
+### 4. Grant an IAM policy
+
+`Allow group PackerBuilders to manage instance-family in compartment my-packer-compartment` — narrow the verbs and compartment to what your template actually builds.
+
+### 5. Wire the pipeline
+
+```yaml
+- task: PackerTask@1
+  inputs:
+    command: 'build'
+    provider: 'oci'
+    environmentServiceNameOCI: 'my-oci-connection'
+    environmentAuthSchemeOCI: 'WorkloadIdentityFederation'
+    ociWifTenancyOcid: 'ocid1.tenancy.oc1..aaaa...'
+    ociWifRegion: 'us-ashburn-1'
+    ociWifIdentityDomainUrl: 'https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com'
+    ociWifClientId: '<client-id from step 1>'
+    templatePath: 'image.pkr.hcl'
+```
+
+The identity domain host must be a real Oracle identity-domain host: an `idcs-` prefix followed by 32 hex characters, under one of the four Oracle realms. A look-alike host is refused **before** the OIDC token is transmitted.
+
+### The template contract — required
+
+Unlike AWS and GCP, whose SDKs read well-known environment variables natively, `packer-plugin-oracle` reads **no** `OCI_CLI_*` variable. Its only override for the config file is the HCL `access_cfg_file` field, so **your template must declare the variable and wire it**:
+
+```hcl
+variable "oci_access_cfg_file" {
+  type    = string
+  default = ""
+}
+
+source "oracle-oci" "example" {
+  access_cfg_file = var.oci_access_cfg_file
+  # Do NOT set tenancy_ocid / user_ocid / fingerprint / key_file on the WIF path.
+  # They must stay empty so the plugin falls through to the config file above --
+  # a value in any of them is answered first and the session token is never used.
+  availability_domain = "..."
+  # ...
+}
+```
+
+The task passes the path with `-var`, not as an environment variable, and that is deliberate: Packer **silently ignores** a `PKR_VAR_` for a variable the template never declared, so a missing declaration would leave the build authenticating with whatever ambient OCI config the agent happens to have. Passed as `-var`, the same mistake is a hard error before any builder runs:
+
+```
+A "oci_access_cfg_file" variable was passed in the command line but was not
+found in known variables.
+```
+
+One case this does **not** catch: a template that declares the variable but never wires it to `access_cfg_file`. Packer accepts that, and the build then falls back to the plugin's own default config lookup.
+
+### What the task writes
+
+Three files, all mode 0600 under the agent temp directory, all scrubbed and deleted when the command finishes: the ephemeral private key, the UPST, and the config file naming both. The key pair is generated per run and never leaves the agent except as a public key in the exchange request.
 
 ## Long-running builds and WIF token lifetime
 
