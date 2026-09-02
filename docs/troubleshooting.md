@@ -38,7 +38,8 @@ A download whose checksum or signature fails verification is **deleted** rather 
 
 ## `latest` resolves to an unexpected version
 
-- For `hashicorp`/`mirror`, `latest` is resolved via the HashiCorp checkpoint API. If it is unreachable the installer falls back to a pinned version and logs a warning — pin an explicit `packerVersion` for reproducible builds.
+- For `hashicorp`/`mirror`, `latest` is resolved via the HashiCorp checkpoint API. If it is unreachable the installer **fails the task** — it does not fall back to a pinned version (#78). Someone who asked for `latest` often did so precisely for security currency, so a selective outage of the version endpoint must not silently hand them a since-superseded release. Pin an explicit `packerVersion` for reproducible builds, and to be unaffected by a checkpoint outage at all.
+- `latest` carries no rollback protection on any source: nothing compares the resolved version against anything previously installed, so a checkpoint or registry pointer that moves *backwards* resolves to that older version. On `hashicorp`/`mirror` the artifact is still GPG-verified against the embedded HashiCorp key, so the residual is a genuine, signed, **older** release rather than a forged one; the `registry` source has no signature chain, only a checksum from the same host. Pinning `packerVersion` is the supported mitigation.
 - For `registry`, `latest` is whatever the registry's `packer` mirror reports as latest.
 
 ## Build fails with cloud authentication errors
