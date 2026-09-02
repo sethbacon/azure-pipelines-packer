@@ -188,6 +188,10 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
             'PKR_VAR_oci_user_ocid',
             'PKR_VAR_oci_key_file',
             'PKR_VAR_oci_pass_phrase',
+            // The auth-mode switch, cleared by both branches (#391): an
+            // inherited `true` is mutually exclusive with access_cfg_file and
+            // fails Prepare() naming fields the pipeline never set.
+            'PKR_VAR_oci_use_instance_principals',
         ];
         for (const name of seeded) process.env[name] = 'inherited-from-the-agent';
 
@@ -309,6 +313,12 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
 
         process.env['PKR_VAR_oci_access_cfg_file_account'] = 'inherited';
         process.env['PKR_VAR_oci_security_token_file'] = '/inherited/upst';
+        process.env['PKR_VAR_oci_use_instance_principals'] = 'true';
+        // Deliberately seeded and deliberately NOT asserted cleared (#391):
+        // the OCI service connection has no passphrase field, so this is the
+        // only channel for an encrypted service-connection key. WIF clears it
+        // because its own key is unencrypted PKCS#8; this branch must not.
+        process.env['PKR_VAR_oci_pass_phrase'] = 'operator-supplied';
 
         inputs = { environmentAuthSchemeOCI: 'ServiceConnection' };
         const handler = new PackerCommandHandlerOCI();
@@ -317,13 +327,24 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
 
             // Both directions of the mirror matter: whichever branch runs must not
             // leave the other branch's selectors inherited from the agent.
-            for (const name of ['PKR_VAR_oci_access_cfg_file_account', 'PKR_VAR_oci_security_token_file']) {
+            for (const name of [
+                'PKR_VAR_oci_access_cfg_file_account',
+                'PKR_VAR_oci_security_token_file',
+                'PKR_VAR_oci_use_instance_principals',
+            ]) {
                 assert.strictEqual(
                     process.env[name],
                     undefined,
                     `${name} must be cleared by the API-key branch`,
                 );
             }
+            // The asymmetry is the point, so assert it rather than leaving it
+            // to a comment: clearing this would break an encrypted key.
+            assert.strictEqual(
+                process.env['PKR_VAR_oci_pass_phrase'],
+                'operator-supplied',
+                'the API-key branch must preserve an operator-supplied passphrase',
+            );
             // And the API-key branch still pins access_cfg_file at the
             // never-existing path (#333), rather than a synthetic config.
             assert.ok(
