@@ -162,6 +162,7 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('MirrorChecksumCapitalTrueFail');  // #331: 'True' from unquoted YAML must keep verification ON
     expectFailure('RegistryMirrorNameInvalidReject');
     expectFailure('MirrorSumsMissingEntryFail');       // #111: SUMS published but our artifact isn't listed in it
+    expectFailure('MirrorSumsMissingEntryGpgRequiredFail'); // #338: signed SUMS omits the artifact -> requireGpgSignature must still refuse
 
     // --- Mirror GPG (now honored) + typed-error classification ---
     expectFailure('MirrorGpgRequiredMissingFail');   // requireGpgSignature default true + .sig missing -> fail

@@ -2,10 +2,13 @@ import ma = require('azure-pipelines-task-lib/mock-answer');
 import tmrm = require('azure-pipelines-task-lib/mock-run');
 import path = require('path');
 
-// #111: same "artifact not listed in SHA256SUMS" condition as
-// MirrorSumsMissingEntryFail, but requireChecksum=false must downgrade to a
-// warning and still succeed -- the opt-out toggle applies to an unavailable
-// entry, not just a wholly-missing SUMS file.
+// #338: the mirror publishes a SUMS that does not list our artifact, and the
+// operator opted out of checksums but left requireGpgSignature enabled.
+//
+// The signature verified a document that says nothing about this zip, so the
+// install must FAIL rather than proceed with a toggle that reads as enforced
+// while protecting nothing. Mirrors MirrorSumsMissingGpgRequiredFail, which
+// makes the same assertion for a wholly-absent SUMS file.
 const tp = path.join(__dirname, 'RunInstaller.js');
 const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 
@@ -14,10 +17,7 @@ tr.setInput('downloadSource', 'mirror');
 tr.setInput('mirrorBaseUrl', 'https://artifacts.example.com/hashicorp/packer');
 tr.setInput('mirrorAllowedHosts', 'artifacts.example.com');
 tr.setInput('requireChecksum', 'false');
-// Both toggles, deliberately. A signed SUMS that omits this artifact covers
-// nothing about it, so requireGpgSignature is honored on this branch too --
-// requireChecksum=false alone now fails closed (see MirrorSumsMissingEntryGpgRequiredFail).
-tr.setInput('requireGpgSignature', 'false');
+// requireGpgSignature deliberately LEFT AT ITS DEFAULT (true).
 
 tr.registerMock('os', { type: () => 'Linux', arch: () => 'x64', tmpdir: () => '/tmp' });
 

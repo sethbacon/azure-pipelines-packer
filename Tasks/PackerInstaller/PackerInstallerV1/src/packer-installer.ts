@@ -565,6 +565,21 @@ async function downloadZipFromMirror(version: string, mirrorBaseUrl: string): Pr
             if (requireChecksum) {
                 throw new VerificationFailure(`Checksum verification is required but ${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}).`);
             }
+            // A signed SUMS that does not list THIS artifact anchors nothing about
+            // it. The signature above verified a document that says nothing on the
+            // subject of the zip we are about to install, so requireGpgSignature has
+            // to be honored here too -- otherwise it sits enabled and reads as
+            // "signature enforced" while buying the operator zero protection for the
+            // actual download. Exactly the #65 argument one branch up: SUMS is what
+            // the signature signs, so where SUMS cannot cover the artifact,
+            // signature-anchored verification of that artifact is impossible.
+            //
+            // Without this, requireChecksum=false ALONE dropped every integrity
+            // check on this path, contradicting SECURITY.md's promise that losing
+            // all verification on a mirror takes disabling BOTH toggles.
+            if (requireGpg) {
+                throw new VerificationFailure(`GPG signature verification is required but ${zipFileName} is not listed in the mirror's signed SHA256SUMS (${safeSha256SumsUrl}), so no signature covers the downloaded archive. Set 'requireGpgSignature' to false to install a mirror artifact the signed checksums do not cover.`);
+            }
             tasks.warning(`${zipFileName} is not listed in the mirror's SHA256SUMS (${safeSha256SumsUrl}); skipping checksum verification. Set 'requireChecksum' to true to require it.`);
             return { zipPath, verified: false };
         }
