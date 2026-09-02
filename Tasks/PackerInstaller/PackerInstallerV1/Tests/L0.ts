@@ -19,6 +19,7 @@ import './EgressAuthorizationL0';
 // failure/edge states of the verification itself. Kept in its own file so its three
 // tables stay readable; imported for its side effect of registering the suite.
 import './ArtifactTrustL0';
+import './GpgKeyExpiryL0';
 // This extension's half of azure-pipelines-terraform#879: downloadToFile was the
 // one network op in this module its siblings' withRetry did not cover.
 import './NetworkRetryClassL0';
