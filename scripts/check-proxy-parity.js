@@ -117,6 +117,19 @@ const PACKAGE_DELEGATED_SINKS = {
         min: '0.5.0',
         carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.6.0' },
     },
+    // exchangeOidcForUpst (#344): the second hop of the OCI WIF flow -- OIDC JWT
+    // to an OCI User Principal Session Token. Its fetch() and the
+    // buildAdoFetchOptions call that supplies the proxy dispatcher both live in
+    // @4cloudguru/pipeline-task-ado alongside generateIdToken's, so there is no
+    // local fetchOptions to inspect here. Same onward-delegation shape: the
+    // package's buildAdoFetchOptions resolves proxy config from
+    // pipeline-task-core, so a stale nested copy of THAT package would run old
+    // proxy logic behind a fresh ado floor.
+    exchangeOidcForUpst: {
+        pkg: '@4cloudguru/pipeline-task-ado',
+        min: '0.8.0',
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.7.0' },
+    },
 };
 
 /**

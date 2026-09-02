@@ -50,7 +50,7 @@ npm run package:dev
 ## Documentation
 
 - [YAML examples](docs/yaml-examples.md) — installer + every command/provider, end-to-end pipelines
-- [Workload Identity Federation setup](docs/wif-setup.md) — Azure/AWS/GCP, least-privilege trust policies
+- [Workload Identity Federation setup](docs/wif-setup.md) — Azure/AWS/GCP/OCI, least-privilege trust policies
 - [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md) — dev workflow, testing, release process
 - [Security policy](SECURITY.md)

@@ -52,6 +52,7 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         getEndpointDataParameter: t.getEndpointDataParameter,
         getEndpointUrl: t.getEndpointUrl,
         generateIdToken: itg.generateIdToken,
+        exchangeOidcForUpst: itg.exchangeOidcForUpst,
     };
 
     /** A real RSA key: the OCI/GCP handlers run normalizePem for real. */
@@ -110,6 +111,11 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             return v;
         };
         itg.generateIdToken = async () => 'mock-oidc-jwt-for-matrix';
+        // The OCI WIF branch has a SECOND network hop. Stubbed for the same
+        // reason as generateIdToken: this matrix is about the credential guards,
+        // and an unstubbed exchange would make every OCI WIF row fail on a real
+        // fetch rather than on the property under test.
+        itg.exchangeOidcForUpst = async () => 'mock-upst-for-matrix';
         // Data parameters are ALSO provisioned through the real ENDPOINT_DATA_*
         // channel, not only through the getEndpointDataParameter stub above: a
         // SECRET data field is read by readSecretEndpointDataParameter straight from
@@ -146,6 +152,7 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             getEndpointUrl: orig.getEndpointUrl,
         });
         itg.generateIdToken = orig.generateIdToken;
+        itg.exchangeOidcForUpst = orig.exchangeOidcForUpst;
         EnvironmentVariableHelper.clearTrackedVariables();
         for (const k of touchedEnv) delete process.env[k];
         touchedEnv.clear();
@@ -221,6 +228,17 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
                 user: 'ocid1.user.oc1..aaaaaaaaexampleuserocid',
                 region: 'us-ashburn-1',
                 fingerprint: 'aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99',
+            },
+        },
+        'oci.WorkloadIdentityFederation': {
+            serviceConnection: 'OCI',
+            inputs: {
+                environmentAuthSchemeOCI: 'WorkloadIdentityFederation',
+                ociWifTenancyOcid: 'ocid1.tenancy.oc1..aaaaaaaaexampletenancyocid',
+                ociWifRegion: 'us-ashburn-1',
+                ociWifIdentityDomainUrl:
+                    'https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com',
+                ociWifClientId: 'example-client-id',
             },
         },
         'vsphere.static': {
@@ -345,6 +363,13 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         { site: 'oci.static.region', handler: 'oci', fixture: () => without('oci.static', 'data', 'region') },
         { site: 'oci.static.fingerprint', handler: 'oci', fixture: () => without('oci.static', 'data', 'fingerprint') },
         { site: 'oci.static.tenancy[malformed]', handler: 'oci', fixture: () => malformed('oci.static', 'data', 'tenancy') },
+        { site: 'oci.WorkloadIdentityFederation.serviceConnection', handler: 'oci', fixture: () => without('oci.WorkloadIdentityFederation', 'serviceConnection') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifTenancyOcid', handler: 'oci', fixture: () => without('oci.WorkloadIdentityFederation', 'inputs', 'ociWifTenancyOcid') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifRegion', handler: 'oci', fixture: () => without('oci.WorkloadIdentityFederation', 'inputs', 'ociWifRegion') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifIdentityDomainUrl', handler: 'oci', fixture: () => without('oci.WorkloadIdentityFederation', 'inputs', 'ociWifIdentityDomainUrl') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifClientId', handler: 'oci', fixture: () => without('oci.WorkloadIdentityFederation', 'inputs', 'ociWifClientId') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifTenancyOcid[malformed]', handler: 'oci', fixture: () => malformed('oci.WorkloadIdentityFederation', 'inputs', 'ociWifTenancyOcid') },
+        { site: 'oci.WorkloadIdentityFederation.ociWifIdentityDomainUrl[malformed]', handler: 'oci', fixture: () => malformed('oci.WorkloadIdentityFederation', 'inputs', 'ociWifIdentityDomainUrl') },
 
         { site: 'vsphere.static.serviceConnection', handler: 'vsphere', fixture: () => without('vsphere.static', 'serviceConnection') },
         { site: 'vsphere.static.url', handler: 'vsphere', fixture: () => without('vsphere.static', 'url') },
@@ -443,6 +468,13 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         {
             site: 'oci.static.competing-credential-env', handler: 'oci', base: 'oci.static',
             competing: ['OCI_CLI_CONFIG_FILE', 'OCI_CLI_PROFILE', 'OCI_CLI_TENANCY', 'OCI_CLI_KEY_FILE'],
+        },
+        {
+            site: 'oci.WorkloadIdentityFederation.competing-credential-env', handler: 'oci', base: 'oci.WorkloadIdentityFederation',
+            // The API-key selectors matter as much as the OCI_CLI_* ones here: an
+            // inherited PKR_VAR_oci_user_ocid is answered by the raw configuration
+            // provider at index 0, so the session token would never be consulted.
+            competing: ['OCI_CLI_CONFIG_FILE', 'OCI_CLI_PROFILE', 'OCI_CLI_AUTH', 'PKR_VAR_oci_user_ocid', 'PKR_VAR_oci_key_file', 'PKR_VAR_oci_pass_phrase'],
         },
         {
             // #44/#187: an inherited insecure-connection flag would disable vCenter

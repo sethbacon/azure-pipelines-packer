@@ -154,7 +154,7 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `azure-packer-command-handler.ts`   | AzureRM auth (WIF / MSI / Service Principal) → `PKR_VAR_arm_*`                                                                                                                                               |
 | `aws-packer-command-handler.ts`     | AWS auth (static keys / WIF web-identity) → `AWS_*` env                                                                                                                                                      |
 | `gcp-packer-command-handler.ts`     | GCP auth (SA key / WIF) → `GOOGLE_APPLICATION_CREDENTIALS`                                                                                                                                                   |
-| `oci-packer-command-handler.ts`     | OCI auth → `PKR_VAR_oci_*` env + temp key file                                                                                                                                                               |
+| `oci-packer-command-handler.ts`     | OCI auth: API key → `PKR_VAR_oci_*` env + temp key file; or WIF → OIDC-to-UPST exchange, then a generated OCI config passed as `-var oci_access_cfg_file` (#344)                                              |
 | `vsphere-packer-command-handler.ts` | vSphere auth → `PKR_VAR_vsphere_*` env                                                                                                                                                                       |
 | `none-packer-command-handler.ts`    | No cloud creds (local/hypervisor builders)                                                                                                                                                                   |
 | `credential-guards.ts`              | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`)                       |
@@ -186,6 +186,7 @@ copy, rather than reading a local `fetchOptions` spread that no longer exists he
 - `fix` only writes a file and sets the `fixFilePath` output variable when `fixOutputFile` is explicitly set; otherwise the fixed template goes to stdout only.
 - `fmt` defaults to check mode (`-check -diff`); a formatting diff fails the task.
 - Credentials are injected as environment variables (never CLI args) and cleared via `EnvironmentVariableHelper.clearTrackedVariables()` in the `finally` block after every command.
+  - **One ratified exception, for credential PATHS only (#344).** The OCI WIF branch passes its generated config file's *path* with `-var`, because Packer **silently skips** a `PKR_VAR_` naming a variable the template never declared — a template missing the declaration would ignore the credential and fall through to the agent's ambient OCI config. `-var` makes Packer refuse the run instead (`hcl.DiagError`, verified against packer 1.14.1). The secret is the 0600 file's contents, which never reach argv; only its path does. Extend this to a secret VALUE and the exception no longer applies — argv is visible in `ps` and echoed into the build log.
 
 ### Provider auth env conventions
 

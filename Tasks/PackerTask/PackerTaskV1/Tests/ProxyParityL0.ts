@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import tasks = require('azure-pipelines-task-lib/task');
-import { generateIdToken } from '@4cloudguru/pipeline-task-ado';
+import { exchangeOidcForUpst, generateIdToken } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * CLASS TEST — outbound proxy parity (#196).
@@ -36,6 +36,18 @@ const t = tasks as any;
 type ProxyConfig = { proxyUrl: string; proxyUsername?: string; proxyPassword?: string };
 
 /**
+ * A throwaway public key for the OCI UPST row below. Generated rather than
+ * hard-coded because exchangeOidcForUpst exports it as SPKI DER before sending,
+ * so it has to be a real key -- but it never leaves this process and is paired
+ * with no private half that is kept.
+ */
+const OCI_WIF_TEST_PUBLIC_KEY = require('crypto').generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+}).publicKey as string;
+
+/**
  * Table B. Every outbound call this task makes on a WIF path, exercised through
  * its real entry point. Adding a second token exchange means adding a row here,
  * not a new test file — which is the property the previous round's per-site
@@ -45,11 +57,38 @@ type WifCallRow = {
     what: string;
     /** Runs the real code path; resolves once the stubbed fetch has been called. */
     invoke: () => Promise<unknown>;
+    /**
+     * The redirect policy this call is expected to set. Both refuse to follow a
+     * 3xx, by different mechanisms: 'error' makes fetch itself throw, while
+     * 'manual' surfaces the redirect so the caller can reject it with a specific
+     * message and mark it non-retryable. The property under test is "this call
+     * does not follow redirects" -- pinning one spelling for every row would
+     * make the table assert an implementation rather than the property.
+     */
+    redirect: 'error' | 'manual';
 };
 const WIF_CALL_ROWS: WifCallRow[] = [
     {
-        what: 'ADO OIDC token request (all three WIF providers)',
+        what: 'ADO OIDC token request (all four WIF providers)',
         invoke: () => generateIdToken('service-connection-id'),
+        redirect: 'error',
+    },
+    {
+        // The second hop of the OCI WIF flow (#344). A real identity-domain host
+        // is required: exchangeOidcForUpst validates the destination BEFORE it
+        // transmits, so a placeholder host would reject without ever reaching
+        // fetch and this row would assert nothing.
+        what: 'OCI UPST token exchange',
+        invoke: () => exchangeOidcForUpst(
+            'oidc-jwt',
+            'https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com',
+            'client-id',
+            OCI_WIF_TEST_PUBLIC_KEY,
+        ),
+        // 'manual' rather than 'error' so the handler can reject the redirect
+        // with its own message -- "refusing to forward the OIDC token to another
+        // origin" -- and mark it non-retryable, instead of a generic fetch throw.
+        redirect: 'manual',
     },
 ];
 
@@ -75,6 +114,16 @@ const SITE_ROWS: SiteRow[] = [
         file: 'Tasks/PackerInstaller/PackerInstallerV1/src/http-client.ts',
         fn: 'createRegistryClient', sink: 'createAdoHttpClient', verdict: 'PROXIED-BY-PACKAGE',
         why: 'the same transport with the registry-specific failure message; a second construction is a second site the floor has to cover',
+    },
+    {
+        file: 'Tasks/PackerTask/PackerTaskV1/src/oci-packer-command-handler.ts',
+        fn: 'handleProviderWIF', sink: 'generateIdToken', verdict: 'PROXIED-BY-PACKAGE',
+        why: 'the OCI WIF path mints its own OIDC token directly rather than via writeOidcTokenFile, because OCI needs the token value for the UPST exchange rather than a file on disk (#344)',
+    },
+    {
+        file: 'Tasks/PackerTask/PackerTaskV1/src/oci-packer-command-handler.ts',
+        fn: 'handleProviderWIF', sink: 'exchangeOidcForUpst', verdict: 'PROXIED-BY-PACKAGE',
+        why: 'the second hop of the OCI WIF flow: its fetch() and buildAdoFetchOptions call both live in @4cloudguru/pipeline-task-ado, so like generateIdToken it is held to a version floor rather than a local fetchOptions inspection (#344)',
     },
 ];
 
@@ -117,10 +166,15 @@ describe('outbound proxy parity (class test #196)', function () {
             t.getHttpProxyConfiguration = () => proxy;
             globalThis.fetch = (async (_url: string, init: RequestInit) => {
                 inits.push(init);
-                return new Response(JSON.stringify({ oidcToken: 'federated-token' }), {
-                    status: 200,
-                    headers: { 'content-type': 'application/json' },
-                });
+                // Carries the success shape of BOTH hops: `oidcToken` for the ADO
+                // token request, `access_token` for the OCI UPST exchange. Each
+                // row reads only its own field, and a row that threw before
+                // reaching fetch would fail the assertion below rather than
+                // silently passing.
+                return new Response(
+                    JSON.stringify({ oidcToken: 'federated-token', access_token: 'upst-token' }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
             }) as unknown as typeof globalThis.fetch;
             return { inits };
         }
@@ -157,7 +211,7 @@ describe('outbound proxy parity (class test #196)', function () {
                     // The proxy fix must not relax the redirect policy: a 3xx could
                     // otherwise forward the System.AccessToken bearer header to an
                     // unvalidated hop through the proxy.
-                    assert.strictEqual(init.redirect, 'error',
+                    assert.strictEqual(init.redirect, row.redirect,
                         `${row.what}: redirect policy was weakened by the proxy change`);
                     assert.ok(init.signal, `${row.what}: the abort signal (30s timeout) was dropped`);
                 }

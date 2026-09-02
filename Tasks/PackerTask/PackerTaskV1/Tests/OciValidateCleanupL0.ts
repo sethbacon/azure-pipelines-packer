@@ -11,7 +11,12 @@ import { ParentCommandHandler } from '../src/parent-handler';
 tl.setResourcePath(path.join(__dirname, '..', 'task.json'));
 
 function ociKeyFiles(): string[] {
-    return fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('oci-keyfile-') && f.endsWith('.pem'));
+    // Every OCI credential temp file, not just the API-key PEM: the WIF branch
+    // writes an ephemeral key, the UPST and a synthetic config, and a filter that
+    // only matched the API-key prefix would report a clean tmpdir while three
+    // WIF credential files were still on disk.
+    const prefixes = ['oci-keyfile-', 'oci-wif-key-', 'oci-wif-upst-', 'oci-wif-config-'];
+    return fs.readdirSync(os.tmpdir()).filter((f) => prefixes.some((p) => f.startsWith(p)));
 }
 
 async function run() {
