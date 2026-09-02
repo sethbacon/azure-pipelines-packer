@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.5.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.4.0...v1.5.0) (2026-09-02)
+
+
+### Features
+
+* **oci:** Workload Identity Federation via OCI UPST ([#388](https://github.com/sethbacon/azure-pipelines-packer/issues/388)) ([c1a1c30](https://github.com/sethbacon/azure-pipelines-packer/commit/c1a1c300f13bcd4d48de7b5076b297f68b0414d2))
+
+
+### Bug Fixes
+
+* **installer:** gate the embedded GPG key's expiry, not just its fingerprint ([#395](https://github.com/sethbacon/azure-pipelines-packer/issues/395)) ([769586e](https://github.com/sethbacon/azure-pipelines-packer/commit/769586e9190d8f51cb7c0b2f091854c61cb977f0))
+* **oci:** clear the auth-mode switch on both branches ([#392](https://github.com/sethbacon/azure-pipelines-packer/issues/392)) ([9831b2a](https://github.com/sethbacon/azure-pipelines-packer/commit/9831b2a3542d66e8d8e02ca7f9ff101242e79b72))
+
+
+### Documentation
+
+* **ci:** correct the stale "not yet a required check" note in pr-checks ([#397](https://github.com/sethbacon/azure-pipelines-packer/issues/397)) ([20b3c6a](https://github.com/sethbacon/azure-pipelines-packer/commit/20b3c6ac0c0eea082cb9e0a2fd80e338bc3ee356))
+* correct the 'latest' resolution behaviour and state the rollback residual ([#398](https://github.com/sethbacon/azure-pipelines-packer/issues/398)) ([167d8ab](https://github.com/sethbacon/azure-pipelines-packer/commit/167d8abdfc1722fa20c7492bcca0950ef099e08b))
+* name local builders in the Marketplace description ([#385](https://github.com/sethbacon/azure-pipelines-packer/issues/385)) ([61d8232](https://github.com/sethbacon/azure-pipelines-packer/commit/61d8232980eeb9f35b904b383fb28f42cc34e291))
+* **wif:** fold OCI into the WIF guidance it was left out of ([#394](https://github.com/sethbacon/azure-pipelines-packer/issues/394)) ([8d9a275](https://github.com/sethbacon/azure-pipelines-packer/commit/8d9a27563e49cec203dffc8551e6e7be4edafd45))
+
+
+### Refactor
+
+* **commands:** let a provider handler contribute -var args ([#387](https://github.com/sethbacon/azure-pipelines-packer/issues/387)) ([619f343](https://github.com/sethbacon/azure-pipelines-packer/commit/619f34347d8ac9b1659010d20f953e301c083063))
+* extract path containment, and bring it back in sync with the siblings ([#402](https://github.com/sethbacon/azure-pipelines-packer/issues/402)) ([d29577d](https://github.com/sethbacon/azure-pipelines-packer/commit/d29577d747833cda99c29b769361e764f1e46c5f))
+
+
+### Security
+
+* honor requireGpgSignature when the mirror's SUMS omits the artifact ([#396](https://github.com/sethbacon/azure-pipelines-packer/issues/396)) ([8211b99](https://github.com/sethbacon/azure-pipelines-packer/commit/8211b99388c46b3096c496d7b40cdfcf5b5889dc))
+* refuse an Azure run whose template omits the credential variable ([#400](https://github.com/sethbacon/azure-pipelines-packer/issues/400)) ([f8304bc](https://github.com/sethbacon/azure-pipelines-packer/commit/f8304bcbdfe6b212e51475d61e3171410844ba29))
+
 ## [1.4.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.3.7...v1.4.0) (2026-08-31)
 
 
