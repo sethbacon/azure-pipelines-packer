@@ -38,7 +38,13 @@ const FAMILIES = [];
 // exempt from the provenance convention this gate exists to enforce.
 const UPSTREAM = 'azure-pipelines-terraform';
 
+const COMMAND_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
+
 const PROVENANCE = [
+    // Extracted from base-packer-command-handler.ts (#113), where it had been a
+    // seventh copy of a module the sibling extensions gate as a byte-identical
+    // family -- and invisible to every basename-keyed check because it was inline.
+    { dir: COMMAND_SRC, file: 'path-containment.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'hashicorp-gpg-key.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'gpg-verifier.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'http-client.ts', upstream: UPSTREAM },
