@@ -406,7 +406,13 @@ export abstract class BasePackerCommandHandler {
         tool.arg('inspect');
         tool.arg(templatePath);
 
-        const scrubbedEnv: { [key: string]: string } = {};
+        // Null-prototype: the keys here are environment variable NAMES, which are
+        // operator- and agent-influenceable, and they are written with a computed
+        // key (#884's prototype-safe-lookup class). On a plain object literal an
+        // env var literally named `__proto__` is silently discarded rather than
+        // passed through -- `obj['__proto__'] = <string>` creates no own property --
+        // so this is a correctness bug as well as the defect class.
+        const scrubbedEnv: { [key: string]: string } = Object.create(null);
         for (const [key, value] of Object.entries(process.env)) {
             if (value !== undefined && !key.startsWith('PKR_VAR_')) {
                 scrubbedEnv[key] = value;
