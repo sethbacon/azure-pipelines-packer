@@ -197,11 +197,15 @@ jobs:
   # <caller-job-id> / <called-job-name>, and this context is required in
   # azure-pipelines-release-docs.
   #
-  # A NEW required context has to be added to main's branch protection by hand:
-  # "Breaking-change footers survive the squash". Until that is done this job
-  # reports on every pull request without blocking one -- which is also the
-  # state of `release-please can read the merged commit` below, the other half
-  # of the pair, and both should be promoted together.
+  # PROMOTED. This job and `release-please can read the merged commit` below --
+  # the other half of the pair -- are BOTH required contexts on main today
+  # (verified against the branch-protection API, #335). They block a merge; they
+  # do not merely report.
+  #
+  # The `name:` below IS the required-context string, matched exactly. Renaming
+  # this job silently drops its branch-protection requirement and the gate keeps
+  # reporting green while enforcing nothing, so change `name:` only together
+  # with a branch-protection update.
   breaking-change-footers:
     name: Breaking-change footers survive the squash
     runs-on: ubuntu-latest
