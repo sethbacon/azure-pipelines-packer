@@ -6,7 +6,7 @@ WIF eliminates storing a cloud secret in Azure DevOps. Instead, the pipeline req
 
 ## Security note: the token has ADO's default audience
 
-Every WIF provider (`azurerm`/`aws`/`gcp`) reuses the same OIDC token requester, which asks Azure DevOps for a token using only the service-connection ID — it does **not** set a custom `audience`/`aud` parameter, so the minted JWT carries ADO's default audience (`api://AzureADTokenV2`) regardless of which cloud consumes it.
+Every WIF provider (`azurerm`/`aws`/`gcp`/`oci`) reuses the same OIDC token requester, which asks Azure DevOps for a token using only the service-connection ID — it does **not** set a custom `audience`/`aud` parameter, so the minted JWT carries ADO's default audience (`api://AzureADTokenV2`) regardless of which cloud consumes it.
 
 This means **the federation configuration on the cloud side is the actual security boundary**, not the token's audience. For every provider below, you must pin the trust condition to the exact **issuer** (`https://vstoken.dev.azure.com/<your-org-id>`), the exact **audience** (`api://AzureADTokenV2`), and the exact **subject** (`sub`, which encodes the specific service connection) — a loosely-scoped trust policy lets *any* service connection in your ADO organization impersonate the role/identity, not just the one you intend.
 
@@ -218,19 +218,22 @@ The ADO OIDC ID token is **short-lived — minutes, not hours**. Azure DevOps ch
 
 What this repo *can* state, because it is a property of the code rather than of ADO's issuing policy: **the token is fetched exactly once, at the start of the command, and is never refetched or refreshed for the life of the build.** `generateIdToken()` (`@4cloudguru/pipeline-task-ado`) has no expiry handling and no refresh path — it acquires the token, retries only transport failures, and returns. The token is then injected statically (as `PKR_VAR_arm_client_jwt` for Azure, or written to the file `AWS_WEB_IDENTITY_TOKEN_FILE` / the GCP `external_account` credential source points at). It is a client assertion, exchanged once by the cloud SDK for an access token or role session; that exchanged credential has its own, longer lifetime, and it is not refreshed from the ADO token either.
 
-A Packer build that runs longer than the exchanged credential's lifetime will start failing cloud API calls partway through. For Azure specifically, `packer-plugin-azure`'s calls to Entra will start returning **`AADSTS700024: Client assertion is not within its valid time range`** — this is a well-known failure mode for Azure DevOps-issued OIDC tokens on long-running operations (see Microsoft's WIF troubleshooting guidance for `AADSTS700024`). AWS and GCP builds can fail similarly once the assumed role session or Workload Identity Pool token expires.
+OCI is the one provider where the task performs that exchange itself rather than handing the assertion to the cloud SDK: the ADO token is traded for a **User Principal Session Token** before Packer starts, and it is the UPST — not the ADO token — that is written to disk and named by the generated config file. That shortens the exposure of the federated assertion, but it does not change the shape of this limitation. The UPST is minted once, has its own bounded lifetime, and this task never refreshes it.
+
+A Packer build that runs longer than the exchanged credential's lifetime will start failing cloud API calls partway through. For Azure specifically, `packer-plugin-azure`'s calls to Entra will start returning **`AADSTS700024: Client assertion is not within its valid time range`** — this is a well-known failure mode for Azure DevOps-issued OIDC tokens on long-running operations (see Microsoft's WIF troubleshooting guidance for `AADSTS700024`). AWS, GCP and OCI builds can fail similarly once the assumed role session, Workload Identity Pool token or UPST expires.
 
 If your Packer templates build large or slow images (long provisioner scripts, big base images, multi-hour builds):
 
 - **Azure**: prefer a **Managed Identity**-backed service connection (`ManagedServiceIdentity` authorization scheme) for long builds — MSI credentials are refreshed by the Azure SDK for the life of the process, unlike a one-shot WIF assertion. If MSI is not available in your environment, a Service Principal with a client secret is the other long-build-safe fallback (the task will emit a warning recommending WIF, which you can accept for this specific case).
 - **AWS**: the assumed role's session duration is controlled by the IAM role's **Maximum session duration** setting (up to 12 hours) rather than anything this task configures — set it as high as your role's policy allows for long-running builds.
 - **GCP**: the exchanged access token from `external_account` credentials is refreshed automatically by Google's client libraries as long as the underlying ADO OIDC token used to establish it is still valid — but since the ADO token is one-shot and non-refreshable here, the build is bounded by that token's lifetime plus the derived session length, exactly as above.
+- **OCI**: the build is bounded by the UPST's lifetime, which Oracle sets and this task does not configure. There is no equivalent of AWS's role session-duration dial to turn up. If a build reliably outlives it, use the **API key** scheme (`environmentAuthSchemeOCI: ServiceConnection`) for that pipeline instead — an API key does not expire, which is the whole tradeoff being made, and it is the reason this task keeps both schemes rather than replacing one with the other.
 
 There is currently no code path in this task that refetches the ADO OIDC token mid-build; the safest choice for long Azure builds today is Managed Identity or Service Principal rather than WIF.
 
 ## Prefer WIF over static keys
 
-For all three providers, prefer WIF over the static-credential alternative (AWS access keys, GCP service-account JSON keys, Azure Service Principal secrets):
+For all four providers, prefer WIF over the static-credential alternative (AWS access keys, GCP service-account JSON keys, Azure Service Principal secrets, OCI API keys):
 
 - No long-lived secret is stored in Azure DevOps.
 - Tokens are short-lived: the ADO OIDC token expires in minutes, the exchanged cloud credential within the hour — see [Long-running builds and WIF token lifetime](#long-running-builds-and-wif-token-lifetime) for what that means for a slow build.
