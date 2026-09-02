@@ -28,16 +28,16 @@ tr.registerMock('@4cloudguru/pipeline-task-ado', {
     generateIdToken: (_serviceConnectionId: string) => Promise.resolve('mock-oidc-jwt-12345')
 });
 
-// The handler now pre-flights `packer inspect` to confirm the template
-// DECLARES the variable the credential is injected into (#332). Packer
-// silently drops a PKR_VAR_ for an undeclared variable, and for Azure a
-// dropped credential leaves UseMSI() true -- the build then authenticates
-// as the agent VM's identity. Declaring it here is the success path.
+// #332: only a DEFINITE answer fails. A non-zero inspect means the probe
+// could not read the template, and breaking a working pipeline over a failed
+// probe would be worse than the gap -- so this warns and proceeds.
 const a: ma.TaskLibAnswers = {
     which: { packer: 'packer' },
     checkPath: { packer: true },
     exec: {
-        'packer inspect .': { code: 0, stdout: 'var.arm_client_jwt: ""\nvar.arm_client_id: ""\n' }
+        // inspect cannot read the template at all (legacy JSON, syntax error,
+        // unresolvable path). That is 'could not determine', not 'not declared'.
+        'packer inspect .': { code: 1, stdout: '', stderr: 'Error: Argument or block definition required' }
     }
 };
 tr.setAnswers(a);

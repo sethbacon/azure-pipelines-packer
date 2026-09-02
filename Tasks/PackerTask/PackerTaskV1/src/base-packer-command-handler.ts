@@ -366,6 +366,84 @@ export abstract class BasePackerCommandHandler {
     }
 
     /**
+     * Refuses the run when the template does not DECLARE the variable a credential
+     * is about to be injected into (#332).
+     *
+     * Packer silently ignores a PKR_VAR_ naming a variable the template never
+     * declared -- exit 0, no diagnostic, not even on `validate` where
+     * undeclared-variable warnings are otherwise on by default. For Azure that is a
+     * fail-OPEN: packer-plugin-azure's UseMSI() (builder/azure/common/client/
+     * config.go:233) returns true whenever client_secret, client_jwt,
+     * client_cert_path, tenant_id and the OIDC fields are ALL empty, so a dropped
+     * assertion doesn't fail the build -- it silently authenticates as the agent
+     * VM's managed identity instead of the service connection.
+     *
+     * `packer inspect` answers "is it declared?" without touching any variable
+     * precedence tier, needs no flag (`-warn-on-undeclared-var` does not cover
+     * PKR_VAR_ at all, and does not exist before packer 1.8.5), writes nothing to
+     * disk, and puts no secret in argv. It exits 0 even with required plugins
+     * uninstalled, so it needs no `packer init`.
+     *
+     * Two deliberate properties:
+     *
+     * 1. THE CHILD ENV IS SCRUBBED OF PKR_VAR_*. `packer inspect` ECHOES resolved
+     *    values (measured: `var.arm_client_id: "<value>"`), so an inherited
+     *    PKR_VAR_arm_client_secret on a self-hosted agent would be printed into the
+     *    build log BY THIS PROBE. Stripping them means the probe cannot disclose a
+     *    secret it did not create. Callers must also run it BEFORE injecting.
+     *
+     * 2. ONLY A DEFINITE ANSWER FAILS. exit 0 with the variable absent is a real
+     *    "not declared" and fails closed. A non-zero exit means inspect could not
+     *    read the template at all (legacy JSON, a syntax error, a path it cannot
+     *    resolve) -- that is "could not determine", and warning is the honest
+     *    response. Failing there would break working pipelines over a probe, and
+     *    the threat being addressed is operator misconfiguration: the template
+     *    author IS the operator, so this is not an attacker-controlled input.
+     */
+    protected async assertTemplateDeclaresVariable(variableName: string, credentialDescription: string): Promise<void> {
+        const templatePath = this.getTemplatePath();
+        const tool = this.packerToolHandler.createToolRunner();
+        tool.arg('inspect');
+        tool.arg(templatePath);
+
+        const scrubbedEnv: { [key: string]: string } = {};
+        for (const [key, value] of Object.entries(process.env)) {
+            if (value !== undefined && !key.startsWith('PKR_VAR_')) {
+                scrubbedEnv[key] = value;
+            }
+        }
+
+        const { code, stdout } = await this.execWithStdoutCapture(tool, <IExecOptions>{
+            cwd: this.getWorkingDirectory() || undefined,
+            env: scrubbedEnv,
+            silent: true,
+            failOnStdErr: false,
+        });
+
+        if (code !== 0) {
+            tasks.warning(`Could not read variable declarations from '${templatePath}' (packer inspect exited ${code}), so it was not possible to confirm the template declares 'variable "${variableName}"'. If it does not, Packer will silently ignore the ${credentialDescription} and the build may authenticate as an unintended identity.`);
+            return;
+        }
+
+        // `> input-variables:` lines are `var.<name>: "<value>"`. Match the name
+        // only -- the value is deliberately never read or logged here.
+        const declared = new Set<string>();
+        for (const line of stdout.split('\n')) {
+            const match = /^var\.([A-Za-z0-9_-]+):/.exec(line.trim());
+            if (match && match[1]) {
+                declared.add(match[1]);
+            }
+        }
+
+        if (!declared.has(variableName)) {
+            throw new Error(
+                `The template at '${templatePath}' does not declare 'variable "${variableName}"', so Packer would silently discard the ${credentialDescription} this task injects and the build could authenticate as the agent's own identity instead of the service connection. Add it to the template and wire it into the source block:\n\n` +
+                `  variable "${variableName}" {\n    type      = string\n    default   = ""\n    sensitive = true\n  }\n`,
+            );
+        }
+    }
+
+    /**
      * Writes `content` to a uniquely-named 0600 temp file (`<prefix>-<uuid>.<ext>`),
      * tracks it for cleanup, and returns the path. Centralizes the temp-secret
      * convention shared by the AWS/GCP/OCI handlers.

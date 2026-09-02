@@ -140,6 +140,12 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 // is charset-validated, exactly like the ServicePrincipal branch below.
                 const servicePrincipalId = requireIdentityField(serviceConnectionID, "serviceprincipalid");
                 const tenantId = requireIdentityField(serviceConnectionID, "tenantid");
+                // Before minting: a federated assertion is a live bearer credential
+                // the moment it exists, so it must not be requested for a run that
+                // is about to be rejected (#1029's ordering invariant). This also
+                // keeps the inspect probe strictly pre-injection, which is what
+                // stops it echoing our own credential into the log.
+                await this.assertTemplateDeclaresVariable('arm_client_jwt', 'federated OIDC assertion');
                 const oidcToken = await generateIdToken(serviceConnectionID);
                 tasks.setSecret(oidcToken);
 
@@ -160,6 +166,10 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 // agent VM's ambient managed identity (its MSI path) and
                 // authenticate as an unintended, possibly more-privileged identity.
                 const servicePrincipalId = requireIdentityField(serviceConnectionID, "serviceprincipalid");
+                // Same fail-open as the WIF branch above, same silently-droppable
+                // channel: a dropped client_secret leaves UseMSI() true. Checked
+                // before the secret is read, so the probe runs pre-injection.
+                await this.assertTemplateDeclaresVariable('arm_client_secret', 'service principal client secret');
                 const servicePrincipalKey = requireSecretField(serviceConnectionID, "serviceprincipalkey");
                 tasks.setSecret(servicePrincipalKey);
                 const tenantId = requireIdentityField(serviceConnectionID, "tenantid");

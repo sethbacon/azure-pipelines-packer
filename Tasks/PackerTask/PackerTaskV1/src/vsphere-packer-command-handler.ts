@@ -75,6 +75,14 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
             // interception (#44/#187). The toggle is off, so the variable must be off.
             neutralizeEnvironmentVariables(VSPHERE_COMPETING_CREDENTIAL_ENV, "vSphere");
         }
+        // @credential-exempt: vSphere fails CLOSED on a dropped credential, unlike Azure (#332).
+        // Measured on packer 1.14.1: an under-declared vsphere-iso template errors
+        // "'vcenter_server' is required / 'username' is required / 'password' is required",
+        // exit 1. There is no ambient vCenter identity to fall through to, so a
+        // silently-dropped PKR_VAR_ cannot produce a wrong-identity build the way it
+        // does for packer-plugin-azure's UseMSI() path -- worst case is a confusing
+        // error. A `packer inspect` pre-flight here would add an invocation per run
+        // for no security gain.
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true);

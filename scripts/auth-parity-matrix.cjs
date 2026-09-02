@@ -312,10 +312,25 @@ function analyzeHandler(file, root) {
         return hit ? hit.reason : null;
     };
 
-    const add = (cellName, verdict, detail, line, branchOverride) => {
+    // A marker anywhere in [region.lo, region.hi] -- no lookback. exemptionFor()
+    // deliberately reaches 14 lines ABOVE a region so a marker can sit above the
+    // read it describes, but that leaks across adjacent `case` arms: the Azure WIF
+    // branch begins immediately after the MSI branch, so MSI's marker fell inside
+    // WIF's lookback and silently EXEMPTed a genuinely unguarded WIF cell. Caught by
+    // mutation -- removing WIF's pre-flight produced EXEMPT rather than UNGUARDED,
+    // i.e. the new cell kind was certifying itself green. Cell kinds whose exemption
+    // must not cross a branch boundary pass strictExempt.
+    const strictExemptionFor = (line) => {
+        const r = regionFor(line);
+        const hit = markers.find((m) => m.line >= r.lo && m.line <= r.hi);
+        return hit ? hit.reason : null;
+    };
+
+    const add = (cellName, verdict, detail, line, branchOverride, strictExempt) => {
         const sc = scopes[line] || { method: '<top>', branch: '<top>' };
         const branch = branchOverride || sc.branch;
-        const exempt = verdict === 'UNGUARDED' ? exemptionFor(line) : null;
+        const lookup = strictExempt ? strictExemptionFor : exemptionFor;
+        const exempt = verdict === 'UNGUARDED' ? lookup(line) : null;
         cells.push({
             file: rel, handler, branch, cell: cellName,
             site: `${handler}.${branch}.${cellName}`,
@@ -449,6 +464,49 @@ function analyzeHandler(file, root) {
                 ok ? 'clears competing auth-scheme env vars before injecting'
                    : 'injects credentials without clearing competing/ambient auth env vars',
                 r.lo, r.branch);
+        }
+    }
+
+    // ---- 3b. DELIVERY cells: a credential injected as PKR_VAR_ must be
+    //          accompanied by something that fails closed when the template does
+    //          not declare it (#332).
+    //
+    //          Every other cell kind here asks whether a value was READ safely.
+    //          None of them asks whether it ARRIVES. Packer silently ignores a
+    //          PKR_VAR_ naming a variable the template never declared -- exit 0,
+    //          no diagnostic, not even on `validate` -- and for Azure a dropped
+    //          credential leaves packer-plugin-azure's UseMSI() true, so the build
+    //          authenticates as the agent VM's managed identity rather than
+    //          failing. The matrix reported 44/44 GUARDED throughout, because it
+    //          was blind to the delivery channel. That is the same shape as a green
+    //          class gate certifying a live high.
+    //
+    //          Two things satisfy this cell:
+    //            - assertTemplateDeclaresVariable(...) -- the `packer inspect`
+    //              pre-flight, which refuses when the declaration is absent; or
+    //            - providerVarArgs.push(...) -- delivery as `-var`, which packer
+    //              itself hard-errors on for an undeclared variable.
+    //
+    //          Scoped to SECRET-shaped PKR_VAR_ names on purpose: a dropped
+    //          non-secret selector (subscription id, region) is a wrong-target or
+    //          fail-closed outcome, not a wrong-identity one, and several are
+    //          legitimately optional.
+    if (!isBase) {
+        const SECRET_VAR_RE = /setEnvironmentVariable\s*\(\s*["'](PKR_VAR_[A-Za-z0-9_]*(?:secret|jwt|password|token|privatekey|key_file)[A-Za-z0-9_]*)["']/gi;
+        for (const r of regions) {
+            if (r.branch === '<top>') continue;
+            const region = codeLines.slice(r.lo - 1, r.hi).join('\n');
+            SECRET_VAR_RE.lastIndex = 0;
+            const delivered = [];
+            let m;
+            while ((m = SECRET_VAR_RE.exec(region)) !== null) delivered.push(m[1]);
+            if (!delivered.length) continue;
+            const ok = /assertTemplateDeclaresVariable\s*\(/.test(region)
+                || /providerVarArgs\.push\s*\(/.test(region);
+            add('credential-delivery-channel', ok ? 'GUARDED' : 'UNGUARDED',
+                ok ? `${delivered.join(', ')} delivered with a declaration pre-flight or via -var`
+                   : `${delivered.join(', ')} delivered as PKR_VAR_ with nothing failing closed when the template omits the declaration`,
+                r.lo, r.branch, /* strictExempt */ true);
         }
     }
 
