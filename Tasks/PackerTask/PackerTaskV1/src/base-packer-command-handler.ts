@@ -255,6 +255,55 @@ export abstract class BasePackerCommandHandler {
         }
     }
 
+    /**
+     * `-var name=value` entries a provider handler needs Packer to receive as
+     * COMMAND-LINE variables rather than `PKR_VAR_*` environment variables.
+     *
+     * The three input channels are not equivalent, and only this one fails
+     * closed. Verified against packer 1.14.1 and upstream
+     * hcl2template/types.variables.go's collectInputVariableValues():
+     *
+     *   PKR_VAR_<name>  a variable the template does not declare is SILENTLY
+     *                   skipped -- "let's skip it !", continue. Exit 0.
+     *   -var-file=      at most a DiagWarning, and only when
+     *                   WarnOnUndeclaredVar is set; otherwise continue. Exit 0.
+     *   -var name=      hcl.DiagError, "Undefined -var variable". Exit 1.
+     *
+     * A provider whose credentials reach Packer only through an HCL field --
+     * OCI WIF, whose synthetic config file must arrive as `access_cfg_file`
+     * because packer-plugin-oracle reads no OCI_CLI_* variable -- therefore
+     * cannot use the environment: a template missing the declaration would
+     * silently ignore the credential and fall through to whatever ambient
+     * config the agent has. Emitting `-var` makes Packer's own parser refuse
+     * the run instead. Reproduce with:
+     *
+     *   packer validate -var undeclared=1 <template>   # exit 1
+     *   PKR_VAR_undeclared=1 packer validate <template> # exit 0
+     *
+     * Values are LITERALS, not HCL expressions, for a `type = string` (or
+     * untyped) variable -- expressionFromVariableDefinition wraps them in a
+     * LiteralValueExpr -- so a Windows path's backslashes and a `${...}`
+     * sequence are both inert. Only list/map/object-typed variables are parsed.
+     *
+     * Populated by a handler's handleProvider() and drained by
+     * applyProviderVarArgs() below, which every command that authenticates
+     * calls after handleProvider() but before the template path.
+     */
+    protected providerVarArgs: string[] = [];
+
+    /**
+     * Emits the provider's `-var` entries. Must run AFTER handleProvider()
+     * (which fills the array) and BEFORE the template path: Go's flag package
+     * stops parsing at the first non-flag argument, so a `-var` placed after
+     * the template is read as a positional argument and silently ignored.
+     */
+    protected applyProviderVarArgs(tool: ToolRunner): void {
+        for (const entry of this.providerVarArgs) {
+            tool.arg('-var');
+            tool.arg(entry);
+        }
+    }
+
     /** Adds `-var-file=` tokens (secure file + variableFiles) and `-var key=value` tokens. */
     protected async applyVarArgs(tool: ToolRunner, workingDirectory: string): Promise<void> {
         const secure = await getSecureVarFileArgs();
@@ -442,9 +491,13 @@ export abstract class BasePackerCommandHandler {
         }
         await this.applyVarArgs(tool, command.workingDirectory);
         this.applyCommandOptions(tool);
-        tool.arg(this.getTemplatePath());
 
+        // handleProvider() may contribute `-var` entries (see providerVarArgs),
+        // and Go's flag parser stops at the first non-flag argument -- so the
+        // template path is appended last, after the provider has run.
         await this.handleProvider(command);
+        this.applyProviderVarArgs(tool);
+        tool.arg(this.getTemplatePath());
 
         return tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory });
     }
@@ -484,9 +537,12 @@ export abstract class BasePackerCommandHandler {
 
         await this.applyVarArgs(tool, command.workingDirectory);
         this.applyCommandOptions(tool);
-        tool.arg(this.getTemplatePath());
 
+        // Template path last: handleProvider() may contribute `-var` entries and
+        // Go's flag parser stops at the first non-flag argument.
         await this.handleProvider(command);
+        this.applyProviderVarArgs(tool);
+        tool.arg(this.getTemplatePath());
 
         // #202: the manifest post-processor writes artifact_id entries as each
         // builder finishes, so a multi-builder template that fails on ONE builder
@@ -539,9 +595,12 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         this.applyCommandOptions(tool);
-        tool.arg(this.getTemplatePath());
 
+        // Template path last: handleProvider() may contribute `-var` entries and
+        // Go's flag parser stops at the first non-flag argument.
         await this.handleProvider(command);
+        this.applyProviderVarArgs(tool);
+        tool.arg(this.getTemplatePath());
 
         // Non-interactive: feed the expression on stdin so the console evaluates and exits.
         const expression = tasks.getInput("consoleExpression", false) || '';
@@ -671,9 +730,16 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         await this.applyVarArgs(tool, command.workingDirectory);
-        this.applyCommandOptions(tool);
 
+        // handleProvider() runs BEFORE applyCommandOptions() here, unlike the
+        // other commands: `custom` has no template-path argument of its own, so
+        // an operator's template path (if any) arrives inside commandOptions via
+        // tool.line(). Any `-var` the provider contributes must precede it, for
+        // the same reason the other three place it before getTemplatePath().
         await this.handleProvider(command);
+        this.applyProviderVarArgs(tool);
+
+        this.applyCommandOptions(tool);
 
         return tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory });
     }
