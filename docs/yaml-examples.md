@@ -169,7 +169,9 @@ source "azure-arm" "ubuntu" {
 }
 ```
 
-For **Managed Identity**, the task injects only `PKR_VAR_arm_subscription_id`; leave `arm_tenant_id`/`arm_client_jwt`/`arm_client_secret` unset in the template (or defaulted to `""`) so `packer-plugin-azure` falls back to the VM's managed identity automatically. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported.
+For **Managed Identity**, the task injects only `PKR_VAR_arm_subscription_id`. Declare `arm_tenant_id`/`arm_client_jwt`/`arm_client_secret` with `default = ""` and leave them unwired in the `azure-arm` source block, so `packer-plugin-azure` falls back to the VM's managed identity automatically.
+
+> **Declare them, do not omit them.** Those two spellings are not equivalent. Packer *silently ignores* a `PKR_VAR_` naming a variable the template never declared — so a template that omits the declarations will discard a WIF assertion or client secret without a word if the service connection is ever repointed, and `packer-plugin-azure` then falls back to the agent VM's identity rather than failing (#332). Declaring them with an empty default costs nothing under Managed Identity and makes that silent fall-through impossible. The task refuses to run on the WIF and ServicePrincipal schemes when the credential variable is not declared. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported.
 
 WIF requires a recent `packer-plugin-azure` version — older releases reject Azure DevOps-issued OIDC tokens with an "x5t header" error ([hashicorp/packer-plugin-azure#451](https://github.com/hashicorp/packer-plugin-azure/issues/451), fixed upstream).
 

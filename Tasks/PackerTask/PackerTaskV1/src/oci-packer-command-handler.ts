@@ -293,6 +293,16 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         neutralizeEnvironmentVariables(
             [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_WIF_VAR_ENV, ...OCI_AUTH_MODE_VAR_ENV],
             "OCI API key");
+        // @credential-exempt: the OCI API-key branch cannot be pre-flighted the way
+        // Azure is (#332), because there is no single variable whose absence proves
+        // the credential was dropped -- a template may legitimately wire some oci_*
+        // values and pin others in the source block. The consequence also differs:
+        // the field guards above keep every injected value non-empty, so the raw
+        // configuration provider occupies index 0 and answers before the file
+        // provider, making a dropped PKR_VAR_ a loss of defense-in-depth rather than
+        // a live substitution. The residual -- an ambient ~/.oci/config being read as
+        // a second provider when the template declares none of these -- is already
+        // stated in the OCI_ACCESS_CFG_FILE_DISABLED comment above and in #391.
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);

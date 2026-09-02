@@ -158,6 +158,35 @@ describe('PackerTask Test Suite', function () {
     // transmitted to the look-alike host. A rejection alone could also mean the
     // exchange ran and the response was refused -- only a zero fetch count shows
     // the destination was validated BEFORE anything was sent.
+    // #332: the refusal must happen BEFORE the assertion is minted. A federated
+    // assertion is a live bearer credential the moment it exists, so a task that
+    // fails afterwards has still created one. Only the absence of the mint marker
+    // shows the ordering; a bare pass/fail cannot.
+    it('AzureWifUndeclaredVariableReject mints no assertion for a run it rejects', async () => {
+        const tp = path.join(__dirname, 'AzureWifUndeclaredVariableReject.js');
+        const tr = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        assert.strictEqual(tr.succeeded, false, 'an undeclared credential variable must be refused');
+        assert.ok(
+            tr.stdout.indexOf('AzureWif MINTED_TOKEN') < 0,
+            'no OIDC token may be minted for a rejected run; stdout: ' + tr.stdout,
+        );
+    });
+
+    // #332: a probe that cannot read the template is 'could not determine', not
+    // 'not declared'. Failing there would break legacy-JSON and unparseable
+    // templates over a diagnostic, so it warns and proceeds.
+    it('AzureWifInspectUnreadableWarns proceeds when the probe cannot answer', async () => {
+        const tp = path.join(__dirname, 'AzureWifInspectUnreadableWarns.js');
+        const tr = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        assert.strictEqual(tr.succeeded, true, 'an unreadable template must not fail the task; stdout: ' + tr.stdout);
+        assert.ok(
+            tr.stdout.indexOf('was not possible to confirm') >= 0,
+            'the operator must be told the declaration could not be confirmed; stdout: ' + tr.stdout,
+        );
+    });
+
     it('OciWifIdentityDomainHostReject sends no request to the look-alike host', async () => {
         const tp = path.join(__dirname, 'OciWifIdentityDomainHostReject.js');
         const tr = new ttm.MockTestRunner(tp);
@@ -238,6 +267,10 @@ describe('PackerTask Test Suite', function () {
     // this row pins the message so a refusal for some unrelated reason is not
     // mistaken for the realm check firing.
     expectFailureContains('OciWifIdentityDomainHostReject', ['is not an OCI Identity Domains endpoint']);
+    // #332: the template does not declare the variable the assertion is injected
+    // into. Pinning the message so a refusal for an unrelated reason is not
+    // mistaken for the declaration check firing.
+    expectFailureContains('AzureWifUndeclaredVariableReject', ['does not declare', 'arm_client_jwt']);
     expectFailureContains('GcpWifProjectNumberInvalidReject', ["Input 'gcpProjectNumber'", 'not a valid']);
     expectFailureContains('GcpWifPoolIdInvalidReject', ["Input 'gcpWorkloadIdentityPoolId'", 'not a valid']);
     expectFailureContains('GcpWifProviderIdInvalidReject', ["Input 'gcpWorkloadIdentityProviderId'", 'not a valid']);

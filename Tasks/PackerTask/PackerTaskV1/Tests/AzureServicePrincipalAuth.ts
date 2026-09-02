@@ -14,6 +14,17 @@ process.env['ENDPOINT_AUTH_PARAMETER_AzureRM_SERVICEPRINCIPALID'] = 'spid';
 process.env['ENDPOINT_AUTH_PARAMETER_AzureRM_SERVICEPRINCIPALKEY'] = 'spkey';
 process.env['ENDPOINT_AUTH_PARAMETER_AzureRM_TENANTID'] = 'tenant';
 
-const a: ma.TaskLibAnswers = {};
+// The handler now pre-flights `packer inspect` to confirm the template
+// DECLARES the variable the credential is injected into (#332). Packer
+// silently drops a PKR_VAR_ for an undeclared variable, and for Azure a
+// dropped credential leaves UseMSI() true -- the build then authenticates
+// as the agent VM's identity. Declaring it here is the success path.
+const a: ma.TaskLibAnswers = {
+    which: { packer: 'packer' },
+    checkPath: { packer: true },
+    exec: {
+        'packer inspect .': { code: 0, stdout: 'var.arm_client_secret: ""\nvar.arm_client_id: ""\n' }
+    }
+};
 tr.setAnswers(a);
 tr.run();
