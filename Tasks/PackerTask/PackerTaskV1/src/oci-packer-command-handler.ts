@@ -57,6 +57,17 @@ const OCI_COMPETING_CREDENTIAL_ENV = [
  * removes that read entirely rather than relying on every required field
  * staying non-empty forever -- defense in depth against a future regression
  * in the guards below, not a fix for a live substitution today.
+ *
+ * BEST-EFFORT ON THIS BRANCH, NOT GUARANTEED (#391). The pin travels as a
+ * PKR_VAR_, and Packer silently ignores a PKR_VAR_ naming a variable the
+ * template never declared. The documented API-key template declares five
+ * oci_* variables and not this one (docs/yaml-examples.md), so for that
+ * template -- and every template written before the declaration existed --
+ * the pin is a no-op and the agent's ~/.oci/config IS read as a second
+ * provider. It cannot be promoted to `-var` the way the WIF branch does:
+ * that would hard-fail every existing OCI pipeline. Templates that do
+ * declare the variable get the defense; the rest keep the field-level
+ * guards, which are what actually prevent substitution today.
  */
 const OCI_ACCESS_CFG_FILE_DISABLED = path.join(os.tmpdir(), '.packer-task-oci-access-cfg-file-intentionally-absent');
 
@@ -87,6 +98,32 @@ const OCI_API_KEY_VAR_ENV = [
 const OCI_WIF_VAR_ENV = [
     'PKR_VAR_oci_access_cfg_file_account',
     'PKR_VAR_oci_security_token_file',
+] as const;
+
+/**
+ * The auth-MODE switch, cleared by BOTH branches (#391). Distinct in kind from
+ * the two selector sets above: those choose an identity, this chooses a
+ * mechanism, so neither branch owns it and neither may leave it standing.
+ *
+ * use_instance_principals is mutually exclusive with every field either branch
+ * injects -- the plugin appends a MultiError entry for each non-empty one
+ * (config.go:191-223), so an inherited `true` on a self-hosted agent fails
+ * Prepare() with six errors on the API-key branch and two on WIF, all naming
+ * fields the pipeline author never set and none pointing at the environment.
+ * Fail-closed, but hostile to diagnose. There is no valid run with a service
+ * connection configured in which this is true, so clearing it can only turn a
+ * confusing failure into a working build.
+ *
+ * Note the deliberate asymmetry with PKR_VAR_oci_pass_phrase, which is in
+ * OCI_API_KEY_VAR_ENV and so is cleared by WIF only. WIF must clear it (its
+ * ephemeral key is unencrypted PKCS#8 and the plugin hands the passphrase to
+ * ConfigurationProviderFromFileWithProfile, config.go:272). The API-key branch
+ * must NOT: the OCI service connection has no passphrase field, making this
+ * variable the only channel for an encrypted service-connection key. The
+ * symmetry is tempting and would break that configuration.
+ */
+const OCI_AUTH_MODE_VAR_ENV = [
+    'PKR_VAR_oci_use_instance_principals',
 ] as const;
 
 /**
@@ -208,7 +245,7 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         const configPath = this.writeTrackedSecretFile('oci-wif-config', 'ini', configContent);
 
         neutralizeEnvironmentVariables(
-            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_API_KEY_VAR_ENV],
+            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_API_KEY_VAR_ENV, ...OCI_AUTH_MODE_VAR_ENV],
             "OCI Workload Identity Federation");
 
         // Delivered as a command-line variable, which fails closed on a template
@@ -254,7 +291,7 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         const fingerprint = requireIdentityField(serviceName, "fingerprint", { source: 'data', pattern: FINGERPRINT_PATTERN, description: 'key fingerprint' });
 
         neutralizeEnvironmentVariables(
-            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_WIF_VAR_ENV],
+            [...OCI_COMPETING_CREDENTIAL_ENV, ...OCI_WIF_VAR_ENV, ...OCI_AUTH_MODE_VAR_ENV],
             "OCI API key");
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);

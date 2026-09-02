@@ -239,12 +239,24 @@ variable "oci_region" { type = string }
 variable "oci_fingerprint" { type = string }
 variable "oci_key_file" { type = string }
 
+# Optional but recommended. The task pins this to a path that cannot resolve,
+# which stops the plugin reading a stray ~/.oci/config on a self-hosted agent
+# as a second credential provider. Declaring the variable is what activates
+# that defense -- Packer silently ignores a PKR_VAR_ for a variable the
+# template never declared, so a template without this line simply doesn't get
+# it. Leave the default empty so the template still works outside the task.
+variable "oci_access_cfg_file" {
+  type    = string
+  default = ""
+}
+
 source "oracle-oci" "instance" {
-  tenancy_ocid = var.oci_tenancy_ocid
-  user_ocid    = var.oci_user_ocid
-  region       = var.oci_region
-  fingerprint  = var.oci_fingerprint
-  key_file     = var.oci_key_file
+  tenancy_ocid    = var.oci_tenancy_ocid
+  user_ocid       = var.oci_user_ocid
+  region          = var.oci_region
+  fingerprint     = var.oci_fingerprint
+  key_file        = var.oci_key_file
+  access_cfg_file = var.oci_access_cfg_file
   # ...
 }
 ```
