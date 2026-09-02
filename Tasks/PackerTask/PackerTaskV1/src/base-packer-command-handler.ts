@@ -1,6 +1,7 @@
 import { PackerToolHandler, IPackerToolHandler } from './packer';
 import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
+import { isWithinWorkingDirectory } from './path-containment';
 import { getSecureVarFileArgs, SecureFileLoader } from './secure-file-loader';
 import { EnvironmentVariableHelper, writeSecretFile, generateIdToken, getBoolInputDefaultTrue, scrubFile } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
@@ -35,34 +36,6 @@ export abstract class BasePackerCommandHandler {
         return tasks.getInput("templatePath") || '.';
     }
 
-    /**
-     * True when `resolvedPath` is workingDirectory itself or a descendant of it,
-     * with symlinks resolved on both sides. A purely lexical check (path.resolve +
-     * startsWith) is blind to an in-tree symlink (e.g. one left by a checkout or a
-     * prior build step) whose lexical path stays under base but which points
-     * outside — so a manifest read / fix-output write could escape the working
-     * directory. Because a write target may not exist yet, the deepest EXISTING
-     * ancestor is realpath'd and the not-yet-existent tail (which cannot itself be
-     * a symlink) is re-appended.
-     */
-    protected isWithinWorkingDirectory(resolvedPath: string, workingDirectory: string): boolean {
-        const base = this.realpathOfExistingPrefix(path.resolve(workingDirectory || '.'));
-        const target = this.realpathOfExistingPrefix(path.resolve(resolvedPath));
-        return target === base || target.startsWith(base + path.sep);
-    }
-
-    /** realpath the deepest existing ancestor of `p`, re-appending any non-existent tail. */
-    private realpathOfExistingPrefix(p: string): string {
-        let existing = p;
-        const tail: string[] = [];
-        while (!fs.existsSync(existing)) {
-            const parent = path.dirname(existing);
-            if (parent === existing) return p; // hit the root with no existing ancestor
-            tail.unshift(path.basename(existing));
-            existing = parent;
-        }
-        return tail.length ? path.join(fs.realpathSync(existing), ...tail) : fs.realpathSync(existing);
-    }
 
     /**
      * Reads a boolean input that defaults to `true` when unset.
@@ -318,7 +291,7 @@ export abstract class BasePackerCommandHandler {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
                 const resolved = path.resolve(workingDirectory, trimmed);
-                if (!this.isWithinWorkingDirectory(resolved, workingDirectory)) {
+                if (!isWithinWorkingDirectory(resolved, workingDirectory)) {
                     throw new Error(`variableFiles entry '${trimmed}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
                 }
                 tool.arg(`-var-file=${trimmed}`);
@@ -707,7 +680,7 @@ export abstract class BasePackerCommandHandler {
         const outputFile = tasks.getInput("fixOutputFile", false);
         if (outputFile) {
             const resolved = path.resolve(command.workingDirectory, outputFile);
-            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+            if (!isWithinWorkingDirectory(resolved, command.workingDirectory)) {
                 throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
             }
             // execWithStdoutCapture forces ignoreReturnCode, so a non-zero exit
@@ -718,7 +691,7 @@ export abstract class BasePackerCommandHandler {
             // fix's run is an arbitrarily long window during which a symlink could
             // be planted at `resolved`, which the lexical write below cannot
             // itself detect.
-            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+            if (!isWithinWorkingDirectory(resolved, command.workingDirectory)) {
                 throw new Error(`fixOutputFile '${outputFile}' resolves outside the working directory (${resolved}) after packer fix ran. Refusing to write.`);
             }
             if (result.stdout) {
@@ -753,7 +726,7 @@ export abstract class BasePackerCommandHandler {
             // so validate before handing it through; the CLI arg itself stays
             // relative (packer does the actual resolution against the same cwd).
             const resolved = path.resolve(command.workingDirectory, outputFile);
-            if (!this.isWithinWorkingDirectory(resolved, command.workingDirectory)) {
+            if (!isWithinWorkingDirectory(resolved, command.workingDirectory)) {
                 throw new Error(`hclOutputFile '${outputFile}' resolves outside the working directory (${resolved}). Use a path within workingDirectory.`);
             }
             tool.arg(`-output-file=${outputFile}`);
@@ -773,7 +746,7 @@ export abstract class BasePackerCommandHandler {
         // itself detect. There is no write of our own to withhold here -- packer
         // has already written the file by the time execAsync resolves -- so this
         // fails the task to surface the escape rather than silently succeeding.
-        if (resolvedOutputFile && fs.existsSync(resolvedOutputFile) && !this.isWithinWorkingDirectory(resolvedOutputFile, command.workingDirectory)) {
+        if (resolvedOutputFile && fs.existsSync(resolvedOutputFile) && !isWithinWorkingDirectory(resolvedOutputFile, command.workingDirectory)) {
             throw new Error(`hclOutputFile '${outputFile}' resolves outside the working directory (${resolvedOutputFile}) after packer hcl2_upgrade ran.`);
         }
 
@@ -867,7 +840,7 @@ export abstract class BasePackerCommandHandler {
         if (!manifestFile) return;
 
         const resolved = path.resolve(this.getWorkingDirectory(), manifestFile);
-        if (!this.isWithinWorkingDirectory(resolved, this.getWorkingDirectory())) {
+        if (!isWithinWorkingDirectory(resolved, this.getWorkingDirectory())) {
             tasks.warning(`manifestFile '${manifestFile}' resolves outside the working directory (${resolved}); skipping build output variables.`);
             return;
         }

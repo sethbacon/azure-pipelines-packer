@@ -12,6 +12,7 @@ import './CredentialFailClosedMatrixL0';
 import './CredentialTempFileScrubL0';
 import './ProviderVarArgOrderingL0';
 import './OciWifBranchL0';
+import './PathContainmentL0';
 import './EntryPointSignalsL0';
 import './OutputBoundaryClassL0';
 // This extension's half of azure-pipelines-terraform#867's class: a credential

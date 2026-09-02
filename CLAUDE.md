@@ -160,6 +160,7 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `credential-guards.ts`              | Fail-closed credential guards: clears inherited identity-selecting env vars before a handler applies its own, and derives the per-run AWS role session name (`resolveRoleSessionName`)                       |
 | `secure-file-loader.ts`             | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600                                                                                                               |
 | `secure-var-file-masking.ts`        | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them                                                                                                  |
+| `path-containment.ts`               | Symlink-aware `isWithinWorkingDirectory` guard, extracted from the base handler (#113). A copy of the sibling extensions' module, carrying a provenance header and registered in `PROVENANCE` — apply containment fixes to both repositories |
 
 **Six modules no longer live in this repo** (#46, #380, #337). Four moved to `@4cloudguru/pipeline-task-ado`,
 two (crypto/proxy-shaped) to `@4cloudguru/pipeline-task-core`:
