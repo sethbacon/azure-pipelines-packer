@@ -13,7 +13,7 @@
         "src/**/*.map"
     ],
     "check-coverage": true,
-    "lines": 85,
-    "functions": 82,
-    "branches": 71
+    "lines": 90,
+    "functions": 95,
+    "branches": 80
 }
