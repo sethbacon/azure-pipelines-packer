@@ -48,6 +48,13 @@ type SiteRow = { file: string; fn: string; kind: string; verdict: string; why: s
 const INSTALLER = 'Tasks/PackerInstaller/PackerInstallerV1/src/packer-installer.ts';
 
 const SITE_ROWS: SiteRow[] = [
+    // --- #399: the verification DECISION itself is delegated to a package ---
+    // Every other row asks whether an artifact reached a verifier. This one asks
+    // whether the verifier that runs is the one that was reviewed: verifyDetached
+    // is imported from @4cloudguru/pipeline-task-core/gpg, so a drifted floor or a
+    // second nested copy silently changes what "verified" means.
+    { file: 'Tasks/PackerInstaller/PackerInstallerV1/src/gpg-verifier.ts', fn: 'verifyDetached', kind: 'DELEGATED-VERIFY', verdict: 'PINNED-DELEGATE', why: 'declared floor and a single resolved copy of the package that owns the signature decision (#399)' },
+
     // --- acquisition: every path that pulls a binary off the network ---
     { file: INSTALLER, fn: 'downloadZipFromHashiCorp', kind: 'ACQUIRE', verdict: 'VERIFIED', why: 'GPG-signed SHA256SUMS from releases.hashicorp.com' },
     { file: INSTALLER, fn: 'downloadZipFromRegistry', kind: 'ACQUIRE', verdict: 'VERIFIED', why: 'registry-provided sha256, mandatory under requireChecksum' },

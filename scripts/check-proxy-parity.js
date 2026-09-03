@@ -56,6 +56,9 @@
 
 const fs = require('fs');
 const path = require('path');
+// Shared with check-artifact-trust.js (#399): one floor + resolved-copy check
+// for every capability delegated into the shared packages, network or crypto.
+const { packageDelegationVerdict } = require('./lib/package-delegation.js');
 
 // `--json` prints the machine-readable finding list (consumed by the class
 // test's per-site table) instead of the human report; the exit code is identical.
@@ -95,6 +98,8 @@ const DELEGATED_FETCH_SINKS = ['createHttpClient'];
  */
 const PACKAGE_DELEGATED_SINKS = {
     createAdoHttpClient: {
+        capability: 'the proxy decision',
+        provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
         min: '0.3.0',
         // The package delegates onward to core, so the direct floor above only
@@ -113,6 +118,8 @@ const PACKAGE_DELEGATED_SINKS = {
     // pipeline-task-core, so a stale nested copy of THAT package would run old
     // proxy logic even with a fresh ado floor.
     generateIdToken: {
+        capability: 'the proxy decision',
+        provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
         min: '0.5.0',
         carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.6.0' },
@@ -126,6 +133,8 @@ const PACKAGE_DELEGATED_SINKS = {
     // pipeline-task-core, so a stale nested copy of THAT package would run old
     // proxy logic behind a fresh ado floor.
     exchangeOidcForUpst: {
+        capability: 'the proxy decision',
+        provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
         min: '0.8.0',
         carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.7.0' },
@@ -191,71 +200,12 @@ const DELEGATED_NODE_HTTP_SINKS = {
 const TOOL_LIB_SINKS = ['downloadTool'];
 
 /** The package.json of the task that owns `file`, or null above the task roots. */
-function declaredDependency(file, pkg) {
-    let dir = path.dirname(path.resolve(file));
-    // The walk stops at the tree being ANALYSED, which is ROOT (argv), not at
-    // this file's own parent. Those are the same path while the gate lives in
-    // scripts/ of the repo it analyses, so this changes nothing today -- and it
-    // is what lets the gate be resolved from one canonical copy elsewhere. With
-    // __dirname the boundary followed the SCRIPT, so a moved gate stopped
-    // resolving declared dependencies and reported correctly-proxied call sites
-    // as findings (measured: 4 in packer, 14 in terraform, 1 in release-docs).
-    const stop = ROOT;
-    while (dir.startsWith(stop)) {
-        const manifest = path.join(dir, 'package.json');
-        if (fs.existsSync(manifest)) {
-            try {
-                const json = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-                const range = (json.dependencies || {})[pkg];
-                if (range) return range;
-            } catch {
-                return null;
-            }
-        }
-        const parent = path.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
-    }
-    return null;
-}
-
 /**
  * Deliberately narrow: only a caret or exact range pins a floor this gate can
  * reason about. `*`, `latest` or a git URL cannot be shown to include the fix,
  * so they are treated as NOT satisfying it rather than waved through.
  */
-function satisfiesFloor(range, min) {
-    const parsed = /^\^?(\d+)\.(\d+)\.(\d+)/.exec(String(range).trim());
-    if (!parsed) return false;
-    const floor = min.split('.').map(Number);
-    const actual = parsed.slice(1).map(Number);
-    for (let i = 0; i < 3; i += 1) {
-        if (actual[i] > floor[i]) return true;
-        if (actual[i] < floor[i]) return false;
-    }
-    return true;
-}
-
 /** The lockfile of the task that owns `file` — what `npm ci` actually installs. */
-function lockfileFor(file) {
-    let dir = path.dirname(path.resolve(file));
-    // The walk stops at the tree being ANALYSED, which is ROOT (argv), not at
-    // this file's own parent. Those are the same path while the gate lives in
-    // scripts/ of the repo it analyses, so this changes nothing today -- and it
-    // is what lets the gate be resolved from one canonical copy elsewhere. With
-    // __dirname the boundary followed the SCRIPT, so a moved gate stopped
-    // resolving declared dependencies and reported correctly-proxied call sites
-    // as findings (measured: 4 in packer, 14 in terraform, 1 in release-docs).
-    const stop = ROOT;
-    while (dir.startsWith(stop)) {
-        const lock = path.join(dir, 'package-lock.json');
-        if (fs.existsSync(lock)) return lock;
-        const parent = path.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
-    }
-    return null;
-}
 
 /**
  * Every copy of `dep` the owning task installs, top-level or nested. Read from
@@ -263,50 +213,12 @@ function lockfileFor(file) {
  * can still resolve to two different copies, and only the lockfile shows it.
  * Returns null when there is nothing to read, which the caller fails closed on.
  */
-function installedCopies(file, dep) {
-    const lock = lockfileFor(file);
-    if (!lock) return null;
-    let json;
-    try {
-        json = JSON.parse(fs.readFileSync(lock, 'utf8'));
-    } catch {
-        return null;
-    }
-    const suffix = `node_modules/${dep}`;
-    return Object.entries(json.packages || {})
-        .filter(([key]) => key === suffix || key.endsWith(`/${suffix}`))
-        .map(([key, value]) => ({ path: key, version: value && value.version }));
-}
-
 /**
  * Resolves the delegated sink's verdict: the owning task must declare the
  * delegating package at or above its floor AND, when that package delegates
  * onward, the onward dependency must resolve to exactly one copy at or above
  * its own floor.
  */
-function packageDelegationVerdict(file, { pkg, min, carries }) {
-    const declared = declaredDependency(file, pkg);
-    if (declared === null || !satisfiesFloor(declared, min)) {
-        return { ok: false, why: `delegates the proxy decision to ${pkg}, but the owning task declares ${declared ?? 'no dependency on it'} (floor ${min})` };
-    }
-    if (!carries) {
-        return { ok: true, why: `proxy dispatch and secret registration come from ${pkg}@${declared} (floor ${min})` };
-    }
-
-    const copies = installedCopies(file, carries.pkg);
-    if (copies === null) {
-        return { ok: false, why: `${pkg}@${declared} delegates onward to ${carries.pkg}, but no lockfile was readable to show which copy is installed` };
-    }
-    if (copies.length !== 1) {
-        const seen = copies.map((c) => `${c.version} at ${c.path}`).join(', ') || 'none';
-        return { ok: false, why: `${pkg}@${declared} delegates onward to ${carries.pkg}, which resolves to ${copies.length} copies (${seen}) — the delegated call runs whichever one is nested, not the one this task imports` };
-    }
-    if (!satisfiesFloor(copies[0].version, carries.min)) {
-        return { ok: false, why: `${pkg}@${declared} delegates onward to ${carries.pkg}@${copies[0].version}, below the ${carries.min} floor` };
-    }
-    return { ok: true, why: `proxy dispatch and secret registration come from ${pkg}@${declared} (floor ${min}), resolving a single ${carries.pkg}@${copies[0].version} (floor ${carries.min})` };
-}
-
 function walk(dir, out = []) {
     let entries;
     try {
@@ -565,7 +477,7 @@ for (const file of files) {
             const re = new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g');
             let m;
             while ((m = re.exec(masked)) !== null) {
-                const { ok, why } = packageDelegationVerdict(file, spec);
+                const { ok, why } = packageDelegationVerdict(file, spec, ROOT);
                 record(m.index, local, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED', why);
             }
         }
@@ -585,7 +497,7 @@ for (const file of files) {
                     'no agent from a proxy-agent builder, and node:https reaches no proxy without one');
                 continue;
             }
-            const { ok, why } = packageDelegationVerdict(file, spec);
+            const { ok, why } = packageDelegationVerdict(file, spec, ROOT);
             record(m.index, sink, ok ? 'PROXIED-BY-PACKAGE' : 'UNPROXIED',
                 ok ? `supplies a CONNECT-tunnelling agent; ${why}` : why);
         }

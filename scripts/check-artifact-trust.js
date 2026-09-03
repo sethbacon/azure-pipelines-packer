@@ -56,6 +56,11 @@ const path = require('path');
 
 const JSON_OUTPUT = process.argv.includes('--json');
 const ROOT = path.resolve(process.argv.filter((a) => a !== '--json')[2] || process.cwd());
+// Shared with check-proxy-parity.js (#399). The cryptographic verification
+// decision is DELEGATED to @4cloudguru/pipeline-task-core, so the version that
+// resolves is part of this signature's story: an unpinned verifier is an
+// unverified artifact one npm resolution away.
+const { packageDelegationVerdict } = require('./lib/package-delegation.js');
 
 // Network sinks that put bytes on disk. Anything here makes its enclosing
 // function an ACQUIRE site.
@@ -564,7 +569,43 @@ const FAIL_VERDICTS = new Set([
     'TRUSTS-UNMARKED-CACHE',
     'RECORDS-UNVERIFIED',
     'STALE-FALLBACK',
+    'DELEGATED-VERIFIER-UNPINNED',
 ]);
+
+// ---- DELEGATED-VERIFY: the signature decision itself lives in a package (#399).
+//
+// Every other kind here asks whether an artifact reached a verifier. This one
+// asks whether the verifier that runs is the one that was reviewed. verifyDetached
+// decides whether a downloaded binary's checksums were signed by HashiCorp, and it
+// is imported from @4cloudguru/pipeline-task-core/gpg -- so a floor that drifts, or
+// a second nested copy, silently changes what "verified" means. That is the same
+// hazard the network sinks are held to; it was simply never applied to the crypto one.
+const DELEGATED_VERIFIERS = {
+    verifyDetached: {
+        pkg: '@4cloudguru/pipeline-task-core',
+        min: '0.7.1',
+        capability: 'the detached-signature verification decision',
+        provides: 'the GPG verification decision',
+    },
+};
+
+for (const file of files) {
+    const raw = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(ROOT, file).split(path.sep).join('/');
+    for (const [name, spec] of Object.entries(DELEGATED_VERIFIERS)) {
+        // Import specifiers are string literals, so the binding is read from raw
+        // source; a name inside a comment cannot create a site because it must
+        // appear in an import FROM that package.
+        const imported = new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from\\s*['"]${spec.pkg.replace(/[/\\^$*+?.()|[\]{}]/g, '\\$&')}(?:/[\\w./-]+)?['"]`);
+        if (!imported.test(raw)) continue;
+        const { ok, why } = packageDelegationVerdict(file, spec, ROOT);
+        sites.push({
+            kind: 'DELEGATED-VERIFY', rel, fn: name,
+            verdict: ok ? 'PINNED-DELEGATE' : 'DELEGATED-VERIFIER-UNPINNED',
+            why, line: raw.slice(0, raw.search(imported)).split('\n').length,
+        });
+    }
+}
 
 const seen = new Set();
 const unique = sites.filter((s) => {
@@ -582,7 +623,7 @@ if (JSON_OUTPUT) {
 }
 
 console.log(`artifact-trust signature — ${path.basename(ROOT)} (${files.length} src file(s), ${unique.length} trust site(s))\n`);
-for (const kind of ['ACQUIRE', 'VERIFY', 'DISCARD', 'SUMS-ABSENT', 'CACHE-ADMIT', 'RECORD-READ', 'RECORD-WRITE', 'LATEST']) {
+for (const kind of ['ACQUIRE', 'VERIFY', 'DELEGATED-VERIFY', 'DISCARD', 'SUMS-ABSENT', 'CACHE-ADMIT', 'RECORD-READ', 'RECORD-WRITE', 'LATEST']) {
     const rows = unique.filter((s) => s.kind === kind);
     if (rows.length === 0) continue;
     console.log(`${kind} (${rows.length}):`);
