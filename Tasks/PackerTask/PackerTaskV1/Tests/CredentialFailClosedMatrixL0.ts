@@ -116,6 +116,16 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         // and an unstubbed exchange would make every OCI WIF row fail on a real
         // fetch rather than on the property under test.
         itg.exchangeOidcForUpst = async () => 'mock-upst-for-matrix';
+        // The Azure branches' declaration pre-flight SPAWNS `packer inspect`
+        // (#332). Stubbed for the same reason as the two above: this matrix drives
+        // handlers in-process to test credential guards, and a real subprocess
+        // makes every Azure row depend on whether packer is installed and how fast
+        // it answers -- which is exactly how these rows started timing out on the
+        // Windows leg while passing on Linux. Resolving is correct: "the template
+        // declares it" is the not-under-test path for a credential-guard row.
+        templateProbeCalls = 0;
+        BasePackerCommandHandler.prototype['assertTemplateDeclaresVariable'] =
+            async function (): Promise<void> { templateProbeCalls += 1; };
         // Data parameters are ALSO provisioned through the real ENDPOINT_DATA_*
         // channel, not only through the getEndpointDataParameter stub above: a
         // SECRET data field is read by readSecretEndpointDataParameter straight from
@@ -383,6 +393,33 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             await assert.rejects(
                 () => run(row.handler, row.fixture()),
                 `${row.site}: an absent or malformed credential field must fail the task, not degrade to ambient credentials`);
+        });
+    }
+
+    let templateProbeCalls = 0;
+
+    // --- ORDERING: cheap local checks run before the external probe -----------
+    //
+    // Both Azure branches pre-flight `packer inspect` to confirm the template
+    // declares the variable the credential is injected into (#332). That probe
+    // spawns a subprocess, so it must run AFTER the service-connection fields are
+    // validated: an absent field should fail immediately, not wait on a process.
+    //
+    // This shipped wrong on the ServicePrincipal branch and CI could not see it.
+    // The probe was placed before the field reads, and the only symptom was the
+    // matrix timing out on the WINDOWS leg while passing on Linux -- a 20s hang,
+    // not an assertion. Asserting the probe is never CALLED makes the ordering
+    // observable on every platform instead of being a latent timing difference.
+    for (const site of ['serviceprincipalkey', 'tenantid'] as const) {
+        it(`runs no template probe when azure.ServicePrincipal.${site} is absent`, async () => {
+            // The counter is maintained by install(), which run() calls ITSELF. A
+            // stub assigned here instead would be overwritten by that call -- which
+            // is exactly how the first version of this test passed under both
+            // orderings and proved nothing.
+            await assert.rejects(() => run('azure', without('azure.ServicePrincipal', 'auth', site)));
+            assert.strictEqual(
+                templateProbeCalls, 0,
+                `a missing ${site} must fail before the template probe spawns a subprocess`);
         });
     }
 

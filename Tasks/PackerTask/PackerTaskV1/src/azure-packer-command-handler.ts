@@ -166,13 +166,21 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 // agent VM's ambient managed identity (its MSI path) and
                 // authenticate as an unintended, possibly more-privileged identity.
                 const servicePrincipalId = requireIdentityField(serviceConnectionID, "serviceprincipalid");
-                // Same fail-open as the WIF branch above, same silently-droppable
-                // channel: a dropped client_secret leaves UseMSI() true. Checked
-                // before the secret is read, so the probe runs pre-injection.
-                await this.assertTemplateDeclaresVariable('arm_client_secret', 'service principal client secret');
                 const servicePrincipalKey = requireSecretField(serviceConnectionID, "serviceprincipalkey");
                 tasks.setSecret(servicePrincipalKey);
                 const tenantId = requireIdentityField(serviceConnectionID, "tenantid");
+                // Same fail-open as the WIF branch above, same silently-droppable
+                // channel: a dropped client_secret leaves UseMSI() true.
+                //
+                // AFTER the field reads, matching the WIF branch. Ordering is not
+                // cosmetic here: this probe spawns `packer inspect`, so running it
+                // first makes an ABSENT credential field wait on a subprocess before
+                // failing. It also inverted which error an operator sees -- a missing
+                // serviceprincipalkey reported as a template problem. WIF puts the
+                // probe before generateIdToken only because a federated assertion
+                // must not be minted for a doomed run; no such token exists here, so
+                // there is nothing to protect by probing early.
+                await this.assertTemplateDeclaresVariable('arm_client_secret', 'service principal client secret');
 
                 neutralizeEnvironmentVariables(
                     [ARM_IDENTITY_SELECTORS.jwt, ARM_IDENTITY_SELECTORS.certPath],
