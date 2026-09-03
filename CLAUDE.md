@@ -161,6 +161,7 @@ Source: `Tasks/PackerTask/PackerTaskV1/src/`. Same dispatch architecture as Terr
 | `secure-file-loader.ts`             | Downloads a secure file from the ADO Secure Files library and tightens its permissions to 0600                                                                                                               |
 | `secure-var-file-masking.ts`        | Registers the values inside a downloaded secure var file as secrets, line-wise, before packer can echo them                                                                                                  |
 | `path-containment.ts`               | Symlink-aware `isWithinWorkingDirectory` guard, extracted from the base handler (#113). A copy of the sibling extensions' module, carrying a provenance header and registered in `PROVENANCE` — apply containment fixes to both repositories |
+| `temp-secret-file-manager.ts`       | Owns the credential temp-file lifecycle — 0600 writes, tracking, scrub-then-unlink, and the secure var file — extracted from the base handler (#113). The handler composes it and keeps `cleanupTempFiles()`/`writeTrackedSecretFile()` as delegates, because those are the names ParentCommandHandler and six provider handlers already call |
 
 **Six modules no longer live in this repo** (#46, #380, #337). Four moved to `@4cloudguru/pipeline-task-ado`,
 two (crypto/proxy-shaped) to `@4cloudguru/pipeline-task-core`:
