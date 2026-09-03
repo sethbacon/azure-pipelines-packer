@@ -1,664 +1,673 @@
 {
-    "id": "d7325172-ac69-4242-957b-9169eb383cc7",
-    "name": "PipelinePacker",
-    "friendlyName": "Pipeline Packer",
-    "description": "Run a Packer command to build machine images on Azure, AWS, GCP, OCI, vSphere, and local builders.",
-    "author": "sethbacon",
-    "helpMarkDown": "[Learn more about this task](https://github.com/sethbacon/azure-pipelines-packer)",
-    "category": "Utility",
-    "visibility": [
-        "Build",
-        "Release"
-    ],
-    "demands": [],
-    "version": {
-        "Major": "1",
-        "Minor": "23",
-        "Patch": "0"
+  "id": "d7325172-ac69-4242-957b-9169eb383cc7",
+  "name": "PipelinePacker",
+  "friendlyName": "Pipeline Packer",
+  "description": "Run a Packer command to build machine images on Azure, AWS, GCP, OCI, vSphere, and local builders.",
+  "author": "sethbacon",
+  "helpMarkDown": "[Learn more about this task](https://github.com/sethbacon/azure-pipelines-packer)",
+  "category": "Utility",
+  "visibility": [
+    "Build",
+    "Release"
+  ],
+  "demands": [],
+  "version": {
+    "Major": "1",
+    "Minor": "23",
+    "Patch": "0"
+  },
+  "minimumAgentVersion": "4.265.1",
+  "instanceNameFormat": "Packer $(command)",
+  "groups": [
+    {
+      "name": "providerAuth",
+      "displayName": "Provider / Authentication",
+      "isExpanded": true
     },
-    "minimumAgentVersion": "4.265.1",
-    "instanceNameFormat": "Packer $(command)",
-    "groups": [
-        {
-            "name": "providerAuth",
-            "displayName": "Provider / Authentication",
-            "isExpanded": true
-        },
-        {
-            "name": "variables",
-            "displayName": "Variables",
-            "isExpanded": false
-        },
-        {
-            "name": "advanced",
-            "displayName": "Advanced",
-            "isExpanded": false
-        }
-    ],
-    "inputs": [
-        {
-            "name": "command",
-            "type": "pickList",
-            "label": "Command",
-            "defaultValue": "build",
-            "required": true,
-            "helpMarkDown": "The Packer command to run.",
-            "options": {
-                "init": "init",
-                "validate": "validate",
-                "build": "build",
-                "fmt": "fmt",
-                "inspect": "inspect",
-                "console": "console",
-                "fix": "fix",
-                "hcl2_upgrade": "hcl2_upgrade",
-                "plugins": "plugins",
-                "version": "version",
-                "custom": "custom"
-            }
-        },
-        {
-            "name": "workingDirectory",
-            "type": "filePath",
-            "label": "Working directory",
-            "defaultValue": "",
-            "required": false,
-            "helpMarkDown": "Directory in which to run Packer. Defaults to the repository root."
-        },
-        {
-            "name": "templatePath",
-            "type": "string",
-            "label": "Template path",
-            "defaultValue": ".",
-            "required": false,
-            "visibleRule": "command != version && command != custom",
-            "helpMarkDown": "Path to the Packer template file or directory (HCL2). Defaults to the current directory."
-        },
-        {
-            "name": "provider",
-            "type": "pickList",
-            "label": "Provider",
-            "defaultValue": "none",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "command = build || command = validate || command = console || command = custom",
-            "helpMarkDown": "Which cloud's credentials to inject for this command. Choose 'none' for Docker, QEMU, VirtualBox, VMware, Hyper-V, or Vagrant builders.",
-            "options": {
-                "none": "None (local / hypervisor builders)",
-                "azurerm": "Azure",
-                "aws": "AWS",
-                "gcp": "Google Cloud",
-                "oci": "Oracle Cloud (OCI)",
-                "vsphere": "VMware vSphere"
-            }
-        },
-        {
-            "name": "environmentServiceNameAzureRM",
-            "type": "connectedService:AzureRM",
-            "label": "Azure subscription",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = azurerm",
-            "helpMarkDown": "Azure Resource Manager service connection. Workload Identity Federation is recommended."
-        },
-        {
-            "name": "environmentAzureRmOverrideSubscriptionID",
-            "type": "string",
-            "label": "Override subscription ID",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = azurerm",
-            "helpMarkDown": "Optional. Override the subscription ID from the service connection."
-        },
-        {
-            "name": "environmentServiceNameAWS",
-            "type": "connectedService:PTPAWSServiceEndpoint",
-            "label": "AWS service connection",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = aws",
-            "helpMarkDown": "AWS service connection (Pipeline AWS for Packer)."
-        },
-        {
-            "name": "environmentAuthSchemeAWS",
-            "type": "pickList",
-            "label": "AWS authentication scheme",
-            "defaultValue": "ServiceConnection",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = aws",
-            "helpMarkDown": "How to authenticate to AWS.",
-            "options": {
-                "ServiceConnection": "Access keys (service connection)",
-                "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
-            }
-        },
-        {
-            "name": "awsRegion",
-            "type": "string",
-            "label": "AWS region",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = aws",
-            "helpMarkDown": "AWS region, e.g. us-east-1. Falls back to the region on the service connection if blank."
-        },
-        {
-            "name": "awsRoleArn",
-            "type": "string",
-            "label": "AWS role ARN",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeAWS = WorkloadIdentityFederation",
-            "helpMarkDown": "ARN of the IAM role to assume via web identity (OIDC)."
-        },
-        {
-            "name": "awsSessionName",
-            "type": "string",
-            "label": "AWS role session name",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeAWS = WorkloadIdentityFederation",
-            "helpMarkDown": "Session name for the assumed role. Leave blank to derive one from the job (`ado-packer-<TeamProject>-<BuildId>`). The session name is the human-readable half of CloudTrail's `userIdentity.arn` (`arn:aws:sts::<acct>:assumed-role/<Role>/<SessionName>`), so a per-run value is what lets an incident responder tell which pipeline and which run created a resource; it can also be constrained with an `sts:RoleSessionName` trust-policy condition. A value supplied here must match AWS's grammar: 2-64 characters from `[A-Za-z0-9_+=,.@-]`."
-        },
-        {
-            "name": "environmentServiceNameGCP",
-            "type": "connectedService:PTPGoogleCloudServiceEndpoint",
-            "label": "GCP service connection",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = gcp",
-            "helpMarkDown": "GCP service connection (Pipeline GCP for Packer)."
-        },
-        {
-            "name": "environmentAuthSchemeGCP",
-            "type": "pickList",
-            "label": "GCP authentication scheme",
-            "defaultValue": "ServiceConnection",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = gcp",
-            "helpMarkDown": "How to authenticate to GCP.",
-            "options": {
-                "ServiceConnection": "Service account key (service connection)",
-                "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
-            }
-        },
-        {
-            "name": "gcpProjectNumber",
-            "type": "string",
-            "label": "GCP project number",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
-            "helpMarkDown": "GCP project number for the workload identity pool audience."
-        },
-        {
-            "name": "gcpWorkloadIdentityPoolId",
-            "type": "string",
-            "label": "GCP workload identity pool ID",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
-            "helpMarkDown": "Workload identity pool ID."
-        },
-        {
-            "name": "gcpWorkloadIdentityProviderId",
-            "type": "string",
-            "label": "GCP workload identity provider ID",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
-            "helpMarkDown": "Workload identity provider ID."
-        },
-        {
-            "name": "gcpServiceAccountEmail",
-            "type": "string",
-            "label": "GCP service account email",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
-            "helpMarkDown": "Service account to impersonate via WIF."
-        },
-        {
-            "name": "environmentServiceNameOCI",
-            "type": "connectedService:PTPOCIServiceEndpoint",
-            "label": "OCI service connection",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = oci",
-            "helpMarkDown": "OCI service connection (Pipeline OCI for Packer). The connection fields are exposed to the template as PKR_VAR_oci_* variables."
-        },
-        {
-            "name": "environmentAuthSchemeOCI",
-            "type": "pickList",
-            "label": "OCI authentication scheme",
-            "defaultValue": "ServiceConnection",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = oci",
-            "helpMarkDown": "How to authenticate to OCI. Workload Identity Federation exchanges the pipeline's OIDC token for a short-lived OCI User Principal Session Token, so no API key is stored. It requires the template to declare `variable \"oci_access_cfg_file\"` and wire it to the builder's `access_cfg_file`; see the OCI section of docs/wif-setup.md.",
-            "options": {
-                "ServiceConnection": "API key (service connection)",
-                "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
-            }
-        },
-        {
-            "name": "ociWifTenancyOcid",
-            "type": "string",
-            "label": "OCI tenancy OCID",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
-            "helpMarkDown": "OCID of the OCI tenancy to authenticate against. E.g. ocid1.tenancy.oc1..aaaa..."
-        },
-        {
-            "name": "ociWifRegion",
-            "type": "pickList",
-            "label": "OCI region",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
-            "helpMarkDown": "OCI region identifier. E.g. us-ashburn-1. Not listed? Type the region identifier directly.",
-            "properties": {
-                "EditableOptions": "True"
-            },
-            "options": {
-                "us-ashburn-1": "US East (Ashburn)",
-                "us-phoenix-1": "US West (Phoenix)",
-                "us-chicago-1": "US Midwest (Chicago)",
-                "us-sanjose-1": "US West (San Jose)",
-                "ca-montreal-1": "Canada Southeast (Montreal)",
-                "ca-toronto-1": "Canada Southeast (Toronto)",
-                "sa-saopaulo-1": "Brazil East (Sao Paulo)",
-                "sa-vinhedo-1": "Brazil Southeast (Vinhedo)",
-                "sa-santiago-1": "Chile Central (Santiago)",
-                "sa-valparaiso-1": "Chile West (Valparaiso)",
-                "sa-bogota-1": "Colombia Central (Bogota)",
-                "mx-queretaro-1": "Mexico Central (Queretaro)",
-                "mx-monterrey-1": "Mexico Northeast (Monterrey)",
-                "eu-paris-1": "France Central (Paris)",
-                "eu-marseille-1": "France South (Marseille)",
-                "eu-frankfurt-1": "Germany Central (Frankfurt)",
-                "eu-milan-1": "Italy Northwest (Milan)",
-                "eu-turin-1": "Italy North (Turin)",
-                "eu-amsterdam-1": "Netherlands Northwest (Amsterdam)",
-                "eu-madrid-1": "Spain Central (Madrid)",
-                "eu-madrid-3": "Spain Central (Madrid 3)",
-                "eu-stockholm-1": "Sweden Central (Stockholm)",
-                "eu-zurich-1": "Switzerland North (Zurich)",
-                "uk-london-1": "UK South (London)",
-                "uk-cardiff-1": "UK West (Newport)",
-                "il-jerusalem-1": "Israel Central (Jerusalem)",
-                "me-abudhabi-1": "UAE Central (Abu Dhabi)",
-                "me-dubai-1": "UAE East (Dubai)",
-                "me-riyadh-1": "Saudi Arabia Central (Riyadh)",
-                "me-jeddah-1": "Saudi Arabia West (Jeddah)",
-                "af-casablanca-1": "Morocco West (Casablanca)",
-                "af-johannesburg-1": "South Africa Central (Johannesburg)",
-                "ap-mumbai-1": "India West (Mumbai)",
-                "ap-hyderabad-1": "India South (Hyderabad)",
-                "ap-singapore-1": "Singapore (Singapore)",
-                "ap-singapore-2": "Singapore West (Singapore)",
-                "ap-batam-1": "Indonesia North (Batam)",
-                "ap-kulai-2": "Malaysia West 2 (Kulai)",
-                "ap-seoul-1": "South Korea Central (Seoul)",
-                "ap-chuncheon-1": "South Korea North (Chuncheon)",
-                "ap-tokyo-1": "Japan East (Tokyo)",
-                "ap-osaka-1": "Japan Central (Osaka)",
-                "ap-sydney-1": "Australia East (Sydney)",
-                "ap-melbourne-1": "Australia Southeast (Melbourne)"
-            }
-        },
-        {
-            "name": "ociWifIdentityDomainUrl",
-            "type": "string",
-            "label": "OCI Identity Domain URL",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
-            "helpMarkDown": "URL of the OCI Identity Domain federated with Azure DevOps. E.g. https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com - the host must be an Oracle identity-domain host, whose first label is 'idcs-' followed by 32 hex characters."
-        },
-        {
-            "name": "ociWifClientId",
-            "type": "string",
-            "label": "OCI Identity Domain application client ID",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
-            "helpMarkDown": "Client ID of the OCI Identity Domains confidential application federated with Azure DevOps. This is a public identifier, not a stored key."
-        },
-        {
-            "name": "environmentServiceNameVSphere",
-            "type": "connectedService:PTPvSphereServiceEndpoint",
-            "label": "vSphere service connection",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = vsphere",
-            "helpMarkDown": "vSphere/vCenter service connection (Pipeline vSphere for Packer). Exposed to the template as PKR_VAR_vsphere_* variables."
-        },
-        {
-            "name": "vsphereInsecureConnection",
-            "type": "boolean",
-            "label": "vSphere insecure connection",
-            "defaultValue": "false",
-            "required": false,
-            "groupName": "providerAuth",
-            "visibleRule": "provider = vsphere",
-            "helpMarkDown": "Sets PKR_VAR_vsphere_insecure_connection=true, which makes the vsphere-iso/vsphere-clone builders **skip vCenter TLS certificate validation**. The vSphere password is then sent to vCenter over an unverified connection and can be intercepted on-path. Use only on a trusted network with a self-signed lab certificate -- never in production. The task emits a warning whenever this is enabled."
-        },
-        {
-            "name": "variableFiles",
-            "type": "multiLine",
-            "label": "Variable files",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "variables",
-            "visibleRule": "command = build || command = validate || command = custom",
-            "helpMarkDown": "One -var-file path per line."
-        },
-        {
-            "name": "packerVariables",
-            "type": "multiLine",
-            "label": "Variables",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "variables",
-            "visibleRule": "command = build || command = validate || command = custom",
-            "helpMarkDown": "One key=value per line, passed as -var arguments. These values are echoed in cleartext in the build log — do not put secrets here. For sensitive values use secureVarsFile, or a PKR_VAR_* Packer variable sourced from a secret pipeline variable."
-        },
-        {
-            "name": "secureVarsFile",
-            "type": "secureFile",
-            "label": "Secure variable file",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "variables",
-            "visibleRule": "command = build || command = validate || command = custom",
-            "helpMarkDown": "A variable file from the Secure Files library, passed as -var-file. Every scalar string value in the file (JSON `.pkrvars.json` or quoted HCL `.pkrvars.hcl` literals) is registered with the build-log secret masker before packer runs, so a value packer echoes is redacted. Values shorter than 4 characters, and numeric/boolean values, are NOT masked; nor is the file's content protected from a template that deliberately writes it to an artifact."
-        },
-        {
-            "name": "environmentVariables",
-            "type": "multiLine",
-            "label": "Environment variables",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "variables",
-            "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings). These values are not masked in the build log — do not put secrets here. Use a secret pipeline variable (which the agent masks) or secureVarsFile instead."
-        },
-        {
-            "name": "upgradePlugins",
-            "type": "boolean",
-            "label": "Upgrade plugins",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = init",
-            "helpMarkDown": "Run init with -upgrade to update installed plugins to the latest matching versions."
-        },
-        {
-            "name": "githubToken",
-            "type": "password",
-            "label": "GitHub API token",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = init",
-            "helpMarkDown": "Optional. Set PACKER_GITHUB_API_TOKEN to avoid GitHub rate limits when downloading plugins. This field is plain text, not a secret input type — do not put secrets directly in this field. Reference a pipeline secret variable instead, e.g. `$(myGithubTokenSecret)`. Pasting a raw token directly into this field stores it in plaintext in the pipeline definition, visible to anyone with read access."
-        },
-        {
-            "name": "syntaxOnly",
-            "type": "boolean",
-            "label": "Syntax only",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = validate",
-            "helpMarkDown": "Run validate with -syntax-only (no variable or builder evaluation)."
-        },
-        {
-            "name": "onlyBuilds",
-            "type": "string",
-            "label": "Only builds",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Comma-separated build names to include (-only)."
-        },
-        {
-            "name": "exceptBuilds",
-            "type": "string",
-            "label": "Except builds",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Comma-separated build names to exclude (-except)."
-        },
-        {
-            "name": "parallelBuilds",
-            "type": "string",
-            "label": "Parallel builds",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Maximum number of builds to run in parallel (-parallel-builds)."
-        },
-        {
-            "name": "onError",
-            "type": "pickList",
-            "label": "On error",
-            "defaultValue": "default",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Behavior when a build fails (-on-error).",
-            "options": {
-                "default": "default (clean up)",
-                "cleanup": "cleanup",
-                "abort": "abort",
-                "ask": "ask",
-                "run-cleanup-provisioner": "run-cleanup-provisioner"
-            }
-        },
-        {
-            "name": "force",
-            "type": "boolean",
-            "label": "Force",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Force a builder to run when artifacts from a previous build prevent it (-force)."
-        },
-        {
-            "name": "disableColor",
-            "type": "boolean",
-            "label": "Disable color output",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Disable colorized output (-color=false)."
-        },
-        {
-            "name": "manifestFile",
-            "type": "string",
-            "label": "Manifest file",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = build",
-            "helpMarkDown": "Optional. Path to the manifest post-processor output. When set, the last build's artifact id is exposed as the 'artifactId' output variable."
-        },
-        {
-            "name": "fmtCheck",
-            "type": "boolean",
-            "label": "Check formatting",
-            "defaultValue": "true",
-            "required": false,
-            "visibleRule": "command = fmt",
-            "helpMarkDown": "Run fmt with -check -diff; a formatting difference fails the task."
-        },
-        {
-            "name": "fmtWrite",
-            "type": "boolean",
-            "label": "Write formatting changes",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = fmt",
-            "helpMarkDown": "Run fmt with -write=true to reformat files in place."
-        },
-        {
-            "name": "fmtRecursive",
-            "type": "boolean",
-            "label": "Recursive",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = fmt",
-            "helpMarkDown": "Also format files in subdirectories (-recursive)."
-        },
-        {
-            "name": "consoleExpression",
-            "type": "string",
-            "label": "Console expression",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = console",
-            "helpMarkDown": "Expression to evaluate non-interactively (piped to packer console on stdin)."
-        },
-        {
-            "name": "fixValidate",
-            "type": "boolean",
-            "label": "Validate after fix",
-            "defaultValue": "true",
-            "required": false,
-            "visibleRule": "command = fix",
-            "helpMarkDown": "When disabled, runs fix with -validate=false."
-        },
-        {
-            "name": "fixOutputFile",
-            "type": "string",
-            "label": "Fix output file",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = fix",
-            "helpMarkDown": "Optional. Write the fixed template to this file instead of stdout."
-        },
-        {
-            "name": "hclOutputFile",
-            "type": "string",
-            "label": "HCL2 output file",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = hcl2_upgrade",
-            "helpMarkDown": "Output file for the upgraded HCL2 template (-output-file)."
-        },
-        {
-            "name": "withAnnotations",
-            "type": "boolean",
-            "label": "With annotations",
-            "defaultValue": "false",
-            "required": false,
-            "visibleRule": "command = hcl2_upgrade",
-            "helpMarkDown": "Include helper annotations in the upgraded template (-with-annotations)."
-        },
-        {
-            "name": "pluginsSubCommand",
-            "type": "pickList",
-            "label": "Plugins sub-command",
-            "defaultValue": "installed",
-            "required": false,
-            "visibleRule": "command = plugins",
-            "helpMarkDown": "The packer plugins sub-command to run.",
-            "options": {
-                "install": "install",
-                "installed": "installed",
-                "remove": "remove",
-                "required": "required"
-            }
-        },
-        {
-            "name": "pluginSource",
-            "type": "string",
-            "label": "Plugin source",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "pluginsSubCommand = install || pluginsSubCommand = remove",
-            "helpMarkDown": "Plugin source address, e.g. github.com/hashicorp/azure."
-        },
-        {
-            "name": "pluginVersion",
-            "type": "string",
-            "label": "Plugin version constraint",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "pluginsSubCommand = install || pluginsSubCommand = remove",
-            "helpMarkDown": "Optional version constraint, e.g. ~> 2.0."
-        },
-        {
-            "name": "customCommand",
-            "type": "string",
-            "label": "Custom command",
-            "defaultValue": "",
-            "required": false,
-            "visibleRule": "command = custom",
-            "helpMarkDown": "The Packer sub-command to run (e.g. a future command not yet surfaced as a dedicated option)."
-        },
-        {
-            "name": "commandOptions",
-            "type": "string",
-            "label": "Additional command options",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "advanced",
-            "helpMarkDown": "Free-form additional arguments appended to the Packer command. These are echoed in cleartext in the build log — do not put secrets here."
-        }
-    ],
-    "restrictions": {
-        "commands": {
-            "mode": "restricted"
-        },
-        "settableVariables": {
-            "allowed": [
-                "artifactId",
-                "manifestFilePath",
-                "fixFilePath"
-            ]
-        }
+    {
+      "name": "variables",
+      "displayName": "Variables",
+      "isExpanded": false
     },
-    "execution": {
-        "Node20_1": {
-            "target": "src/index.js"
-        },
-        "Node24": {
-            "target": "src/index.js"
-        }
-    },
-    "outputVariables": [
-        {
-            "name": "artifactId",
-            "description": "The last build's artifact id, parsed from the manifest post-processor output (when manifestFile is set)."
-        },
-        {
-            "name": "manifestFilePath",
-            "description": "The resolved path to the Packer manifest file (when manifestFile is set)."
-        },
-        {
-            "name": "fixFilePath",
-            "description": "The path to the fixed template file (when the fix command writes to a file)."
-        }
-    ],
-    "messages": {
-        "PackerToolNotFound": "Packer was not found on the agent. Add the Pipeline Packer tool installer task before this task, or ensure packer is on the PATH.",
-        "Error_FederatedTokenAcquisitionFailed": "Failed to acquire federated token for the service connection."
+    {
+      "name": "advanced",
+      "displayName": "Advanced",
+      "isExpanded": false
     }
+  ],
+  "inputs": [
+    {
+      "name": "command",
+      "type": "pickList",
+      "label": "Command",
+      "defaultValue": "build",
+      "required": true,
+      "helpMarkDown": "The Packer command to run.",
+      "options": {
+        "init": "init",
+        "validate": "validate",
+        "build": "build",
+        "fmt": "fmt",
+        "inspect": "inspect",
+        "console": "console",
+        "fix": "fix",
+        "hcl2_upgrade": "hcl2_upgrade",
+        "plugins": "plugins",
+        "version": "version",
+        "custom": "custom"
+      }
+    },
+    {
+      "name": "workingDirectory",
+      "type": "filePath",
+      "label": "Working directory",
+      "defaultValue": "",
+      "required": false,
+      "helpMarkDown": "Directory in which to run Packer. Defaults to the repository root."
+    },
+    {
+      "name": "templatePath",
+      "type": "string",
+      "label": "Template path",
+      "defaultValue": ".",
+      "required": false,
+      "visibleRule": "command != version && command != custom",
+      "helpMarkDown": "Path to the Packer template file or directory (HCL2). Defaults to the current directory."
+    },
+    {
+      "name": "provider",
+      "type": "pickList",
+      "label": "Provider",
+      "defaultValue": "none",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "command = build || command = validate || command = console || command = custom",
+      "helpMarkDown": "Which cloud's credentials to inject for this command. Choose 'none' for Docker, QEMU, VirtualBox, VMware, Hyper-V, or Vagrant builders.",
+      "options": {
+        "none": "None (local / hypervisor builders)",
+        "azurerm": "Azure",
+        "aws": "AWS",
+        "gcp": "Google Cloud",
+        "oci": "Oracle Cloud (OCI)",
+        "vsphere": "VMware vSphere"
+      }
+    },
+    {
+      "name": "environmentServiceNameAzureRM",
+      "type": "connectedService:AzureRM",
+      "label": "Azure subscription",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = azurerm",
+      "helpMarkDown": "Azure Resource Manager service connection. Workload Identity Federation is recommended."
+    },
+    {
+      "name": "environmentAzureRmOverrideSubscriptionID",
+      "type": "string",
+      "label": "Override subscription ID",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = azurerm",
+      "helpMarkDown": "Optional. Override the subscription ID from the service connection."
+    },
+    {
+      "name": "environmentServiceNameAWS",
+      "type": "connectedService:PTPAWSServiceEndpoint",
+      "label": "AWS service connection",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = aws",
+      "helpMarkDown": "AWS service connection (Pipeline AWS for Packer)."
+    },
+    {
+      "name": "environmentAuthSchemeAWS",
+      "type": "pickList",
+      "label": "AWS authentication scheme",
+      "defaultValue": "ServiceConnection",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = aws",
+      "helpMarkDown": "How to authenticate to AWS.",
+      "options": {
+        "ServiceConnection": "Access keys (service connection)",
+        "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
+      }
+    },
+    {
+      "name": "awsRegion",
+      "type": "string",
+      "label": "AWS region",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = aws",
+      "helpMarkDown": "AWS region, e.g. us-east-1. Falls back to the region on the service connection if blank."
+    },
+    {
+      "name": "awsRoleArn",
+      "type": "string",
+      "label": "AWS role ARN",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeAWS = WorkloadIdentityFederation",
+      "helpMarkDown": "ARN of the IAM role to assume via web identity (OIDC)."
+    },
+    {
+      "name": "awsSessionName",
+      "type": "string",
+      "label": "AWS role session name",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeAWS = WorkloadIdentityFederation",
+      "helpMarkDown": "Session name for the assumed role. Leave blank to derive one from the job (`ado-packer-<TeamProject>-<BuildId>`). The session name is the human-readable half of CloudTrail's `userIdentity.arn` (`arn:aws:sts::<acct>:assumed-role/<Role>/<SessionName>`), so a per-run value is what lets an incident responder tell which pipeline and which run created a resource; it can also be constrained with an `sts:RoleSessionName` trust-policy condition. A value supplied here must match AWS's grammar: 2-64 characters from `[A-Za-z0-9_+=,.@-]`."
+    },
+    {
+      "name": "environmentServiceNameGCP",
+      "type": "connectedService:PTPGoogleCloudServiceEndpoint",
+      "label": "GCP service connection",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = gcp",
+      "helpMarkDown": "GCP service connection (Pipeline GCP for Packer)."
+    },
+    {
+      "name": "environmentAuthSchemeGCP",
+      "type": "pickList",
+      "label": "GCP authentication scheme",
+      "defaultValue": "ServiceConnection",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = gcp",
+      "helpMarkDown": "How to authenticate to GCP.",
+      "options": {
+        "ServiceConnection": "Service account key (service connection)",
+        "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
+      }
+    },
+    {
+      "name": "gcpProjectNumber",
+      "type": "string",
+      "label": "GCP project number",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
+      "helpMarkDown": "GCP project number for the workload identity pool audience."
+    },
+    {
+      "name": "gcpWorkloadIdentityPoolId",
+      "type": "string",
+      "label": "GCP workload identity pool ID",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
+      "helpMarkDown": "Workload identity pool ID."
+    },
+    {
+      "name": "gcpWorkloadIdentityProviderId",
+      "type": "string",
+      "label": "GCP workload identity provider ID",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
+      "helpMarkDown": "Workload identity provider ID."
+    },
+    {
+      "name": "gcpServiceAccountEmail",
+      "type": "string",
+      "label": "GCP service account email",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeGCP = WorkloadIdentityFederation",
+      "helpMarkDown": "Service account to impersonate via WIF."
+    },
+    {
+      "name": "environmentServiceNameOCI",
+      "type": "connectedService:PTPOCIServiceEndpoint",
+      "label": "OCI service connection",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = oci",
+      "helpMarkDown": "OCI service connection (Pipeline OCI for Packer). The connection fields are exposed to the template as PKR_VAR_oci_* variables."
+    },
+    {
+      "name": "environmentAuthSchemeOCI",
+      "type": "pickList",
+      "label": "OCI authentication scheme",
+      "defaultValue": "ServiceConnection",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = oci",
+      "helpMarkDown": "How to authenticate to OCI. Workload Identity Federation exchanges the pipeline's OIDC token for a short-lived OCI User Principal Session Token, so no API key is stored. It requires the template to declare `variable \"oci_access_cfg_file\"` and wire it to the builder's `access_cfg_file`; see the OCI section of docs/wif-setup.md.",
+      "options": {
+        "ServiceConnection": "API key (service connection)",
+        "WorkloadIdentityFederation": "Workload Identity Federation (OIDC)"
+      }
+    },
+    {
+      "name": "ociWifTenancyOcid",
+      "type": "string",
+      "label": "OCI tenancy OCID",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
+      "helpMarkDown": "OCID of the OCI tenancy to authenticate against. E.g. ocid1.tenancy.oc1..aaaa..."
+    },
+    {
+      "name": "ociWifRegion",
+      "type": "pickList",
+      "label": "OCI region",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
+      "helpMarkDown": "OCI region identifier. E.g. us-ashburn-1. Not listed? Type the region identifier directly.",
+      "properties": {
+        "EditableOptions": "True"
+      },
+      "options": {
+        "us-ashburn-1": "US East (Ashburn)",
+        "us-phoenix-1": "US West (Phoenix)",
+        "us-chicago-1": "US Midwest (Chicago)",
+        "us-sanjose-1": "US West (San Jose)",
+        "ca-montreal-1": "Canada Southeast (Montreal)",
+        "ca-toronto-1": "Canada Southeast (Toronto)",
+        "sa-saopaulo-1": "Brazil East (Sao Paulo)",
+        "sa-vinhedo-1": "Brazil Southeast (Vinhedo)",
+        "sa-santiago-1": "Chile Central (Santiago)",
+        "sa-valparaiso-1": "Chile West (Valparaiso)",
+        "sa-bogota-1": "Colombia Central (Bogota)",
+        "mx-queretaro-1": "Mexico Central (Queretaro)",
+        "mx-monterrey-1": "Mexico Northeast (Monterrey)",
+        "eu-paris-1": "France Central (Paris)",
+        "eu-marseille-1": "France South (Marseille)",
+        "eu-frankfurt-1": "Germany Central (Frankfurt)",
+        "eu-milan-1": "Italy Northwest (Milan)",
+        "eu-turin-1": "Italy North (Turin)",
+        "eu-amsterdam-1": "Netherlands Northwest (Amsterdam)",
+        "eu-madrid-1": "Spain Central (Madrid)",
+        "eu-madrid-3": "Spain Central (Madrid 3)",
+        "eu-stockholm-1": "Sweden Central (Stockholm)",
+        "eu-zurich-1": "Switzerland North (Zurich)",
+        "uk-london-1": "UK South (London)",
+        "uk-cardiff-1": "UK West (Newport)",
+        "il-jerusalem-1": "Israel Central (Jerusalem)",
+        "me-abudhabi-1": "UAE Central (Abu Dhabi)",
+        "me-dubai-1": "UAE East (Dubai)",
+        "me-riyadh-1": "Saudi Arabia Central (Riyadh)",
+        "me-jeddah-1": "Saudi Arabia West (Jeddah)",
+        "af-casablanca-1": "Morocco West (Casablanca)",
+        "af-johannesburg-1": "South Africa Central (Johannesburg)",
+        "ap-mumbai-1": "India West (Mumbai)",
+        "ap-hyderabad-1": "India South (Hyderabad)",
+        "ap-singapore-1": "Singapore (Singapore)",
+        "ap-singapore-2": "Singapore West (Singapore)",
+        "ap-batam-1": "Indonesia North (Batam)",
+        "ap-kulai-2": "Malaysia West 2 (Kulai)",
+        "ap-seoul-1": "South Korea Central (Seoul)",
+        "ap-chuncheon-1": "South Korea North (Chuncheon)",
+        "ap-tokyo-1": "Japan East (Tokyo)",
+        "ap-osaka-1": "Japan Central (Osaka)",
+        "ap-sydney-1": "Australia East (Sydney)",
+        "ap-melbourne-1": "Australia Southeast (Melbourne)"
+      }
+    },
+    {
+      "name": "ociWifIdentityDomainUrl",
+      "type": "string",
+      "label": "OCI Identity Domain URL",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
+      "helpMarkDown": "URL of the OCI Identity Domain federated with Azure DevOps. E.g. https://idcs-0123456789abcdef0123456789abcdef.identity.oraclecloud.com - the host must be an Oracle identity-domain host, whose first label is 'idcs-' followed by 32 hex characters."
+    },
+    {
+      "name": "ociWifClientId",
+      "type": "string",
+      "label": "OCI Identity Domain application client ID",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "environmentAuthSchemeOCI = WorkloadIdentityFederation",
+      "helpMarkDown": "Client ID of the OCI Identity Domains confidential application federated with Azure DevOps. This is a public identifier, not a stored key."
+    },
+    {
+      "name": "environmentServiceNameVSphere",
+      "type": "connectedService:PTPvSphereServiceEndpoint",
+      "label": "vSphere service connection",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = vsphere",
+      "helpMarkDown": "vSphere/vCenter service connection (Pipeline vSphere for Packer). Exposed to the template as PKR_VAR_vsphere_* variables."
+    },
+    {
+      "name": "vsphereInsecureConnection",
+      "type": "boolean",
+      "label": "vSphere insecure connection",
+      "defaultValue": "false",
+      "required": false,
+      "groupName": "providerAuth",
+      "visibleRule": "provider = vsphere",
+      "helpMarkDown": "Sets PKR_VAR_vsphere_insecure_connection=true, which makes the vsphere-iso/vsphere-clone builders **skip vCenter TLS certificate validation**. The vSphere password is then sent to vCenter over an unverified connection and can be intercepted on-path. Use only on a trusted network with a self-signed lab certificate -- never in production. The task emits a warning whenever this is enabled."
+    },
+    {
+      "name": "variableFiles",
+      "type": "multiLine",
+      "label": "Variable files",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "variables",
+      "visibleRule": "command = build || command = validate || command = custom",
+      "helpMarkDown": "One -var-file path per line."
+    },
+    {
+      "name": "packerVariables",
+      "type": "multiLine",
+      "label": "Variables",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "variables",
+      "visibleRule": "command = build || command = validate || command = custom",
+      "helpMarkDown": "One key=value per line, passed as -var arguments. These values are echoed in cleartext in the build log — do not put secrets here. For sensitive values use secureVarsFile, or a PKR_VAR_* Packer variable sourced from a secret pipeline variable."
+    },
+    {
+      "name": "secureVarsFile",
+      "type": "secureFile",
+      "label": "Secure variable file",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "variables",
+      "visibleRule": "command = build || command = validate || command = custom",
+      "helpMarkDown": "A variable file from the Secure Files library, passed as -var-file. Every scalar string value in the file (JSON `.pkrvars.json` or quoted HCL `.pkrvars.hcl` literals) is registered with the build-log secret masker before packer runs, so a value packer echoes is redacted. Values shorter than 4 characters, and numeric/boolean values, are NOT masked; nor is the file's content protected from a template that deliberately writes it to an artifact."
+    },
+    {
+      "name": "environmentVariables",
+      "type": "multiLine",
+      "label": "Environment variables",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "variables",
+      "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings). These values are not masked in the build log — do not put secrets here. Use a secret pipeline variable (which the agent masks) or secureVarsFile instead."
+    },
+    {
+      "name": "upgradePlugins",
+      "type": "boolean",
+      "label": "Upgrade plugins",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = init",
+      "helpMarkDown": "Run init with -upgrade to update installed plugins to the latest matching versions."
+    },
+    {
+      "name": "githubServiceConnection",
+      "type": "connectedService:github",
+      "label": "GitHub connection",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = init",
+      "helpMarkDown": "Optional. A GitHub service connection whose token is used as `PACKER_GITHUB_API_TOKEN` to avoid GitHub rate limits when downloading plugins. Preferred over the **GitHub API token** field below: the credential lives in the organization's service-connection store, is rotated there, and never appears in the pipeline definition. Takes precedence when both are set."
+    },
+    {
+      "name": "githubToken",
+      "type": "password",
+      "label": "GitHub API token",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = init",
+      "helpMarkDown": "Optional. Sets `PACKER_GITHUB_API_TOKEN` to avoid GitHub rate limits when downloading plugins. Prefer **GitHub connection** above, which keeps the token in the service-connection store instead of the pipeline definition. If you use this field instead, reference a pipeline secret variable (e.g. `$(myGithubTokenSecret)`) rather than pasting a token: a literal value here is stored in the pipeline definition and is visible to anyone who can read it. Ignored when a GitHub connection is set."
+    },
+    {
+      "name": "syntaxOnly",
+      "type": "boolean",
+      "label": "Syntax only",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = validate",
+      "helpMarkDown": "Run validate with -syntax-only (no variable or builder evaluation)."
+    },
+    {
+      "name": "onlyBuilds",
+      "type": "string",
+      "label": "Only builds",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Comma-separated build names to include (-only)."
+    },
+    {
+      "name": "exceptBuilds",
+      "type": "string",
+      "label": "Except builds",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Comma-separated build names to exclude (-except)."
+    },
+    {
+      "name": "parallelBuilds",
+      "type": "string",
+      "label": "Parallel builds",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Maximum number of builds to run in parallel (-parallel-builds)."
+    },
+    {
+      "name": "onError",
+      "type": "pickList",
+      "label": "On error",
+      "defaultValue": "default",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Behavior when a build fails (-on-error).",
+      "options": {
+        "default": "default (clean up)",
+        "cleanup": "cleanup",
+        "abort": "abort",
+        "ask": "ask",
+        "run-cleanup-provisioner": "run-cleanup-provisioner"
+      }
+    },
+    {
+      "name": "force",
+      "type": "boolean",
+      "label": "Force",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Force a builder to run when artifacts from a previous build prevent it (-force)."
+    },
+    {
+      "name": "disableColor",
+      "type": "boolean",
+      "label": "Disable color output",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Disable colorized output (-color=false)."
+    },
+    {
+      "name": "manifestFile",
+      "type": "string",
+      "label": "Manifest file",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = build",
+      "helpMarkDown": "Optional. Path to the manifest post-processor output. When set, the last build's artifact id is exposed as the 'artifactId' output variable."
+    },
+    {
+      "name": "fmtCheck",
+      "type": "boolean",
+      "label": "Check formatting",
+      "defaultValue": "true",
+      "required": false,
+      "visibleRule": "command = fmt",
+      "helpMarkDown": "Run fmt with -check -diff; a formatting difference fails the task."
+    },
+    {
+      "name": "fmtWrite",
+      "type": "boolean",
+      "label": "Write formatting changes",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = fmt",
+      "helpMarkDown": "Run fmt with -write=true to reformat files in place."
+    },
+    {
+      "name": "fmtRecursive",
+      "type": "boolean",
+      "label": "Recursive",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = fmt",
+      "helpMarkDown": "Also format files in subdirectories (-recursive)."
+    },
+    {
+      "name": "consoleExpression",
+      "type": "string",
+      "label": "Console expression",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = console",
+      "helpMarkDown": "Expression to evaluate non-interactively (piped to packer console on stdin)."
+    },
+    {
+      "name": "fixValidate",
+      "type": "boolean",
+      "label": "Validate after fix",
+      "defaultValue": "true",
+      "required": false,
+      "visibleRule": "command = fix",
+      "helpMarkDown": "When disabled, runs fix with -validate=false."
+    },
+    {
+      "name": "fixOutputFile",
+      "type": "string",
+      "label": "Fix output file",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = fix",
+      "helpMarkDown": "Optional. Write the fixed template to this file instead of stdout."
+    },
+    {
+      "name": "hclOutputFile",
+      "type": "string",
+      "label": "HCL2 output file",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = hcl2_upgrade",
+      "helpMarkDown": "Output file for the upgraded HCL2 template (-output-file)."
+    },
+    {
+      "name": "withAnnotations",
+      "type": "boolean",
+      "label": "With annotations",
+      "defaultValue": "false",
+      "required": false,
+      "visibleRule": "command = hcl2_upgrade",
+      "helpMarkDown": "Include helper annotations in the upgraded template (-with-annotations)."
+    },
+    {
+      "name": "pluginsSubCommand",
+      "type": "pickList",
+      "label": "Plugins sub-command",
+      "defaultValue": "installed",
+      "required": false,
+      "visibleRule": "command = plugins",
+      "helpMarkDown": "The packer plugins sub-command to run.",
+      "options": {
+        "install": "install",
+        "installed": "installed",
+        "remove": "remove",
+        "required": "required"
+      }
+    },
+    {
+      "name": "pluginSource",
+      "type": "string",
+      "label": "Plugin source",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "pluginsSubCommand = install || pluginsSubCommand = remove",
+      "helpMarkDown": "Plugin source address, e.g. github.com/hashicorp/azure."
+    },
+    {
+      "name": "pluginVersion",
+      "type": "string",
+      "label": "Plugin version constraint",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "pluginsSubCommand = install || pluginsSubCommand = remove",
+      "helpMarkDown": "Optional version constraint, e.g. ~> 2.0."
+    },
+    {
+      "name": "customCommand",
+      "type": "string",
+      "label": "Custom command",
+      "defaultValue": "",
+      "required": false,
+      "visibleRule": "command = custom",
+      "helpMarkDown": "The Packer sub-command to run (e.g. a future command not yet surfaced as a dedicated option)."
+    },
+    {
+      "name": "commandOptions",
+      "type": "string",
+      "label": "Additional command options",
+      "defaultValue": "",
+      "required": false,
+      "groupName": "advanced",
+      "helpMarkDown": "Free-form additional arguments appended to the Packer command. These are echoed in cleartext in the build log — do not put secrets here."
+    }
+  ],
+  "restrictions": {
+    "commands": {
+      "mode": "restricted"
+    },
+    "settableVariables": {
+      "allowed": [
+        "artifactId",
+        "manifestFilePath",
+        "fixFilePath"
+      ]
+    }
+  },
+  "execution": {
+    "Node20_1": {
+      "target": "src/index.js"
+    },
+    "Node24": {
+      "target": "src/index.js"
+    }
+  },
+  "outputVariables": [
+    {
+      "name": "artifactId",
+      "description": "The last build's artifact id, parsed from the manifest post-processor output (when manifestFile is set)."
+    },
+    {
+      "name": "manifestFilePath",
+      "description": "The resolved path to the Packer manifest file (when manifestFile is set)."
+    },
+    {
+      "name": "fixFilePath",
+      "description": "The path to the fixed template file (when the fix command writes to a file)."
+    }
+  ],
+  "messages": {
+    "PackerToolNotFound": "Packer was not found on the agent. Add the Pipeline Packer tool installer task before this task, or ensure packer is on the PATH.",
+    "Error_FederatedTokenAcquisitionFailed": "Failed to acquire federated token for the service connection."
+  }
 }
