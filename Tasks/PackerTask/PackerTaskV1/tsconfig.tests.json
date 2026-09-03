@@ -1,9 +1,12 @@
 {
+    "extends": "../../../tsconfig.json",
     "compilerOptions": {
-        "target": "ES6",
         "module": "commonjs",
         "skipLibCheck": true,
-        "types": ["node", "mocha"]
+        "types": [
+            "node",
+            "mocha"
+        ]
     },
     "include": [
         "Tests/**/*",
