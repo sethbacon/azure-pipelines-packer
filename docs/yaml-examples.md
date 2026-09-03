@@ -81,7 +81,10 @@ After this task, `$(packerLocation)` holds the binary path and `$(packerDownload
     templatePath: './images/ubuntu'
     upgradePlugins: true
     # Optional: avoid GitHub plugin-download rate limits
-    githubToken: $(GITHUB_TOKEN)
+    # Preferred: the token lives in the service-connection store, not the
+    # pipeline definition. Falls back to githubToken when unset.
+    githubServiceConnection: 'my-github-connection'
+    # githubToken: $(GITHUB_TOKEN)   # alternative; use a secret variable, never a literal
 ```
 
 Plugin verification and source selection are performed by Packer. Keep plugin versions and sources pinned in the template's `required_plugins` block, review the recorded checksums, and use `upgradePlugins` only when updating those dependencies intentionally. The task does not add a separate plugin allowlist or checksum policy.

@@ -403,6 +403,53 @@ export abstract class BasePackerCommandHandler {
         return fn();
     }
 
+    /**
+     * The GitHub token for `PACKER_GITHUB_API_TOKEN`, from a GitHub service
+     * connection when one is named, otherwise from the plain `githubToken` input
+     * (#142).
+     *
+     * The connection is preferred because the credential then lives in the
+     * organization's service-connection store and is rotated there, rather than
+     * sitting in the pipeline definition where the plain input puts it.
+     *
+     * Reading it takes two parameter spellings because GitHub connections carry
+     * different auth schemes: a PAT connection exposes `accessToken`, while the
+     * OAuth and GitHub App (`InstallationToken`) schemes expose `AccessToken`.
+     * Checking only one silently yields nothing for the other, which would look
+     * exactly like "no token configured" and fall back to an unauthenticated
+     * download.
+     *
+     * Fails closed when a connection IS named but no token can be read from it:
+     * that is a misconfiguration, and silently continuing would produce
+     * rate-limited plugin downloads that are hard to trace back to the
+     * connection. An absent connection is not an error -- the input is optional
+     * and the plain field, or neither, is a valid configuration.
+     */
+    private resolveGithubToken(): string | undefined {
+        const connection = tasks.getInput("githubServiceConnection", false);
+        if (!connection) {
+            return tasks.getInput("githubToken", false) || undefined;
+        }
+        // @credential-exempt: the fail-closed check is on the DISJUNCTION of the two
+        // reads, not on either one. Each spelling is legitimately optional -- a PAT
+        // connection has no `AccessToken` and an OAuth one has no `accessToken` --
+        // so an optional=false read would abort a correctly-configured connection.
+        // The throw below fires when NEITHER yields a token, which is the real
+        // fail-closed condition; auth-parity-matrix.cjs judges each accessor
+        // individually and cannot see a guard spanning two of them.
+        for (const parameter of ["accessToken", "AccessToken"]) {
+            const token = tasks.getEndpointAuthorizationParameter(connection, parameter, true);
+            if (token) {
+                // Vaulted endpoint parameters are already masked by the agent, but
+                // this value is about to become an environment variable read by a
+                // child process, so register it here too rather than assume.
+                tasks.setSecret(token);
+                return token;
+            }
+        }
+        throw new Error(`The GitHub service connection '${connection}' did not supply an access token. Remove the connection to use the 'GitHub API token' field instead, or reconfigure the connection.`);
+    }
+
     // --- Command implementations ---
 
     public async init(): Promise<number> {
@@ -413,7 +460,7 @@ export abstract class BasePackerCommandHandler {
             tool.arg('-upgrade');
         }
 
-        const githubToken = tasks.getInput("githubToken", false);
+        const githubToken = this.resolveGithubToken();
         if (githubToken) {
             // Avoids GitHub API rate limits during plugin download.
             EnvironmentVariableHelper.setEnvironmentVariable("PACKER_GITHUB_API_TOKEN", githubToken, true);

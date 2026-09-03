@@ -76,7 +76,10 @@ The ADO OIDC token used for Workload Identity Federation is fetched once at the 
 
 ## Plugin download is rate-limited
 
-`packer init` downloads plugins from GitHub, which is rate-limited for anonymous requests. Set the `githubToken` input on the `init` command to a token (use a pipeline secret variable); it is passed as `PACKER_GITHUB_API_TOKEN`.
+`packer init` downloads plugins from GitHub, which is rate-limited for anonymous requests. Either input on the `init` command supplies a token, passed as `PACKER_GITHUB_API_TOKEN`:
+
+- **`githubServiceConnection`** — a GitHub service connection. Preferred: the credential lives in the organization's service-connection store and is rotated there, never appearing in the pipeline definition. Takes precedence when both are set. If the connection is named but supplies no token the task fails rather than falling back, so a misconfigured connection is not mistaken for an unauthenticated download.
+- **`githubToken`** — a password-typed field. Reference a pipeline secret variable (`$(GITHUB_TOKEN)`) rather than pasting a literal: a literal is stored in the pipeline definition.
 
 Packer itself verifies plugin checksums and signatures during `init` and the `plugins` commands. The task delegates plugin trust and source selection to Packer; it does not add a separate plugin allowlist or checksum policy. Pin plugin versions and required sources in the template's `required_plugins` block, and review its checksums before enabling `upgradePlugins` in a pipeline.
 
