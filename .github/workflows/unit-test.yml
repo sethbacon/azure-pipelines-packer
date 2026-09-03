@@ -113,6 +113,21 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit root build/publish toolchain
         run: npm audit --audit-level=high
+      # Provenance, not just integrity (#414). The audit above and `npm ci`'s
+      # lockfile hashes answer "are these the bytes the lockfile pinned"; this
+      # answers "were those bytes published by the build that claims to have
+      # built them". Both @4cloudguru/pipeline-task-* packages publish SLSA
+      # provenance attestations, and they carry the delegated GPG verifier, the
+      # OIDC token requester and the UPST exchange -- so a registry-side swap is
+      # exactly the event worth catching here.
+      #
+      # Wired as a hard gate rather than advisory: every package in these trees
+      # is signed today (verified, including one published in 2016 -- npm
+      # back-signed the registry), so there is no permanently-red-because-
+      # unsigned failure mode to absorb. It goes red on an INVALID signature,
+      # which is the event we want it to go red on.
+      - name: Verify registry signatures and provenance (root)
+        run: npm audit signatures
 
   build-and-test-task-v1:
     name: Build and Test Packer Task V1 (${{ matrix.os }})
@@ -149,6 +164,11 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+      # See the root job's note (#414): provenance, not just integrity. No
+      # --omit=dev here -- signature verification is about who published the
+      # bytes on disk, and `npm ci` installed the dev tree too.
+      - name: Verify registry signatures and provenance
+        run: npm audit signatures
       - name: Lint
         run: npx eslint src/
       - name: Compile TypeScript
@@ -218,6 +238,11 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
+      # See the root job's note (#414): provenance, not just integrity. No
+      # --omit=dev here -- signature verification is about who published the
+      # bytes on disk, and `npm ci` installed the dev tree too.
+      - name: Verify registry signatures and provenance
+        run: npm audit signatures
       - name: Lint
         run: npx eslint src/
       - name: Compile TypeScript
