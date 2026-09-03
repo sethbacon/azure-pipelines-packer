@@ -3,6 +3,7 @@ import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
 import { TempSecretFileManager } from './temp-secret-file-manager';
 import { isWithinWorkingDirectory } from './path-containment';
+import { sanitizeOutputVariableValue, setBuildOutputs } from './output-variables';
 import { getSecureVarFileArgs } from './secure-file-loader';
 import { EnvironmentVariableHelper, generateIdToken, getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
@@ -583,7 +584,7 @@ export abstract class BasePackerCommandHandler {
         // cleanup/deregistration step needs to remove those orphans. Capture the
         // code, publish the outputs, and only then fail.
         const code = await tool.execAsync(<IExecOptions>{ cwd: command.workingDirectory, ignoreReturnCode: true });
-        this.setBuildOutputs();
+        setBuildOutputs(this.getWorkingDirectory());
         if (code !== 0) {
             throw new Error(`packer build failed with exit code ${code}.`);
         }
@@ -670,7 +671,7 @@ export abstract class BasePackerCommandHandler {
             }
             if (result.stdout) {
                 tasks.writeFile(resolved, result.stdout);
-                const safeFixFilePath = this.sanitizeOutputVariableValue(resolved);
+                const safeFixFilePath = sanitizeOutputVariableValue(resolved);
                 if (safeFixFilePath) {
                     tasks.setVariable('fixFilePath', safeFixFilePath, false, true);
                 } else {
@@ -777,89 +778,4 @@ export abstract class BasePackerCommandHandler {
 
     // --- Build output parsing ---
 
-    /**
-     * If a `manifestFile` input is set, reads the Packer `manifest` post-processor
-     * output and exposes the last build's artifact id and the manifest path as
-     * pipeline output variables. No-op when the manifest is absent or unparseable.
-     */
-    /** Upper bound on a template-controlled value before it becomes a pipeline output variable. */
-    private static readonly OUTPUT_VAR_MAX_LENGTH = 1024;
-
-    /**
-     * Upper bound on the manifest file itself before it is read into memory and
-     * JSON.parse'd (#101). The manifest post-processor's output is
-     * build-template-controlled: a template that appends unbounded post-processor
-     * entries (or simply points manifestFile at a large artifact) would otherwise
-     * be buffered whole and parsed. A real manifest is a few KB per build.
-     */
-    private static readonly MANIFEST_MAX_BYTES = 5 * 1024 * 1024;
-
-    /**
-     * Caps length and requires printable-ASCII content before a template- or
-     * build-influenced value becomes a pipeline output variable. The manifest
-     * JSON (artifactId in particular) is written by the Packer manifest
-     * post-processor -- i.e. build-template-controlled, possibly from a less
-     * trusted repo than the pipeline definition -- and later steps commonly
-     * macro-expand $(artifactId) into a script, so embedded newlines/NUL/
-     * control bytes are command/argument injection, not just log noise (#101).
-     * Returns null (caller should skip the variable) when validation fails.
-     */
-    private sanitizeOutputVariableValue(value: string): string | null {
-        if (!value || value.length > BasePackerCommandHandler.OUTPUT_VAR_MAX_LENGTH) return null;
-        return /^[\x20-\x7E]+$/.test(value) ? value : null;
-    }
-
-    private setBuildOutputs(): void {
-        const manifestFile = tasks.getInput("manifestFile", false);
-        if (!manifestFile) return;
-
-        const resolved = path.resolve(this.getWorkingDirectory(), manifestFile);
-        if (!isWithinWorkingDirectory(resolved, this.getWorkingDirectory())) {
-            tasks.warning(`manifestFile '${manifestFile}' resolves outside the working directory (${resolved}); skipping build output variables.`);
-            return;
-        }
-        if (!fs.existsSync(resolved)) {
-            // Explicitly configured by the user -- a missing manifest usually means
-            // the template's manifest post-processor block is missing/misconfigured,
-            // which should be diagnosable from this step's own log, not debug-only (#106).
-            tasks.warning(`Manifest file not found at ${resolved}; skipping build output variables.`);
-            return;
-        }
-        try {
-            const size = fs.statSync(resolved).size;
-            if (size > BasePackerCommandHandler.MANIFEST_MAX_BYTES) {
-                tasks.warning(`Manifest file ${resolved} is ${size} bytes, above the ${BasePackerCommandHandler.MANIFEST_MAX_BYTES}-byte cap; skipping build output variables.`);
-                return;
-            }
-            const manifest = JSON.parse(fs.readFileSync(resolved, 'utf8'));
-            const safeManifestPath = this.sanitizeOutputVariableValue(resolved);
-            if (safeManifestPath) {
-                tasks.setVariable('manifestFilePath', safeManifestPath, false, true);
-            } else {
-                tasks.warning(`manifestFilePath '${resolved}' failed output-variable validation (length/printable-ASCII); skipping manifestFilePath output variable.`);
-            }
-
-            const builds = manifest.builds;
-            if (Array.isArray(builds) && builds.length > 0) {
-                const last = builds[builds.length - 1];
-                const artifactId = last?.artifact_id;
-                if (typeof artifactId === 'string' || typeof artifactId === 'number') {
-                    const safeArtifactId = this.sanitizeOutputVariableValue(String(artifactId));
-                    if (safeArtifactId) {
-                        tasks.setVariable('artifactId', safeArtifactId, false, true);
-                        tasks.debug(`Set artifactId output variable: ${safeArtifactId}`);
-                    } else {
-                        tasks.warning(`Manifest artifact_id failed output-variable validation (length/printable-ASCII); skipping artifactId output variable.`);
-                    }
-                } else if (artifactId !== undefined) {
-                    tasks.debug(`Manifest artifact_id is not a string or number (${typeof artifactId}); skipping artifactId output variable.`);
-                }
-            }
-        } catch (err) {
-            // Explicitly configured by the user -- a parse failure means the
-            // manifest post-processor produced corrupt/unexpected JSON, which
-            // should be diagnosable from this step's own log, not debug-only (#106).
-            tasks.warning(`Could not parse Packer manifest for build outputs: ${err}`);
-        }
-    }
 }

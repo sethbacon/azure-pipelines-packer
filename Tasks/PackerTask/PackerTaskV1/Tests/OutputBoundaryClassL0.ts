@@ -44,6 +44,16 @@ function handlerSource(): string {
     return fs.readFileSync(path.join(__dirname, '..', 'src', 'base-packer-command-handler.ts'), 'utf8');
 }
 
+/**
+ * The output-variable boundary moved out of the handler (#113). These structural
+ * rows must follow it: they are the Windows substitute for a behavioural test
+ * that cannot run there, so scanning the file the code NO LONGER lives in would
+ * silently assert nothing while still passing.
+ */
+function outputVariablesSource(): string {
+    return fs.readFileSync(path.join(__dirname, '..', 'src', 'output-variables.ts'), 'utf8');
+}
+
 function report(tr: ttm.MockTestRunner, message: string): string {
     return `${message}\n--- STDOUT ---\n${tr.stdout}\n--- STDERR ---\n${tr.stderr}`;
 }
@@ -69,7 +79,7 @@ describe('Output-boundary defect class (S1 output variables / S2 path writes / S
             // this row is POSIX-only; assert the wiring structurally instead of
             // pending the row.
             assert.ok(
-                /const safeManifestPath = this\.sanitizeOutputVariableValue\(resolved\);[\s\S]{0,200}?tasks\.setVariable\('manifestFilePath', safeManifestPath/.test(handlerSource()),
+                /const safeManifestPath = sanitizeOutputVariableValue\(resolved\);[\s\S]{0,200}?tasks\.setVariable\('manifestFilePath', safeManifestPath/.test(outputVariablesSource()),
                 'manifestFilePath must be exported only through the output-variable guard'
             );
             return;
@@ -86,7 +96,7 @@ describe('Output-boundary defect class (S1 output variables / S2 path writes / S
     it('S1 setVariable(fixFilePath) — a control-char-bearing resolved path is rejected, not exported', async function () {
         if (process.platform === 'win32') {
             assert.ok(
-                /const safeFixFilePath = this\.sanitizeOutputVariableValue\(resolved\);[\s\S]{0,200}?tasks\.setVariable\('fixFilePath', safeFixFilePath/.test(handlerSource()),
+                /const safeFixFilePath = sanitizeOutputVariableValue\(resolved\);[\s\S]{0,200}?tasks\.setVariable\('fixFilePath', safeFixFilePath/.test(handlerSource()),
                 'fixFilePath must be exported only through the output-variable guard'
             );
             return;
