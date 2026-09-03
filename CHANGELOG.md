@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.5.1...v1.6.0) (2026-09-03)
+
+
+### Features
+
+* **init:** accept a GitHub service connection for PACKER_GITHUB_API_TOKEN ([#410](https://github.com/sethbacon/azure-pipelines-packer/issues/410)) ([6e9c096](https://github.com/sethbacon/azure-pipelines-packer/commit/6e9c096390f7694c8c2b7932c3d8e2d4022f7e7f))
+
+
+### Bug Fixes
+
+* **build:** stop the tests tsconfig re-emitting src at an older target ([#412](https://github.com/sethbacon/azure-pipelines-packer/issues/412)) ([59e1e52](https://github.com/sethbacon/azure-pipelines-packer/commit/59e1e52198456cc462cddb613d8c7841dc05d821))
+
+
+### Security
+
+* enforce a version floor on the delegated GPG verifier ([#413](https://github.com/sethbacon/azure-pipelines-packer/issues/413)) ([1df6d48](https://github.com/sethbacon/azure-pipelines-packer/commit/1df6d486f70335e6128632e035a156b470db52ed))
+* verify npm registry signatures and provenance in CI ([#415](https://github.com/sethbacon/azure-pipelines-packer/issues/415)) ([10ab573](https://github.com/sethbacon/azure-pipelines-packer/commit/10ab5738065a94b83fccea06577cb343d9db071f))
+
 ## [1.5.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.5.0...v1.5.1) (2026-09-03)
 
 
