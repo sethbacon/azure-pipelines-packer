@@ -7,6 +7,15 @@ rules:
       # caching (no `cache:` input), so there is no cached artifact to poison.
       # zizmor flags setup-node defensively in any artifact-publishing workflow.
       - release.yml
+  self-repository:
+    ignore:
+      # The audit asks for GitHub's self-repository form, `uses: $/...`, in
+      # place of `uses: ./...`. actionlint rejects `$/` as a malformed `uses`
+      # reference (rhysd/actionlint#711 is open), and actionlint is a required
+      # check here via shared-workflows' workflow-security gate, so the
+      # remediation cannot be applied. Tracked in 4cloudguru/shared-workflows#45.
+      - release.yml
+      - weekly-security.yml
   superfluous-actions:
     ignore:
       # softprops/action-gh-release is used deliberately for its multi-file
