@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.5.0...v1.5.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **azure:** validate service-principal fields before the template probe ([#407](https://github.com/sethbacon/azure-pipelines-packer/issues/407)) ([48df8fa](https://github.com/sethbacon/azure-pipelines-packer/commit/48df8fa625a346f9f7c178ef91fd9b59baa6dffc))
+
+
+### Refactor
+
+* extract the credential temp-file lifecycle from the base handler ([#403](https://github.com/sethbacon/azure-pipelines-packer/issues/403)) ([c6a6a28](https://github.com/sethbacon/azure-pipelines-packer/commit/c6a6a28b00245d4aecfd901c3939efa5284b0702))
+* extract the environmentVariables passthrough policy ([#406](https://github.com/sethbacon/azure-pipelines-packer/issues/406)) ([c98741c](https://github.com/sethbacon/azure-pipelines-packer/commit/c98741c6350748ba9daac133576cbda52fbf1994))
+* extract the output-variable boundary from the base handler ([#405](https://github.com/sethbacon/azure-pipelines-packer/issues/405)) ([2338688](https://github.com/sethbacon/azure-pipelines-packer/commit/2338688f319b722fe3462056061b652dffec817a))
+
 ## [1.5.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.4.0...v1.5.0) (2026-09-02)
 
 
