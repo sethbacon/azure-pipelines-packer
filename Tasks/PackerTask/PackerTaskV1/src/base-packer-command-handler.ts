@@ -1,20 +1,27 @@
 import { PackerToolHandler, IPackerToolHandler } from './packer';
 import { ToolRunner, IExecOptions } from 'azure-pipelines-task-lib/toolrunner';
 import { PackerBaseCommandInitializer, PackerAuthorizationCommandInitializer } from './packer-commands';
+import { TempSecretFileManager } from './temp-secret-file-manager';
 import { isWithinWorkingDirectory } from './path-containment';
-import { getSecureVarFileArgs, SecureFileLoader } from './secure-file-loader';
-import { EnvironmentVariableHelper, writeSecretFile, generateIdToken, getBoolInputDefaultTrue, scrubFile } from '@4cloudguru/pipeline-task-ado';
+import { getSecureVarFileArgs } from './secure-file-loader';
+import { EnvironmentVariableHelper, generateIdToken, getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
 import path = require('path');
 import fs = require('fs');
-import os = require('os');
-import { randomUUID as uuidV4 } from 'crypto';
 
 export abstract class BasePackerCommandHandler {
     providerName: string;
     packerToolHandler: IPackerToolHandler;
-    protected tempFiles: string[];
-    private secureFileId: string | null = null;
+    protected readonly tempSecretFiles = new TempSecretFileManager();
+
+    /**
+     * The live tracked-temp-file array, delegated to TempSecretFileManager (#113).
+     * Kept as `tempFiles` and kept LIVE: a subclass fixture pushes to it directly
+     * and two suites read it reflectively, so a copy would silently stop tracking.
+     */
+    protected get tempFiles(): string[] {
+        return this.tempSecretFiles.trackedFiles;
+    }
 
     /** Injects provider credentials as environment variables for commands that build/evaluate. */
     abstract handleProvider(command: PackerAuthorizationCommandInitializer): Promise<void>;
@@ -22,7 +29,6 @@ export abstract class BasePackerCommandHandler {
     constructor() {
         this.providerName = "";
         this.packerToolHandler = new PackerToolHandler(tasks);
-        this.tempFiles = [];
     }
 
     // --- Shared helpers ---
@@ -281,7 +287,7 @@ export abstract class BasePackerCommandHandler {
     protected async applyVarArgs(tool: ToolRunner, workingDirectory: string): Promise<void> {
         const secure = await getSecureVarFileArgs();
         if (secure) {
-            this.secureFileId = secure.secureFileId;
+            this.tempSecretFiles.setSecureFileId(secure.secureFileId);
             tool.arg(secure.varFileArg);
         }
 
@@ -426,19 +432,12 @@ export abstract class BasePackerCommandHandler {
      * Writes `content` to a uniquely-named 0600 temp file (`<prefix>-<uuid>.<ext>`),
      * tracks it for cleanup, and returns the path. Centralizes the temp-secret
      * convention shared by the AWS/GCP/OCI handlers.
+     *
+     * Delegates to TempSecretFileManager (#113); kept as a method because six
+     * provider-handler call sites invoke it as `this.writeTrackedSecretFile(...)`.
      */
     protected writeTrackedSecretFile(prefix: string, ext: string, content: string): string {
-        // Prefer Agent.TempDirectory (purged between jobs) over the shared OS
-        // tmpdir so an abnormal termination (SIGKILL, hard crash) that skips the
-        // finally-block/signal-handler cleanup still gets an agent-provided
-        // backstop for these long-lived credential files (#104). Falls back to
-        // os.tmpdir() for headless/mock runs (and any run where the variable is
-        // unset), which is every existing test -- no behavior change there.
-        const baseDir = tasks.getVariable('Agent.TempDirectory') || os.tmpdir();
-        const filePath = path.join(baseDir, `${prefix}-${uuidV4()}.${ext}`);
-        writeSecretFile(filePath, content);
-        this.tempFiles.push(filePath);
-        return filePath;
+        return this.tempSecretFiles.writeTracked(prefix, ext, content);
     }
 
     /**
@@ -452,41 +451,16 @@ export abstract class BasePackerCommandHandler {
         return this.writeTrackedSecretFile(prefix, 'jwt', oidcToken);
     }
 
+    /**
+     * Scrubs and removes every tracked credential temp file, then the downloaded
+     * secure var file. Delegates to TempSecretFileManager (#113).
+     *
+     * Stays PUBLIC and stays on the handler: ParentCommandHandler calls it in its
+     * finally block and again from emergencyCleanup() on SIGTERM/SIGINT/
+     * uncaughtException, and five suites call it on a handler instance.
+     */
     public cleanupTempFiles(): void {
-        for (const filePath of this.tempFiles) {
-            try {
-                if (fs.existsSync(filePath)) {
-                    // Scrub (zero-overwrite) before unlinking, uniformly for every
-                    // tracked secret temp file -- OIDC/UPST token files, GCP/OCI
-                    // credential JSON, PEM keys alike -- so a crash between the
-                    // overwrite and the unlink is the only remaining exposure
-                    // window, matching TerraformTaskV5's temp-file-manager.ts
-                    // (#336). A scrub failure is surfaced but does not skip the
-                    // unlink attempt below.
-                    try {
-                        scrubFile(filePath);
-                    } catch (scrubErr) {
-                        tasks.warning(`Failed to scrub temp file ${filePath} before deletion: ${scrubErr}`);
-                    }
-                    fs.unlinkSync(filePath);
-                    tasks.debug(`Cleaned up temp file: ${filePath}`);
-                }
-            } catch (err) {
-                // A leftover credential temp file (OIDC token / GCP or OCI key) is
-                // a real exposure on a self-hosted agent -- surface it above debug (#104).
-                tasks.warning(`Failed to clean up temp file ${filePath}: ${err}`);
-            }
-        }
-        this.tempFiles = [];
-
-        if (this.secureFileId) {
-            try {
-                new SecureFileLoader().deleteSecureFile(this.secureFileId);
-            } catch (err) {
-                tasks.warning(`Failed to clean up secure file: ${err}`);
-            }
-            this.secureFileId = null;
-        }
+        this.tempSecretFiles.cleanup();
     }
 
     // --- Dispatch ---
