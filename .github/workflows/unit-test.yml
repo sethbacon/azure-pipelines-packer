@@ -69,8 +69,6 @@ jobs:
         run: node scripts/test-check-proxy-parity.js
       - name: Self-test bump-minor-versions.js
         run: node scripts/test-bump-minor-versions.js
-      - name: Self-test publish-marketplace.js
-        run: node scripts/test-publish-marketplace.js
 
   check-shared-modules:
     name: Check Shared Module Provenance

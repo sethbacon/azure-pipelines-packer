@@ -356,6 +356,16 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: sbom-and-signatures
+      # Verify the .vsix against its cosign bundle before attaching it to the
+      # GitHub Release, so the release never distributes an artifact that
+      # fails signature verification. This repo had no equivalent gate
+      # anywhere in its release pipeline before -- found by comparing against
+      # azure-pipelines-terraform's and azure-pipelines-release-docs's publish
+      # jobs, which both already ran this (2026-09-04). Shared with both.
+      - name: Verify VSIX signature before release
+        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@450841eb41e83ae6d0b0a3ee20d1217b2887391b # v1.20.0
+        with:
+          certificate-identity-regexp: '^https://github\.com/sethbacon/azure-pipelines-packer/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
       - name: Create draft GitHub Release
         id: create_release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
@@ -385,6 +395,13 @@ jobs:
       # (v1.3.3-v1.3.7) via harden-runner's own audit-mode connection log:
       #   github.com            — actions/checkout
       #   registry.npmjs.org    — npm ci (root)
+      #   release-assets.githubusercontent.com — cosign-installer downloading the cosign binary
+      #   raw.githubusercontent.com — cosign-installer's own bootstrap-vs-requested-release
+      #     SHA comparison, observed on every one of 5 real runs sampled from
+      #     azure-pipelines-release-docs at the same cosign-installer pin (2026-09-04)
+      #   tuf-repo-cdn.sigstore.dev — cosign verify-blob's Sigstore TUF trust root fetch
+      #     (verify-blob reads the cert+Rekor entry from the bundle itself, so this needs
+      #     no live Fulcio/Rekor/TSA call)
       #   login.microsoftonline.com — azure/login OIDC + az account get-access-token
       #   management.azure.com  — azure/login (subscription/tenant resolution)
       #   *.blob.core.windows.net — az CLI's own cache/telemetry (azcliprod...) plus
@@ -409,6 +426,9 @@ jobs:
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+            release-assets.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
             login.microsoftonline.com:443
             management.azure.com:443
             dc.services.visualstudio.com:443
@@ -434,6 +454,27 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: vsix
+      # The signing job produced a cosign keyless sign-blob bundle over the
+      # exact VSIX bytes and uploaded it separately. Re-download it here so
+      # the integrity gate below verifies the SAME bytes about to be
+      # published, not merely that some valid signature exists somewhere.
+      - name: Download SBOM and signature artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sbom-and-signatures
+      # Integrity gate: re-verify the downloaded VSIX against the cosign
+      # bundle from the sign job BEFORE the token-authenticated publish. An
+      # artifact substituted between jobs -- a compromised download-artifact
+      # action, an artifact-store isolation failure -- fails the release here
+      # rather than being published to the Marketplace. This repo had no
+      # equivalent gate anywhere in its release pipeline before -- found by
+      # comparing against azure-pipelines-terraform's and
+      # azure-pipelines-release-docs's publish jobs (2026-09-04). Shared with
+      # both, including in their own equivalent of this step.
+      - name: Verify VSIX signature before publish
+        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@450841eb41e83ae6d0b0a3ee20d1217b2887391b # v1.20.0
+        with:
+          certificate-identity-regexp: '^https://github\.com/sethbacon/azure-pipelines-packer/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
       # Authenticate to Microsoft Entra via GitHub OIDC (federated credential) —
       # no stored secret. The service principal is a member of the 'sethbacon'
       # Marketplace publisher. Replaces the deprecated full-scoped TFX_PAT.
@@ -443,27 +484,40 @@ jobs:
           client-id: ${{ vars.AZDO_PUBLISH_CLIENT_ID }}
           tenant-id: ${{ vars.AZDO_PUBLISH_TENANT_ID }}
           allow-no-subscriptions: true
-      - name: Publish extension with a Microsoft Entra token
-        # scripts/publish-marketplace.js spawns tfx WITHOUT --token (so tfx
-        # prompts and reads the token from stdin, keeping it out of
-        # /proc/<pid>/cmdline -- #109) and retries a transient upstream failure
-        # a bounded number of times (v1.2.7's publish died on a single HTTP 503
-        # and left an orphaned draft release). A deterministic rejection is
-        # never retried. Its behaviour is gated by
-        # scripts/test-publish-marketplace.js in CI.
+      - name: Mint a Microsoft Entra token for the Marketplace publish
+        id: mint-token
         run: |
           VSIX_FILE=$(find . -maxdepth 1 -name "*.vsix" -print -quit)
+          echo "vsix-file=$VSIX_FILE" >> "$GITHUB_OUTPUT"
           # 499b84ac-1321-427f-aa17-267ca6975798 is the Azure DevOps resource app.
           MARKETPLACE_TOKEN=$(az account get-access-token \
             --tenant "${VARS_AZDO_PUBLISH_TENANT_ID}" \
             --resource 499b84ac-1321-427f-aa17-267ca6975798 \
             --query accessToken -o tsv)
-          # Mask the runtime-minted token so it is redacted from any log output.
+          # Masked before it is written anywhere -- including $GITHUB_OUTPUT,
+          # which is how it reaches the next step's `with:` input. Masking
+          # redacts LOG output; the value itself flows to the composite
+          # action the same way any secret input does (an INPUT_* env var the
+          # runner sets, never a shell interpolation), so this does not
+          # reopen the argv exposure the retry step avoids.
           echo "::add-mask::$MARKETPLACE_TOKEN"
-          export MARKETPLACE_TOKEN
-          node scripts/publish-marketplace.js --vsix "$VSIX_FILE"
+          echo "token=$MARKETPLACE_TOKEN" >> "$GITHUB_OUTPUT"
         env:
           VARS_AZDO_PUBLISH_TENANT_ID: ${{ vars.AZDO_PUBLISH_TENANT_ID }}
+      - name: Publish extension with a Microsoft Entra token
+        # Feeds the token to tfx on stdin (never argv -- CWE-214) and retries a
+        # transient upstream failure a bounded number of times; a deterministic
+        # rejection (bad manifest, auth failure, duplicate version on the first
+        # attempt) is never retried (v1.2.7's publish died on a single HTTP 503
+        # and left an orphaned draft release). Formerly this repo's own
+        # scripts/publish-marketplace.js, now shared with
+        # azure-pipelines-terraform and azure-pipelines-release-docs so a fix
+        # lands in all three the next time each bumps this pin, rather than
+        # needing three separate PRs the way v1.15.2's fix did.
+        uses: 4cloudguru/shared-workflows/.github/actions/publish-marketplace@450841eb41e83ae6d0b0a3ee20d1217b2887391b # v1.20.0
+        with:
+          vsix-path: ${{ steps.mint-token.outputs.vsix-file }}
+          marketplace-token: ${{ steps.mint-token.outputs.token }}
 
   undraft-release:
     name: Undraft GitHub Release

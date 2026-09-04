@@ -77,7 +77,6 @@ azure-pipelines-packer/
 │   │                                         #     (entry point tested + measured, every declared
 │   │                                         #      execution handler exercised, Minor-bump layers,
 │   │                                         #      Marketplace publish retry + token off argv)
-│   ├── publish-marketplace.js               # Release: tfx publish, token on stdin + bounded retry
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
 │   ├── test-*.js                            # CI self-tests for each of the guards above
