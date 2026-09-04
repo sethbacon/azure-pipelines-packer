@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.0...v1.6.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* centralize the Marketplace publish and add the missing cosign integrity gate ([#420](https://github.com/sethbacon/azure-pipelines-packer/issues/420)) ([516988c](https://github.com/sethbacon/azure-pipelines-packer/commit/516988c57ab09816f4c96ca9928515d3c329ae70))
+* stop tfx's routine preamble from masking a real publish failure ([#418](https://github.com/sethbacon/azure-pipelines-packer/issues/418)) ([b48f30d](https://github.com/sethbacon/azure-pipelines-packer/commit/b48f30da6c64f102790b81c370b1d43ff95d50bb))
+
 ## [1.6.0](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.5.1...v1.6.0) (2026-09-03)
 
 
