@@ -414,6 +414,30 @@ describe('PackerInstaller Test Suite', function () {
         }, tr);
     });
 
+    // M8 (batch-A iter3 mutation gap): downloadZipFromRegistry's own hoisted
+    // assertEgressHostAllowed call on registryUrl's host must be what refuses a
+    // PINNED version's install -- not merely rely on getValidatedRegistryUrl having
+    // already checked the same host earlier. A mutation that swaps in a hardcoded
+    // hostname there would let an unauthorized registryUrl slip through to the info
+    // fetch; require the failure to name the REAL host and to have never reached
+    // fetchJson.
+    it('RegistryUrlHostAuthorizedBeforeMetadataFetch', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryUrlHostAuthorizedBeforeMetadataFetch.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, "registryUrl's own host must be authorized before the metadata fetch for a pinned version");
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_RegistryDownloadHostIsPrivate registry.example.com'),
+                'the refusal must use RegistryDownloadHostIsPrivate and name the real registryUrl host. errors: ' + issues
+            );
+            assert.ok(
+                !issues.includes('SENTINEL_MUST_NOT_REACH_FETCHJSON'),
+                'fetchJson must never be reached once registryUrl host authorization has failed. errors: ' + issues
+            );
+        }, tr);
+    });
+
     // --- Registry pre-signed download-URL token masking (#98) ---
     // The registry download_url carries a live storage credential in its query string
     // and tool-lib logs the URL at INFO. Assert every token component is registered as
