@@ -466,7 +466,25 @@ describe('PackerInstaller Test Suite', function () {
     });
 
     // --- Real (unmocked) GPG verification ---
-    expectSuccess('GpgRealVerifySuccess');
+    // M9 mutation-coverage gap: every other GPG-disclosure test only exercises the
+    // PERMITTED-SKIP branch (verifyGpgSignature returning false). Nothing asserted
+    // the inverse -- that a GENUINELY verified signature does NOT also emit
+    // GpgVerificationSkippedChecksumOnly -- so flipping gpg-verifier.ts's real
+    // "return true;" to "return false;" changed no test outcome. This runs the
+    // real (unmocked) verifier against a valid signature and requires the
+    // disclosure warning to be absent.
+    it('GpgRealVerifySuccess does not disclose a checksum-only skip for a genuinely verified signature', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'GpgRealVerifySuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+            assert.ok(
+                !tr.warningIssues.some(w => w.includes('loc_mock_GpgVerificationSkippedChecksumOnly')),
+                'a genuinely GPG-verified install must NOT disclose a checksum-only skip. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
     expectFailure('GpgRealVerifyTamperedFail');
     expectSuccess('GpgMultiSignatureFirstInvalidSuccess');   // #137: valid signature at index > 0 must not be ignored
 
