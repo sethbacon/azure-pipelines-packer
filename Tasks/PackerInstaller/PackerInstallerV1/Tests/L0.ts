@@ -360,6 +360,60 @@ describe('PackerInstaller Test Suite', function () {
         }, tr);
     });
 
+    // Class residual (batch-A fold, site 2): verifyGpgSignature returning void meant
+    // a permitted skip (the .sig genuinely absent, requireGpgSignature=false) and a
+    // real signature verification reached the same success path with no way for the
+    // caller to disclose which one happened (#1024/21). Assert the caller now warns
+    // with GpgVerificationSkippedChecksumOnly whenever the boolean comes back false,
+    // for BOTH sources that call verifyGpgSignature.
+    it('HashiCorpGpgOptOutSuccess discloses the weaker (checksum-only) trust level', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'HashiCorpGpgOptOutSuccess.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded (SHA256 still enforced)');
+            assert.ok(
+                tr.warningIssues.some(w => w.includes('loc_mock_GpgVerificationSkippedChecksumOnly')),
+                'a hashicorp install whose GPG signature was permitted to be skipped must disclose that. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    it('MirrorGpgOptOutDisclosesWarning', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorGpgOptOutDisclosesWarning.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded (SHA256 still enforced)');
+            assert.ok(tr.errorIssues.length === 0, 'should have no errors. errors: ' + tr.errorIssues);
+            assert.ok(
+                tr.warningIssues.some(w => w.includes('loc_mock_GpgVerificationSkippedChecksumOnly')),
+                'a mirror install whose GPG signature was permitted to be skipped must disclose that. warnings: ' + tr.warningIssues
+            );
+        }, tr);
+    });
+
+    // Class residual (batch-A fold, site 1): downloadZipFromRegistry's info fetch
+    // previously had no LOCAL re-authorization of registryUrl's own host -- it
+    // relied entirely on the caller (getValidatedRegistryUrl) having checked it
+    // once, earlier. A DNS answer that differs between validation time and request
+    // time (rebinding) was not caught. Assert the hoisted check fires and fetchJson
+    // is never reached.
+    it('RegistryInfoHostRebindRejected', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryInfoHostRebindRejected.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a registry info fetch whose host rebinds to the metadata address must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('loc_mock_RegistryDownloadHostIsPrivate registry.example.com'),
+                'the refusal must use RegistryDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+            assert.ok(
+                !issues.includes('SENTINEL_MUST_NOT_REACH_FETCHJSON'),
+                'fetchJson must never be reached once the rebind is detected. errors: ' + issues
+            );
+        }, tr);
+    });
+
     // --- Registry pre-signed download-URL token masking (#98) ---
     // The registry download_url carries a live storage credential in its query string
     // and tool-lib logs the URL at INFO. Assert every token component is registered as
