@@ -36,6 +36,7 @@
     "loc.messages.MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
     "loc.messages.RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",
     "loc.messages.RegistryDownloadHostNotAllowed": "Registry download host %s is not in registryAllowedHosts (%s).",
+    "loc.messages.GpgVerificationSkippedChecksumOnly": "GPG signature verification for this Packer install was permitted to be skipped (see the prior warning); the archive's integrity is anchored only to its SHA256 checksum, not to HashiCorp's pinned signing key. Set 'requireGpgSignature' to true to require a verified signature.",
     "loc.messages.RegistryRequestFailed": "Registry request failed for %s. HTTP status: %s",
     "loc.messages.Sha256VerificationFailed": "SHA256 verification failed. Expected: %s, Got: %s",
     "loc.messages.ResolvingLatestFromRegistry": "Resolving latest Packer version from registry: %s",

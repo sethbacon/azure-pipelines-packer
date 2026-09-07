@@ -166,6 +166,7 @@
         "MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
         "RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",
         "RegistryDownloadHostNotAllowed": "Registry download host %s is not in registryAllowedHosts (%s).",
+        "GpgVerificationSkippedChecksumOnly": "GPG signature verification for this Packer install was permitted to be skipped (see the prior warning); the archive's integrity is anchored only to its SHA256 checksum, not to HashiCorp's pinned signing key. Set 'requireGpgSignature' to true to require a verified signature.",
         "RegistryTrustAnchorIsChecksumOnly": "Installed from the private registry (%s). Integrity rests on the SHA256 the registry itself asserts, delivered over the same TLS session as the archive -- no signature is verified on this path. The hashicorp and mirror sources verify SHA256SUMS against the pinned HashiCorp GPG key; requireGpgSignature does not apply to downloadSource=registry. A compromised or misconfigured registry can serve a modified archive whose recorded hash matches it. Use downloadSource hashicorp, or a mirror that publishes a signed SHA256SUMS, if you need signature-anchored trust.",
         "RegistryRequestFailed": "Registry request failed for %s. HTTP status: %s",
         "Sha256VerificationFailed": "SHA256 verification failed. Expected: %s, Got: %s",
