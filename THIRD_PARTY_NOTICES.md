@@ -7,6 +7,27 @@ runtime dependencies bundled into the packaged `.vsix` (see
 
 ---
 
+## Task dependencies (shipped via each task's `node_modules`)
+
+Which task ships which package, derived from each task's `package.json` `dependencies`.
+`scripts/check-docs-claims.js` checks this table against those manifests in both directions
+on every pull request, so a package added to or dropped from a task without a matching
+edit here fails CI (the sibling `azure-pipelines-terraform` audit #1115 found undici
+under-attributed to 3 of 7 tasks there, with nothing to catch it). The sections below
+carry each package's licence text and what it is used for.
+
+| Package | Bundled into | License |
+| --- | --- | --- |
+| azure-pipelines-task-lib | PackerInstaller, PackerTask | MIT |
+| azure-pipelines-tool-lib | PackerInstaller | MIT |
+| azure-pipelines-tasks-securefiles-common | PackerTask | MIT |
+| @4cloudguru/pipeline-task-ado | PackerInstaller, PackerTask | Apache-2.0 |
+| @4cloudguru/pipeline-task-core | PackerInstaller, PackerTask | Apache-2.0 |
+| openpgp | PackerInstaller | LGPL-3.0+ |
+| undici | PackerInstaller, PackerTask | MIT |
+
+---
+
 ## openpgp (OpenPGP.js)
 
 **Repository:** https://github.com/openpgpjs/openpgpjs
