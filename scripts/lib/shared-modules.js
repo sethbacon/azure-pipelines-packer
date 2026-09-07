@@ -45,6 +45,15 @@ const PROVENANCE = [
     // seventh copy of a module the sibling extensions gate as a byte-identical
     // family -- and invisible to every basename-keyed check because it was inline.
     { dir: COMMAND_SRC, file: 'path-containment.ts', upstream: UPSTREAM },
+    // Secure var-file value extraction + masking. Registered on #1105: this file
+    // was copied from terraform-ext and then drifted UNGATED -- it was governed by
+    // neither this list nor terraform's byte-identical FAMILIES list, which is
+    // exactly why an identical extractor defect (a string-unaware comment pre-pass
+    // that truncated quoted values at ' #' / ' //', mis-paired the dangling quote
+    // with a quote on a LATER line, and never extracted heredoc bodies at all)
+    // survived in BOTH copies past every gate. Fixes to the extraction logic must
+    // be applied to both repositories' copies.
+    { dir: COMMAND_SRC, file: 'secure-var-file-masking.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'hashicorp-gpg-key.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'gpg-verifier.ts', upstream: UPSTREAM },
     { dir: INSTALLER_SRC, file: 'http-client.ts', upstream: UPSTREAM },
