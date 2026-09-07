@@ -174,7 +174,7 @@ describe('PackerInstaller Test Suite', function () {
                 assert.ok(tr.failed, 'task should have failed');
                 const issues = tr.errorIssues.join('\n');
                 assert.ok(
-                    issues.includes('loc_mock_RegistryUrlHasQueryOrFragment'),
+                    issues.includes('registryUrl must not carry a query string or fragment'),
                     'the refusal must come from the query/fragment guard, not the fetch backstop. errors: ' + issues,
                 );
             }, tr);
@@ -205,6 +205,22 @@ describe('PackerInstaller Test Suite', function () {
             assert.ok(
                 issues.includes('loc_mock_MirrorDownloadHostIsPrivate 10.0.0.5'),
                 'the refusal must use MirrorDownloadHostIsPrivate and name the host. errors: ' + issues
+            );
+        }, tr);
+    });
+
+    // azure-pipelines-terraform#1110 finding 2 (class fix): mirrorBaseUrl is a base a
+    // fixed path is concatenated onto, so a '?' in it retargets every mirror request
+    // while the host allowlist sees nothing. Asserted on the guard's own message.
+    it('MirrorBaseUrlQueryReject', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'MirrorBaseUrlQueryReject.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'a query-carrying mirrorBaseUrl must be refused');
+            const issues = tr.errorIssues.join('\n');
+            assert.ok(
+                issues.includes('mirrorBaseUrl must not carry a query string or fragment'),
+                'the refusal must come from assertPlainUrlBase, not the fetch backstop. errors: ' + issues
             );
         }, tr);
     });

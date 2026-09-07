@@ -9,7 +9,7 @@ import { randomUUID as uuidV4 } from 'crypto';
 import { fetchJson, fetchText, fetchTextAllow404, downloadToFile, DOWNLOAD_TIMEOUT_MS } from './http-client';
 import { verifyGpgSignature } from './gpg-verifier';
 import { parseAllowedHosts, assertEgressHostAllowed, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
-import { validateUrlPathSegment } from '@4cloudguru/pipeline-task-core';
+import { validateUrlPathSegment, assertPlainUrlBase } from '@4cloudguru/pipeline-task-core';
 import {
     VerificationFailure,
     isVerificationFailure,
@@ -158,29 +158,16 @@ async function getValidatedRegistryUrl(): Promise<string> {
     // a real pattern for internal artifact proxies). Mask it BEFORE the first
     // emission below, and strip it structurally from every message.
     maskOperatorUrlCredentials(registryUrl);
-    let parsed: URL;
-    try {
-        parsed = new URL(registryUrl);
-    } catch {
-        throw new Error(`registryUrl '${redactUrlUserInfo(registryUrl)}' is not a valid URL.`);
-    }
-    if (parsed.protocol !== 'https:') {
-        throw new Error(tasks.loc("InsecureUrlRejected", redactUrlUserInfo(registryUrl)));
-    }
-    // Every consumer of this URL concatenates a fixed API path onto it
-    // (`${registryUrl}/terraform/binaries/...`) rather than resolving through the
-    // URL parser, so a query string or fragment in the base silently retargets
-    // the request: 'https://registry.example/?x=' lands the intended path inside
-    // the query string, and a non-empty fragment drops everything after '#'
-    // client-side. Fail closed here, once, rather than in each concatenation
-    // site (suite-scope residual of azure-pipelines-terraform#1110 finding 2,
-    // which fixed the same shape in TerraformModulePublishV1). Userinfo is NOT
-    // rejected: unlike that task, basic-auth userinfo in registryUrl is a
-    // supported pattern here (see maskOperatorUrlCredentials above), so it is
-    // masked and stripped from messages rather than refused.
-    if (parsed.search || parsed.hash) {
-        throw new Error(tasks.loc("RegistryUrlHasQueryOrFragment", redactUrlUserInfo(registryUrl)));
-    }
+    // The shape check is the shared assertPlainUrlBase (class fix for
+    // azure-pipelines-terraform#1110 finding 2 -- the same concatenation exists
+    // in every installer of both extensions): an absolute https URL with no
+    // query string and no fragment, because every consumer concatenates a fixed
+    // API path onto this value and '?' or '#' in the base would silently
+    // retarget the request. Userinfo is allowed: basic-auth in registryUrl is a
+    // supported pattern here (see maskOperatorUrlCredentials above), masked and
+    // stripped from messages rather than refused.
+    assertPlainUrlBase('registryUrl', registryUrl, 'allow');
+    const parsed = new URL(registryUrl);
     // #330: authorize registryUrl's OWN host, matching what the mirror source does
     // to mirrorBaseUrl. Previously this guard was applied only to the download_url
     // the registry hands back, which cannot cover the two requests made BEFORE any
@@ -250,7 +237,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
                 break;
             }
             case "mirror": {
-                const mirrorBaseUrl = tasks.getInput("mirrorBaseUrl", true)!;
+                const mirrorBaseUrl = assertPlainUrlBase('mirrorBaseUrl', tasks.getInput("mirrorBaseUrl", true)!, 'allow');
                 ({ zipPath, verified } = await downloadZipFromMirror(version, mirrorBaseUrl));
                 tasks.setVariable('packerDownloadedFrom', `mirror:${redactUrlUserInfo(mirrorBaseUrl)}`);
                 break;
@@ -833,7 +820,7 @@ async function downloadVerifiedZipForReverify(downloadSource: string, version: s
         case "registry":
             return (await downloadZipFromRegistry(version, await getValidatedRegistryUrl(), getValidatedMirrorName())).zipPath;
         case "mirror":
-            return (await downloadZipFromMirror(version, tasks.getInput("mirrorBaseUrl", true)!)).zipPath;
+            return (await downloadZipFromMirror(version, assertPlainUrlBase('mirrorBaseUrl', tasks.getInput("mirrorBaseUrl", true)!, 'allow'))).zipPath;
         default: // "hashicorp"
             return (await downloadZipFromHashiCorp(version)).zipPath;
     }
