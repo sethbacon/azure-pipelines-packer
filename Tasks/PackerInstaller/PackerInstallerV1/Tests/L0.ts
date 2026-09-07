@@ -23,6 +23,9 @@ import './GpgKeyExpiryL0';
 // This extension's half of azure-pipelines-terraform#879: downloadToFile was the
 // one network op in this module its siblings' withRetry did not cover.
 import './NetworkRetryClassL0';
+// End-to-end coverage for index.ts's SIGTERM/SIGINT/uncaughtException/
+// unhandledRejection registration (azure-pipelines-terraform#1113, suite-scope residual).
+import './SignalHandlerL0';
 
 describe('PackerInstaller Test Suite', function () {
 
