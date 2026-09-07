@@ -6,7 +6,7 @@ import { isWithinWorkingDirectory } from './path-containment';
 import { sanitizeOutputVariableValue, setBuildOutputs } from './output-variables';
 import { applyPassthroughEnvironmentVariables } from './environment-variable-policy';
 import { getSecureVarFileArgs } from './secure-file-loader';
-import { EnvironmentVariableHelper, generateIdToken, getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, generateIdToken, getBoolInputDefaultTrue, readSecretInput, readUrlInput } from '@4cloudguru/pipeline-task-ado';
 import tasks = require('azure-pipelines-task-lib/task');
 import path = require('path');
 import fs = require('fs');
@@ -216,7 +216,7 @@ export abstract class BasePackerCommandHandler {
             }
         }
 
-        const packerVariables = tasks.getInput("packerVariables", false);
+        const packerVariables = readUrlInput("packerVariables", false);
         if (packerVariables) {
             for (const line of packerVariables.split('\n')) {
                 const trimmed = line.trim();
@@ -229,7 +229,7 @@ export abstract class BasePackerCommandHandler {
     }
 
     protected applyCommandOptions(tool: ToolRunner): void {
-        const commandOptions = tasks.getInput("commandOptions");
+        const commandOptions = readUrlInput("commandOptions");
         if (commandOptions) tool.line(commandOptions);
     }
 
@@ -428,7 +428,7 @@ export abstract class BasePackerCommandHandler {
     private resolveGithubToken(): string | undefined {
         const connection = tasks.getInput("githubServiceConnection", false);
         if (!connection) {
-            return tasks.getInput("githubToken", false) || undefined;
+            return readSecretInput("githubToken", false) || undefined;
         }
         // @credential-exempt: the fail-closed check is on the DISJUNCTION of the two
         // reads, not on either one. Each spelling is legitimately optional -- a PAT
@@ -693,7 +693,7 @@ export abstract class BasePackerCommandHandler {
         const tool = this.packerToolHandler.createToolRunner(command);
 
         if (subCommand === 'install' || subCommand === 'remove') {
-            const source = tasks.getInput("pluginSource", true)!;
+            const source = readUrlInput("pluginSource", true);
             tool.arg(source);
             const version = tasks.getInput("pluginVersion", false);
             if (version) tool.arg(version);

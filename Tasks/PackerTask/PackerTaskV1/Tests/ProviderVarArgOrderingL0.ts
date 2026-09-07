@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import tasks = require('azure-pipelines-task-lib/task');
+import ado = require('@4cloudguru/pipeline-task-ado');
 import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
 
 /**
@@ -37,6 +38,8 @@ import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
  * tool.arg(getTemplatePath()) back above handleProvider(), reddens exactly the
  * rows below and nothing else in the suite.
  */
+const adoOrigReadUrlInput = (ado as any).readUrlInput;
+
 describe('provider-contributed -var args precede the template path', function () {
     const originalGetInput = tasks.getInput;
     const originalGetBoolInput = tasks.getBoolInput;
@@ -59,6 +62,8 @@ describe('provider-contributed -var args precede the template path', function ()
     }
 
     beforeEach(() => {
+        // commandOptions is read through the package's readUrlInput (#1105 class sweep), not getInput; delegate to this file's stub.
+        (ado as any).readUrlInput = (name: string, required?: boolean) => (tasks as any).getInput(name, required);
         (tasks as any).getInput = (name: string) => {
             if (name === 'templatePath') return 'template.pkr.hcl';
             if (name === 'customCommand') return 'inspect';
@@ -71,6 +76,7 @@ describe('provider-contributed -var args precede the template path', function ()
     });
 
     afterEach(() => {
+        (ado as any).readUrlInput = adoOrigReadUrlInput;
         (tasks as any).getInput = originalGetInput;
         (tasks as any).getBoolInput = originalGetBoolInput;
         (tasks as any).getVariable = originalGetVariable;

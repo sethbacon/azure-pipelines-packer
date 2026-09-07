@@ -1,5 +1,5 @@
 import tasks = require('azure-pipelines-task-lib/task');
-import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, readUrlInput } from '@4cloudguru/pipeline-task-ado';
 
 /**
  * The `environmentVariables` passthrough policy: which operator-supplied names
@@ -86,7 +86,7 @@ const IDENTITY_SELECTING_ENV_PATTERNS = [
 
 /** Sets any user-provided passthrough environment variables (tracked for cleanup). */
 export function applyPassthroughEnvironmentVariables(): void {
-    const env = tasks.getInput("environmentVariables", false);
+    const env = readUrlInput("environmentVariables", false);
     if (!env) return;
     for (const line of env.split('\n')) {
         const trimmed = line.trim();

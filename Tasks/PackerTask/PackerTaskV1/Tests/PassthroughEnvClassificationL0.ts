@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
 import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
+import ado = require('@4cloudguru/pipeline-task-ado');
 
 /**
  * CLASS TEST — how a passthrough `environmentVariables` entry is classified
@@ -82,6 +83,11 @@ describe('passthrough environmentVariables classification (class test #187/#207)
     const origWarning = t.warning;
     const origSetVariable = t.setVariable;
     const origSetSecret = t.setSecret;
+    // environmentVariables is a multiLine input that can carry a URL with userinfo
+    // (HTTPS_PROXY=https://u:t@...), so the handler reads it through the package's
+    // readUrlInput (#1105 class sweep) instead of getInput, which debug-logs it.
+    // Delegate to this file's getInput stub so each row keeps feeding its entry once.
+    const origReadUrlInput = (ado as any).readUrlInput;
 
     let warnings: string[] = [];
     let maskedValues: string[] = [];
@@ -92,6 +98,7 @@ describe('passthrough environmentVariables classification (class test #187/#207)
         t.warning = (m: string) => warnings.push(m);
         t.setVariable = () => { /* EnvironmentVariableHelper also mirrors to a task variable */ };
         t.setSecret = (v: string) => maskedValues.push(v);
+        (ado as any).readUrlInput = (name: string) => t.getInput(name);
     });
 
     afterEach(() => {
@@ -99,6 +106,7 @@ describe('passthrough environmentVariables classification (class test #187/#207)
         t.warning = origWarning;
         t.setVariable = origSetVariable;
         t.setSecret = origSetSecret;
+        (ado as any).readUrlInput = origReadUrlInput;
         EnvironmentVariableHelper.clearTrackedVariables();
     });
 

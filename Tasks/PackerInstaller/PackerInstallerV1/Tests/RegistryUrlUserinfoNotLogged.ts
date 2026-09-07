@@ -15,6 +15,7 @@ tr.setInput('downloadSource', 'registry');
 // never reaches a log-visible line.
 tr.setInput('registryUrl', 'https://svc:PAT-s3cr3t-value@registry.example.com');
 tr.setInput('registryMirrorName', 'packer');
+tr.setInput('registryAllowedHosts', 'registry.example.com');
 
 tr.registerMock('os', {
     type: () => 'Linux',
@@ -22,8 +23,8 @@ tr.registerMock('os', {
 });
 
 tr.registerMock('./http-client', {
-    fetchJson: async (url: string) => { throw new Error('Should not fetch with a query-carrying registryUrl: ' + url); },
-    fetchText: async (url: string) => { throw new Error('Should not fetch with a query-carrying registryUrl: ' + url); }
+    fetchJson: async (url: string) => { throw new Error('client mock: the run stops here (URL deliberately not echoed)'); },
+    fetchText: async (url: string) => { throw new Error('client mock: the run stops here (URL deliberately not echoed)'); }
 });
 
 tr.registerMock('azure-pipelines-tool-lib/tool', {
