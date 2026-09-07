@@ -77,6 +77,8 @@ azure-pipelines-packer/
 │   │                                         #     (entry point tested + measured, every declared
 │   │                                         #      execution handler exercised, Minor-bump layers,
 │   │                                         #      Marketplace publish retry + token off argv)
+│   ├── check-shared-module-pins.js          # CI: both tasks pin and resolve ONE version of each
+│   │                                         #     @4cloudguru shared package (terraform #1108 class)
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
 │   ├── test-*.js                            # CI self-tests for each of the guards above
