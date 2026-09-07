@@ -39,7 +39,6 @@
   "devDependencies": {
     "@types/mocha": "^10.0.0",
     "@types/node": "^24",
-    "@types/uuid": "^11.0.0",
     "eslint": "^10.9.1",
     "mocha": "^11.8.0",
     "nyc": "^18.0.0",
