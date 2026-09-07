@@ -162,6 +162,7 @@
         "HashiCorpDownloadHostIsPrivate": "HashiCorp download host %s is private or link-local and was rejected.",
         "HashiCorpDownloadHostNotAllowed": "HashiCorp download host %s is not allowed (%s).",
         "InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
+        "RegistryUrlHasQueryOrFragment": "registryUrl '%s' carries a query string or fragment, which would silently retarget the API path this task appends onto it (e.g. a base ending in '?x=' puts the intended path inside the query string instead of the URL path). Provide a bare https:// origin/path with no '?' or '#'.",
         "MirrorDownloadHostIsPrivate": "Mirror download host %s is private or link-local and was rejected. Configure mirrorAllowedHosts to explicitly allow a trusted private mirror.",
         "MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
         "RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",

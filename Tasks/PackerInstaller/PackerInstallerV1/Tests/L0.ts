@@ -157,6 +157,26 @@ describe('PackerInstaller Test Suite', function () {
     expectFailure('RegistryEmptySha256Rejected');
     expectFailure('RegistryInsecureDownloadUrlReject');
     expectFailure('RegistryUrlInvalidReject');   // #139: insecure/malformed registryUrl input rejected before any fetch
+    // azure-pipelines-terraform#1110 finding 2, suite-scope residual: every consumer
+    // concatenates a fixed API path onto registryUrl, so a query string or a
+    // non-empty fragment in the base silently retargets the request. Asserted on
+    // the specific rejection message, not just tr.failed -- the fixtures also mock
+    // fetchJson to throw as a backstop, so a bare failure would pass even with the
+    // guard removed.
+    for (const [file, what] of [['RegistryUrlQueryReject', "a '?x=' query"], ['RegistryUrlFragmentReject', "a non-empty '#frag'"]] as const) {
+        it(`${file} -- ${what} in registryUrl is refused before any fetch, by the query/fragment guard itself`, async () => {
+            const tr = new ttm.MockTestRunner(path.join(__dirname, `${file}.js`));
+            await tr.runAsync();
+            runValidations(() => {
+                assert.ok(tr.failed, 'task should have failed');
+                const issues = tr.errorIssues.join('\n');
+                assert.ok(
+                    issues.includes('loc_mock_RegistryUrlHasQueryOrFragment'),
+                    'the refusal must come from the query/fragment guard, not the fetch backstop. errors: ' + issues,
+                );
+            }, tr);
+        });
+    }
     expectFailure('CacheHitHashMismatchFail');   // #136: cache-hit re-verification catches local tampering/corruption
     expectFailure('MirrorMissingChecksumFail');
     expectFailure('MirrorChecksumCapitalTrueFail');  // #331: 'True' from unquoted YAML must keep verification ON
