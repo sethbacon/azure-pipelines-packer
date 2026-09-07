@@ -92,6 +92,10 @@ jobs:
           node-version: "24"
       - name: Validate shared installer modules carry a provenance header
         run: node scripts/check-shared-modules.js
+      - name: Shared-module pins in lockstep (#1108 class signature)
+        run: node scripts/check-shared-module-pins.js
+      - name: Self-test check-shared-module-pins.js
+        run: node scripts/test-check-shared-module-pins.js
       - name: Validate egress authorization (SSRF class signature)
         run: node scripts/check-egress-authorization.js
       - name: Validate enforced disciplines (documented-but-unenforced class signature)
