@@ -256,6 +256,21 @@ describe('PackerTask Test Suite', function () {
     expectFailure('VariableFilesSymlinkReject');                // #339
     expectSuccess('ConsoleExpressionSuccess');                 // #111
     expectSuccess('VsphereServerUserinfoStripped');            // #110
+    // #1105 class row (credential-capable input read through task-lib's logging
+    // readers): getEndpointUrl() debug-logs the whole connection URL, userinfo
+    // included, at the moment of the read; readEndpointUrl registers the
+    // userinfo first and logs it redacted. Same fixture as the #110 row above.
+    it('VsphereServerUserinfoStripped: the connection URL credential never reaches a log-visible line (#1105)', async () => {
+        const tp = path.join(__dirname, 'VsphereServerUserinfoStripped.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const visible = (tr.stdout + '\n' + tr.stderr + '\n' + tr.errorIssues.join('\n')).split('\n').filter((l) => !l.includes('task.setsecret'));
+            assert.ok(!visible.some((l) => l.includes('s3cr3t')), 'the connection URL credential must not appear in any log-visible line. output: ' + visible.join('\n'));
+            assert.ok(tr.stdout.includes('##vso[task.setsecret]s3cr3t'), 'the userinfo password must be registered with the masker');
+        }, tr);
+    });
     expectFailure('VsphereServerInvalidCharsetReject');        // #110
     expectFailure('EnvironmentVariablesIdentityReject');        // #187
     expectFailure('PluginsSubCommandInjectionReject');          // #339: pickList is UI-only
