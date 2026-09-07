@@ -90,7 +90,11 @@ const SOURCE_SITES: SourceSite[] = [
         mechanism: 'M5',
         site: 'PackerInstallerV1/src/packer-installer.ts:getValidatedRegistryUrl (operator userinfo)',
         file: path.join(INSTALLER_SRC, 'packer-installer.ts'),
-        guard: /function getValidatedRegistryUrl\(\): Promise<string> \{[\s\S]{0,900}?maskOperatorUrlCredentials\(registryUrl\);[\s\S]{0,900}?tasks\.loc\("InsecureUrlRejected", redactUrlUserInfo\(registryUrl\)\)/,
+        // The shape check is now the shared assertPlainUrlBase (azure-pipelines-terraform#1110
+        // class fix), whose message shows only the parsed origin and path -- it cannot echo
+        // userinfo by construction -- so the guard is: mask first, then that call. The defect
+        // shape (a raw registryUrl in a loc'd message) is unchanged.
+        guard: /function getValidatedRegistryUrl\(\): Promise<string> \{[\s\S]{0,900}?maskOperatorUrlCredentials\(registryUrl\);[\s\S]{0,1200}?assertPlainUrlBase\('registryUrl', registryUrl, 'allow'\);/,
         defect: /tasks\.loc\("InsecureUrlRejected", registryUrl\)/,
     },
     {

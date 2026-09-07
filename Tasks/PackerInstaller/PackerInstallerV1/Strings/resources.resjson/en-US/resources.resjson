@@ -32,7 +32,6 @@
     "loc.messages.HashiCorpDownloadHostIsPrivate": "HashiCorp download host %s is private or link-local and was rejected.",
     "loc.messages.HashiCorpDownloadHostNotAllowed": "HashiCorp download host %s is not allowed (%s).",
     "loc.messages.InsecureUrlRejected": "Insecure URL rejected: %s. Only HTTPS URLs are allowed.",
-    "loc.messages.RegistryUrlHasQueryOrFragment": "registryUrl '%s' carries a query string or fragment, which would silently retarget the API path this task appends onto it (e.g. a base ending in '?x=' puts the intended path inside the query string instead of the URL path). Provide a bare https:// origin/path with no '?' or '#'.",
     "loc.messages.MirrorDownloadHostIsPrivate": "Mirror download host %s is private or link-local and was rejected. Configure mirrorAllowedHosts to explicitly allow a trusted private mirror.",
     "loc.messages.MirrorDownloadHostNotAllowed": "Mirror download host %s is not in mirrorAllowedHosts (%s).",
     "loc.messages.RegistryDownloadHostIsPrivate": "Registry download host %s is private or link-local and was rejected. Configure registryAllowedHosts to explicitly allow a trusted private storage host.",
