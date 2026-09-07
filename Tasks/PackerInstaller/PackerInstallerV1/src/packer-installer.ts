@@ -167,6 +167,20 @@ async function getValidatedRegistryUrl(): Promise<string> {
     if (parsed.protocol !== 'https:') {
         throw new Error(tasks.loc("InsecureUrlRejected", redactUrlUserInfo(registryUrl)));
     }
+    // Every consumer of this URL concatenates a fixed API path onto it
+    // (`${registryUrl}/terraform/binaries/...`) rather than resolving through the
+    // URL parser, so a query string or fragment in the base silently retargets
+    // the request: 'https://registry.example/?x=' lands the intended path inside
+    // the query string, and a non-empty fragment drops everything after '#'
+    // client-side. Fail closed here, once, rather than in each concatenation
+    // site (suite-scope residual of azure-pipelines-terraform#1110 finding 2,
+    // which fixed the same shape in TerraformModulePublishV1). Userinfo is NOT
+    // rejected: unlike that task, basic-auth userinfo in registryUrl is a
+    // supported pattern here (see maskOperatorUrlCredentials above), so it is
+    // masked and stripped from messages rather than refused.
+    if (parsed.search || parsed.hash) {
+        throw new Error(tasks.loc("RegistryUrlHasQueryOrFragment", redactUrlUserInfo(registryUrl)));
+    }
     // #330: authorize registryUrl's OWN host, matching what the mirror source does
     // to mirrorBaseUrl. Previously this guard was applied only to the download_url
     // the registry hands back, which cannot cover the two requests made BEFORE any
