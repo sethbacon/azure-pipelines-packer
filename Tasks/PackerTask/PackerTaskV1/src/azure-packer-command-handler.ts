@@ -26,6 +26,10 @@ const ARM_IDENTITY_SELECTORS = {
     oidcRequestUrl: 'PKR_VAR_arm_oidc_request_url',
     oidcRequestToken: 'PKR_VAR_arm_oidc_request_token',
     cliAuth: 'PKR_VAR_arm_use_azure_cli_auth',
+    // packer-plugin-azure's use_interactive_auth opens a device-code login that
+    // outranks the client_jwt/client_secret this task injects, exactly like
+    // use_azure_cli_auth (azure-pipelines-terraform#1107 finding 1, packer sibling).
+    interactiveAuth: 'PKR_VAR_arm_use_interactive_auth',
 } as const;
 
 /**
@@ -41,6 +45,7 @@ const ARM_WHOLESALE_CLEAR = [
     ARM_IDENTITY_SELECTORS.oidcRequestUrl,
     ARM_IDENTITY_SELECTORS.oidcRequestToken,
     ARM_IDENTITY_SELECTORS.cliAuth,
+    ARM_IDENTITY_SELECTORS.interactiveAuth,
 ] as const;
 
 /**
