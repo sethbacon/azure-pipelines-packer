@@ -60,6 +60,42 @@ manual step**: it is applied and enforced in three layers (#192), matching the s
 
 "Packer" is a HashiCorp trademark. The name "Pipeline Tasks for Packer" is nominative fair use describing compatibility. Never use "Packer" as a standalone product name. The `LICENSE` retains the upstream Microsoft copyright; the README notes the lineage.
 
+## Branch Protection: Required status check provenance
+
+`main`'s branch protection requires a status check context named `release-guard/link-regrade`,
+whose producer could not be read off `release-pr-guard.yml` by eye (sethbacon/azure-pipelines-terraform#1120)
+— this section is the short doc this repository was missing for it, not a full restatement of every
+required check.
+
+`release-guard/link-regrade`'s `<suite>/<run>` shape looks like a GitHub App check suite. It is not:
+neither of `release-pr-guard.yml`'s two jobs is named `link-regrade`, and the job whose *key* is
+`link-regrade` doesn't run on `pull_request` at all — the provenance below was read from the shared
+action's source, not guessed from this repository's own workflow file.
+
+| Field | Value |
+| --- | --- |
+| Workflow file | `.github/workflows/release-pr-guard.yml` |
+| Jobs that post it | `closing-keywords` (display name `Release PR closes only what it completes`) on every `pull_request` (`opened`, `edited`, `synchronize`, `reopened`); `link-regrade` (display name `Re-grade open release PRs against the live link graph`) on `schedule (*/5 * * * *)` and `workflow_dispatch` |
+| Action | `4cloudguru/shared-workflows/.github/actions/release-pr-closing-keywords@3aae0966a70daa50bcfe741ef07e20e86c814af4` (v1.20.2) |
+| How it posts | Neither job overrides the action's `status-context` input, so both inherit its default — literally `release-guard/link-regrade` in the action's `action.yml` — and post it as a **commit status** (`POST /repos/<repo>/statuses/<head-sha>` with an explicit `context=` field), not a check run. That is why it matches neither job's `name:`: a commit-status context is chosen by the caller at call time, independent of the job that calls it. The two jobs sharing one context is deliberate — it lets the scheduled re-grade overwrite the pull-request-time verdict on the same SHA. |
+| Token | this workflow's own `${{ secrets.GITHUB_TOKEN }}`, scoped `statuses: write` in both jobs' `permissions:` block — not a GitHub App |
+| Availability consequence | If `4cloudguru/shared-workflows` removes or breaks `release-pr-closing-keywords`, or this workflow file is removed or renamed, the context stops posting entirely and `main` blocks every pull request here — and, because the workflow is byte-identical, in `azure-pipelines-terraform` and `azure-pipelines-release-docs` too. |
+| Preserve on any protection PUT | Yes. `PUT /repos/<owner>/<repo>/branches/main/protection` replaces `required_status_checks.contexts` wholesale, so a payload assembled without reading this table silently drops the context rather than erroring. |
+
+Machine-checked by `scripts/check-docs-claims.js` (CI's `Check Shared Module Provenance` job runs
+it) — a workflow named here that cannot actually post the context fails the build:
+
+<!-- required-checks:begin -->
+| Context | Workflow |
+| --- | --- |
+| `release-guard/link-regrade` | `.github/workflows/release-pr-guard.yml` |
+<!-- required-checks:end -->
+
+**Should it remain required? Yes.** It is the only re-grade of the closing-keyword class after the
+PR's last push — an issue linked through the Development panel fires no webhook `connected` event,
+so the scheduled job is the only thing that ever looks again before merge. Removing it from required
+checks would leave that window unguarded rather than shrink it.
+
 ## Repository Structure
 
 ```txt
