@@ -1,7 +1,7 @@
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
-import { EnvironmentVariableHelper } from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, readEndpointUrl, redactUrlCredentialsIn } from '@4cloudguru/pipeline-task-ado';
 import { assertIdentityValue, neutralizeEnvironmentVariables, requireSecretField, requireServiceConnection } from './credential-guards';
 
 /**
@@ -38,13 +38,13 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         // empty URL, so the `|| ''` tail this used to carry was unreachable dead
         // code that only made the fallback look real (#194). The `!` documents
         // that runtime guarantee, matching the password read below.
-        const endpointUrl = tasks.getEndpointUrl(serviceName, false)!;
+        const endpointUrl = readEndpointUrl(serviceName);
         let server: string;
         try {
             const withScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(endpointUrl) ? endpointUrl : `https://${endpointUrl}`;
             server = new URL(withScheme).host;
         } catch {
-            throw new Error(`vSphere service connection '${serviceName}' has an invalid server URL: '${endpointUrl}'.`);
+            throw new Error(`vSphere service connection '${serviceName}' has an invalid server URL: '${redactUrlCredentialsIn(endpointUrl)}'.`);
         }
         if (!PackerCommandHandlerVSphere.HOST_PATTERN.test(server)) {
             throw new Error(`vSphere service connection '${serviceName}' server '${server}' contains characters outside the allowed hostname[:port] charset.`);

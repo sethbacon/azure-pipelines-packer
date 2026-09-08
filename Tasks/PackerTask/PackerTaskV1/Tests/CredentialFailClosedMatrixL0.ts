@@ -45,6 +45,9 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
         warning: t.warning,
         setSecret: t.setSecret,
         getInput: t.getInput,
+        readUrlInput: (idTokenGeneratorModule as any).readUrlInput,
+        readSecretInput: (idTokenGeneratorModule as any).readSecretInput,
+        readEndpointUrl: (idTokenGeneratorModule as any).readEndpointUrl,
         getBoolInput: t.getBoolInput,
         getVariable: t.getVariable,
         getEndpointAuthorizationParameter: t.getEndpointAuthorizationParameter,
@@ -88,6 +91,14 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             if (required && !v) throw new Error(`Input required: ${name}`);
             return v;
         };
+        // ociWifIdentityDomainUrl is read through the package's silent reader
+        // (azure-pipelines-terraform#1105); route it through the same stub so the
+        // matrix's inputs reach it.
+        (idTokenGeneratorModule as any).readUrlInput = (name: string, required?: boolean) => t.getInput(name, required);
+        (idTokenGeneratorModule as any).readSecretInput = (name: string, required?: boolean) => t.getInput(name, required);
+        // the vSphere handler reads the connection URL through readEndpointUrl (#1105 class
+        // sweep) -- delegate to this file's getEndpointUrl stub, optional flag and all.
+        (idTokenGeneratorModule as any).readEndpointUrl = (id: string, optional?: boolean) => t.getEndpointUrl(id, optional);
         t.getBoolInput = (name: string) => fixture.bools?.[name] ?? false;
         t.getVariable = (name: string) => fixture.vars?.[name];
         t.getEndpointAuthorizationParameter = (_id: string, key: string, optional: boolean) => {
@@ -161,6 +172,9 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             getEndpointDataParameter: orig.getEndpointDataParameter,
             getEndpointUrl: orig.getEndpointUrl,
         });
+        (idTokenGeneratorModule as any).readUrlInput = orig.readUrlInput;
+        (idTokenGeneratorModule as any).readSecretInput = orig.readSecretInput;
+        (idTokenGeneratorModule as any).readEndpointUrl = orig.readEndpointUrl;
         itg.generateIdToken = orig.generateIdToken;
         itg.exchangeOidcForUpst = orig.exchangeOidcForUpst;
         EnvironmentVariableHelper.clearTrackedVariables();

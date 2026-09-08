@@ -20,7 +20,7 @@ import {
     redactUrlUserInfo,
     scrubSecretsFromMessage,
 } from '@4cloudguru/pipeline-task-core';
-import { getBoolInputDefaultTrue } from '@4cloudguru/pipeline-task-ado';
+import { getBoolInputDefaultTrue, readUrlInput } from '@4cloudguru/pipeline-task-ado';
 
 // The package takes the debug sink as a parameter rather than importing the ADO
 // task lib itself; passing it keeps the discard visible in the build log.
@@ -153,7 +153,7 @@ const HASHICORP_EGRESS_MESSAGES: EgressHostMessages = {
  * double slash.
  */
 async function getValidatedRegistryUrl(): Promise<string> {
-    const registryUrl = tasks.getInput("registryUrl", true)!;
+    const registryUrl = readUrlInput("registryUrl", true);
     // registryUrl may embed basic-auth userinfo (https://user:password@host/...,
     // a real pattern for internal artifact proxies). Mask it BEFORE the first
     // emission below, and strip it structurally from every message.
@@ -237,7 +237,7 @@ export async function downloadPacker(inputVersion: string): Promise<string> {
                 break;
             }
             case "mirror": {
-                const mirrorBaseUrl = assertPlainUrlBase('mirrorBaseUrl', tasks.getInput("mirrorBaseUrl", true)!, 'allow');
+                const mirrorBaseUrl = assertPlainUrlBase('mirrorBaseUrl', readUrlInput("mirrorBaseUrl", true), 'allow');
                 ({ zipPath, verified } = await downloadZipFromMirror(version, mirrorBaseUrl));
                 tasks.setVariable('packerDownloadedFrom', `mirror:${redactUrlUserInfo(mirrorBaseUrl)}`);
                 break;
@@ -820,7 +820,7 @@ async function downloadVerifiedZipForReverify(downloadSource: string, version: s
         case "registry":
             return (await downloadZipFromRegistry(version, await getValidatedRegistryUrl(), getValidatedMirrorName())).zipPath;
         case "mirror":
-            return (await downloadZipFromMirror(version, assertPlainUrlBase('mirrorBaseUrl', tasks.getInput("mirrorBaseUrl", true)!, 'allow'))).zipPath;
+            return (await downloadZipFromMirror(version, assertPlainUrlBase('mirrorBaseUrl', readUrlInput("mirrorBaseUrl", true), 'allow'))).zipPath;
         default: // "hashicorp"
             return (await downloadZipFromHashiCorp(version)).zipPath;
     }

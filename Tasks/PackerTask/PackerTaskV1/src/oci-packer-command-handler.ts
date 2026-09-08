@@ -1,13 +1,7 @@
 import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
-import {
-    EnvironmentVariableHelper,
-    exchangeOidcForUpst,
-    generateIdToken,
-    maskSecretLines,
-    validateIdentityDomainUrl,
-} from '@4cloudguru/pipeline-task-ado';
+import { EnvironmentVariableHelper, exchangeOidcForUpst, generateIdToken, maskSecretLines, validateIdentityDomainUrl, readUrlInput } from '@4cloudguru/pipeline-task-ado';
 import { normalizePem } from '@4cloudguru/pipeline-task-core';
 import crypto = require('crypto');
 import os = require('os');
@@ -195,7 +189,7 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         // config error must be caught before step 1 requests one -- not
         // discovered afterwards with a usable token already in hand.
         const identityDomainUrl = validateIdentityDomainUrl(
-            assertIdentityValue(tasks.getInput("ociWifIdentityDomainUrl", true), "Input 'ociWifIdentityDomainUrl'")
+            assertIdentityValue(readUrlInput("ociWifIdentityDomainUrl", true), "Input 'ociWifIdentityDomainUrl'")
         ).href;
         const clientId = assertIdentityValue(tasks.getInput("ociWifClientId", true), "Input 'ociWifClientId'");
         const tenancyOcid = assertIdentityValue(tasks.getInput("ociWifTenancyOcid", true), "Input 'ociWifTenancyOcid'", TENANCY_OCID_PATTERN, 'tenancy OCID');

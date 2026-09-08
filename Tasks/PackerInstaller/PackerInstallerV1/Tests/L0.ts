@@ -166,6 +166,20 @@ describe('PackerInstaller Test Suite', function () {
     // the specific rejection message, not just tr.failed -- the fixtures also mock
     // fetchJson to throw as a backstop, so a bare failure would pass even with the
     // guard removed.
+    // azure-pipelines-terraform#1105 finding 1 (class): a credential in a URL
+    // input must never reach a log-visible line -- including task-lib's own
+    // `<input>=<value>` debug line, which getInput() writes raw at read time.
+    it('RegistryUrlUserinfoNotLogged -- a credential in registryUrl is registered before any line that could show it', async () => {
+        const tr = new ttm.MockTestRunner(path.join(__dirname, 'RegistryUrlUserinfoNotLogged.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            const visible = (tr.stdout + '\n' + tr.stderr + '\n' + tr.errorIssues.join('\n')).split('\n').filter((l) => !l.includes('task.setsecret'));
+            assert.ok(!visible.some((l) => l.includes('PAT-s3cr3t-value')), 'the credential must not appear in any log-visible line. output: ' + visible.join('\n'));
+            const debugLine = visible.find((l) => l.includes('registryUrl='));
+            assert.ok(debugLine && !debugLine.includes('svc:'), 'the registryUrl= debug line must be written in redacted form. line: ' + debugLine);
+        }, tr);
+    });
+
     for (const [file, what] of [['RegistryUrlQueryReject', "a '?x=' query"], ['RegistryUrlFragmentReject', "a non-empty '#frag'"]] as const) {
         it(`${file} -- ${what} in registryUrl is refused before any fetch, by the query/fragment guard itself`, async () => {
             const tr = new ttm.MockTestRunner(path.join(__dirname, `${file}.js`));

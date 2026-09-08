@@ -134,6 +134,20 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('Hcl2UpgradeSuccess');
     expectSuccess('InspectSuccess');
     expectSuccess('CustomSuccess');
+    it('CustomCommandUserinfoNotLogged: a credential in customCommand is registered before any line that could show it, and the customCommand= debug line is redacted (#1105)', async () => {
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(path.join(__dirname, 'CustomCommandUserinfoNotLogged.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const all = (tr.stdout + '\n' + tr.stderr).split('\n');
+            const registered = all.findIndex((l) => l.includes('task.setsecret') && l.includes('CUSTOM-TOKEN-xyz'));
+            assert.ok(registered >= 0, 'the userinfo password must be registered with the masker');
+            const firstVisible = all.findIndex((l) => !l.includes('task.setsecret') && l.includes('CUSTOM-TOKEN-xyz'));
+            assert.ok(firstVisible < 0 || firstVisible > registered, `the credential must be registered before the first line that carries it (registered at ${registered}, first visible at ${firstVisible}): ${all[firstVisible]}`);
+            const debugLine = all.find((l) => l.includes('customCommand='));
+            assert.ok(debugLine && !debugLine.includes('CUSTOM-TOKEN-xyz'), 'the customCommand= debug line must be written redacted. line: ' + debugLine);
+        }, tr);
+    });
 
     // --- Failure mapping ---
     expectFailure('FmtFail');
@@ -256,6 +270,21 @@ describe('PackerTask Test Suite', function () {
     expectFailure('VariableFilesSymlinkReject');                // #339
     expectSuccess('ConsoleExpressionSuccess');                 // #111
     expectSuccess('VsphereServerUserinfoStripped');            // #110
+    // #1105 class row (credential-capable input read through task-lib's logging
+    // readers): getEndpointUrl() debug-logs the whole connection URL, userinfo
+    // included, at the moment of the read; readEndpointUrl registers the
+    // userinfo first and logs it redacted. Same fixture as the #110 row above.
+    it('VsphereServerUserinfoStripped: the connection URL credential never reaches a log-visible line (#1105)', async () => {
+        const tp = path.join(__dirname, 'VsphereServerUserinfoStripped.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const visible = (tr.stdout + '\n' + tr.stderr + '\n' + tr.errorIssues.join('\n')).split('\n').filter((l) => !l.includes('task.setsecret'));
+            assert.ok(!visible.some((l) => l.includes('s3cr3t')), 'the connection URL credential must not appear in any log-visible line. output: ' + visible.join('\n'));
+            assert.ok(tr.stdout.includes('##vso[task.setsecret]s3cr3t'), 'the userinfo password must be registered with the masker');
+        }, tr);
+    });
     expectFailure('VsphereServerInvalidCharsetReject');        // #110
     expectFailure('EnvironmentVariablesIdentityReject');        // #187
     expectFailure('PluginsSubCommandInjectionReject');          // #339: pickList is UI-only

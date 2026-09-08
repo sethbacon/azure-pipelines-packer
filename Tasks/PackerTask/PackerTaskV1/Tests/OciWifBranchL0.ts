@@ -38,6 +38,7 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
         debug: tasks.debug,
         generateIdToken: ado.generateIdToken,
         exchangeOidcForUpst: ado.exchangeOidcForUpst,
+        readUrlInput: ado.readUrlInput,
     };
 
     const INPUTS: Record<string, string> = {
@@ -65,6 +66,9 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
             setSecretCalls.push(v);
         };
         t.getInput = (name: string) => inputs[name];
+        // ociWifIdentityDomainUrl is read through the package's silent reader
+        // (azure-pipelines-terraform#1105), which bypasses getInput.
+        ado.readUrlInput = (name: string) => inputs[name];
         t.getVariable = () => undefined;
         ado.generateIdToken = async () => 'mock-oidc-jwt';
         ado.exchangeOidcForUpst = async () => 'mock-upst-token';
@@ -80,6 +84,7 @@ describe('OCI Workload Identity Federation branch (#344)', function () {
         });
         ado.generateIdToken = orig.generateIdToken;
         ado.exchangeOidcForUpst = orig.exchangeOidcForUpst;
+        ado.readUrlInput = orig.readUrlInput;
         pipelineTaskAdo.EnvironmentVariableHelper.clearTrackedVariables();
         for (const k of Object.keys(process.env)) {
             if (k.startsWith('PKR_VAR_oci_') || k.startsWith('OCI_CLI_')) delete process.env[k];

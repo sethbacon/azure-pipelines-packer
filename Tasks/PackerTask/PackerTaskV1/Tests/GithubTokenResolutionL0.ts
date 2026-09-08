@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import tasks = require('azure-pipelines-task-lib/task');
+import ado = require('@4cloudguru/pipeline-task-ado');
 import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
 
 /**
@@ -16,6 +17,8 @@ import { PackerCommandHandlerNone } from '../src/none-packer-command-handler';
  * from "no token configured" and would quietly fall back to an unauthenticated
  * plugin download.
  */
+const adoOrigReadSecretInput = (ado as any).readSecretInput;
+
 describe('GitHub token resolution (#142)', function () {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- monkeypatch the shared task-lib module
     const t = tasks as any;
@@ -26,6 +29,8 @@ describe('GitHub token resolution (#142)', function () {
     let masked: string[];
 
     beforeEach(() => {
+        // githubToken is a password-typed input read through the package's readSecretInput (#1105 class sweep), not getInput; delegate to this file's stub.
+        (ado as any).readSecretInput = (name: string, required?: boolean) => (tasks as any).getInput(name, required);
         inputs = {};
         endpointParams = {};
         masked = [];
@@ -35,6 +40,7 @@ describe('GitHub token resolution (#142)', function () {
     });
 
     afterEach(() => {
+        (ado as any).readSecretInput = adoOrigReadSecretInput;
         t.getInput = orig.getInput;
         t.getEndpointAuthorizationParameter = orig.getEndpointAuthorizationParameter;
         t.setSecret = orig.setSecret;
