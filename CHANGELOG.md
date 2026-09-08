@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.1...v1.6.2) (2026-09-07)
+
+
+### Bug Fixes
+
+* add uncaughtException/unhandledRejection guards to PackerInstallerV1 ([#423](https://github.com/sethbacon/azure-pipelines-packer/issues/423)) ([6de759d](https://github.com/sethbacon/azure-pipelines-packer/commit/6de759dd0d82d0b746caa6bdca9497d425cb4862))
+* guard registryUrl and mirrorBaseUrl with the shared assertPlainUrlBase ([#433](https://github.com/sethbacon/azure-pipelines-packer/issues/433)) ([ebe674b](https://github.com/sethbacon/azure-pipelines-packer/commit/ebe674bea45ea0073fdaaf09dc0d83aae1829ae7))
+* **packer-installer:** make the verification controls fail closed (batch-A class sweep) ([#422](https://github.com/sethbacon/azure-pipelines-packer/issues/422)) ([90e7d18](https://github.com/sethbacon/azure-pipelines-packer/commit/90e7d189a932785298bfb14a4ae0102af72e76c4))
+* reject a registryUrl carrying a query string or fragment ([#424](https://github.com/sethbacon/azure-pipelines-packer/issues/424)) ([967f089](https://github.com/sethbacon/azure-pipelines-packer/commit/967f08971442c43a30f8565c49d38babf53c3e83))
+* **security:** port var-file masker extractor fix and gate the duplication ([#436](https://github.com/sethbacon/azure-pipelines-packer/issues/436)) ([cce22ba](https://github.com/sethbacon/azure-pipelines-packer/commit/cce22ba45a5ad04a2582d909e5f0835557115548))
+
+
+### Documentation
+
+* give THIRD_PARTY_NOTICES.md a per-package 'Bundled into' table the gate can check ([#432](https://github.com/sethbacon/azure-pipelines-packer/issues/432)) ([1c60dda](https://github.com/sethbacon/azure-pipelines-packer/commit/1c60dda199b37a63afdde6397a20bb9653e8a568))
+
 ## [1.6.1](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.0...v1.6.1) (2026-09-04)
 
 
