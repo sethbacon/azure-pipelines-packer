@@ -134,6 +134,20 @@ describe('PackerTask Test Suite', function () {
     expectSuccess('Hcl2UpgradeSuccess');
     expectSuccess('InspectSuccess');
     expectSuccess('CustomSuccess');
+    it('CustomCommandUserinfoNotLogged: a credential in customCommand is registered before any line that could show it, and the customCommand= debug line is redacted (#1105)', async () => {
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(path.join(__dirname, 'CustomCommandUserinfoNotLogged.js'));
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.succeeded, 'task should have succeeded');
+            const all = (tr.stdout + '\n' + tr.stderr).split('\n');
+            const registered = all.findIndex((l) => l.includes('task.setsecret') && l.includes('CUSTOM-TOKEN-xyz'));
+            assert.ok(registered >= 0, 'the userinfo password must be registered with the masker');
+            const firstVisible = all.findIndex((l) => !l.includes('task.setsecret') && l.includes('CUSTOM-TOKEN-xyz'));
+            assert.ok(firstVisible < 0 || firstVisible > registered, `the credential must be registered before the first line that carries it (registered at ${registered}, first visible at ${firstVisible}): ${all[firstVisible]}`);
+            const debugLine = all.find((l) => l.includes('customCommand='));
+            assert.ok(debugLine && !debugLine.includes('CUSTOM-TOKEN-xyz'), 'the customCommand= debug line must be written redacted. line: ' + debugLine);
+        }, tr);
+    });
 
     // --- Failure mapping ---
     expectFailure('FmtFail');
