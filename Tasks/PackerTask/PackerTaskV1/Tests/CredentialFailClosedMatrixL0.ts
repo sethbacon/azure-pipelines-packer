@@ -479,7 +479,7 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             competing: [
                 'PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_tenant_id',
                 'PKR_VAR_arm_client_id', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth',
-                'ARM_METADATA_URL',
+                'PKR_VAR_arm_use_interactive_auth', 'ARM_METADATA_URL',
             ],
         },
         {
@@ -488,11 +488,11 @@ describe('credential fail-closed matrix (handler x auth-branch x required-field)
             // azurerm's OIDC-refresh or az-CLI auth paths outright, outranking the
             // freshly-minted client_jwt this branch injects.
             site: 'azure.WorkloadIdentityFederation.competing-credential-env', handler: 'azure', base: 'azure.WorkloadIdentityFederation',
-            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'ARM_METADATA_URL'],
+            competing: ['PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'PKR_VAR_arm_use_interactive_auth', 'ARM_METADATA_URL'],
         },
         {
             site: 'azure.ServicePrincipal.competing-credential-env', handler: 'azure', base: 'azure.ServicePrincipal',
-            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'ARM_METADATA_URL'],
+            competing: ['PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_client_cert_path', 'PKR_VAR_arm_oidc_request_url', 'PKR_VAR_arm_oidc_request_token', 'PKR_VAR_arm_use_azure_cli_auth', 'PKR_VAR_arm_use_interactive_auth', 'ARM_METADATA_URL'],
         },
         {
             site: 'gcp.static.competing-credential-env', handler: 'gcp', base: 'gcp.static',
