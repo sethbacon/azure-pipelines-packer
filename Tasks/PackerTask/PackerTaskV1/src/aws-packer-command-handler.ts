@@ -68,8 +68,8 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
         tasks.setSecret(secretAccessKey);
 
         neutralizeEnvironmentVariables(AWS_FEDERATED_CREDENTIAL_ENV, "AWS static");
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ACCESS_KEY_ID", accessKeyId);
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_SECRET_ACCESS_KEY", secretAccessKey, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ACCESS_KEY_ID", accessKeyId, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_SECRET_ACCESS_KEY", secretAccessKey, true, true);
 
         // Region: prefer the explicit task input, fall back to the service
         // connection. BOTH are legitimately optional -- `awsRegion` is
@@ -103,8 +103,8 @@ export class PackerCommandHandlerAWS extends BasePackerCommandHandler {
         // silently discard the assertion just written above (#187).
         neutralizeEnvironmentVariables(AWS_STATIC_CREDENTIAL_ENV, "AWS Workload Identity Federation");
 
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ROLE_ARN", assertIdentityValue(tasks.getInput("awsRoleArn", true), "Input 'awsRoleArn'"));
-        EnvironmentVariableHelper.setEnvironmentVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenFilePath);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_ROLE_ARN", assertIdentityValue(tasks.getInput("awsRoleArn", true), "Input 'awsRoleArn'"), false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("AWS_WEB_IDENTITY_TOKEN_FILE", tokenFilePath, false, true);
         EnvironmentVariableHelper.setEnvironmentVariable("AWS_REGION", assertIdentityValue(tasks.getInput("awsRegion", true), "Input 'awsRegion'"));
         EnvironmentVariableHelper.setEnvironmentVariable("AWS_ROLE_SESSION_NAME", resolveRoleSessionName("awsSessionName", "ado-packer"));
     }

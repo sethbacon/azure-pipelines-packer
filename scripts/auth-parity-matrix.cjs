@@ -287,6 +287,40 @@ const GUARD_HELPERS = [
 /** Fields whose VALUE is opaque: presence is the only checkable property. */
 const SECRET_KEY_RE = /(password|secret|privatekey|key$|accesstoken|token|jwt)/i;
 
+/**
+ * Environment variable NAMES a handler sets that carry a credential or an
+ * identity selector for provider authentication (#1029 finding 4 reopen,
+ * packer sibling of the same terraform-ext class).
+ * `EnvironmentVariableHelper.setEnvironmentVariable()` grew a `required`
+ * fourth parameter that throws on an empty value instead of degrading to a
+ * warning, specifically so the fail-closed guarantee does not rest on every
+ * caller remembering (or keeping) an upstream guard -- but the flag is
+ * opt-in, and the 2026-09-05 blind re-audit found that none of the ~74
+ * credential-bearing call sites across both extensions passed it. Every
+ * `setEnvironmentVariable("<name>", ...)` call for one of these names must
+ * pass a literal `true` as its fourth argument, else it is UNGUARDED.
+ *
+ * Deliberately EXCLUDED -- not a credential, so not in this set:
+ *   - PKR_VAR_arm_subscription_id: names the TARGET subscription/resource
+ *     scope, not a credential; already only set inside `if (subscriptionId)`
+ *     after assertIdentityValue.
+ *   - AWS_REGION / PKR_VAR_oci_region: region identifiers, not credentials.
+ *   - AWS_ROLE_SESSION_NAME: a per-run CloudTrail-attribution string, not a
+ *     credential.
+ *   - PKR_VAR_vsphere_insecure_connection / PKR_VAR_oci_access_cfg_file_account:
+ *     fixed literal flags/constants ("true" / "DEFAULT"), never operator or
+ *     connection input.
+ */
+const FAILCLOSED_CREDENTIAL_ENV = new Set([
+    'PKR_VAR_arm_client_id', 'PKR_VAR_arm_client_secret', 'PKR_VAR_arm_client_jwt', 'PKR_VAR_arm_tenant_id',
+    'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_ROLE_ARN', 'AWS_WEB_IDENTITY_TOKEN_FILE',
+    'GOOGLE_APPLICATION_CREDENTIALS',
+    'PKR_VAR_oci_access_cfg_file', 'PKR_VAR_oci_tenancy_ocid', 'PKR_VAR_oci_user_ocid',
+    'PKR_VAR_oci_fingerprint', 'PKR_VAR_oci_key_file',
+    'PKR_VAR_vsphere_server', 'PKR_VAR_vsphere_user', 'PKR_VAR_vsphere_password',
+    'PACKER_GITHUB_API_TOKEN',
+]);
+
 function analyzeHandler(file, root) {
     const raw = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
     const code = stripComments(raw);
@@ -559,6 +593,29 @@ function analyzeHandler(file, root) {
                 ok ? 'empty service connection throws before the OIDC request'
                    : 'empty service connection reaches the OIDC/credential request unchecked',
                 line);
+        }
+    }
+
+    // ---- 6a. FAILCLOSED-SET cells: a credential-bearing setEnvironmentVariable()
+    //          call must pass required:true (4th arg, literal `true`) so the
+    //          helper itself throws on an empty value instead of degrading to a
+    //          warning -- the fix for #1029's reopen ("the fourth parameter
+    //          exists and no caller uses it").
+    {
+        const re = /\bsetEnvironmentVariable\s*\(/g;
+        let m;
+        while ((m = re.exec(code))) {
+            const argText = callArgs(code, m.index + m[0].length - 1);
+            if (argText === null) continue;
+            const args = splitArgs(argText);
+            const name = unquote(args[0] || '');
+            if (!FAILCLOSED_CREDENTIAL_ENV.has(name)) continue;
+            const line = lineOf(starts, m.index);
+            const required = (args[3] || '').trim() === 'true';
+            add(`failclosed:${name}`, required ? 'GUARDED' : 'UNGUARDED',
+                required ? 'passes required:true -- an empty value now throws'
+                         : `credential-bearing name '${name}' set without required:true -- an empty value degrades to a warning (#1029)`,
+                line, undefined, /* strictExempt */ true);
         }
     }
 
