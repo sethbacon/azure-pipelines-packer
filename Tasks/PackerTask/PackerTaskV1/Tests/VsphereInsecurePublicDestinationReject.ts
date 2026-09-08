@@ -8,10 +8,10 @@ const tr: tmrm.TaskMockRunner = new tmrm.TaskMockRunner(tp);
 tr.setInput('provider', 'vsphere');
 tr.setInput('vsphereInsecureConnection', 'true');
 
-// A private IP literal: the destination guard accepts it without any DNS
-// lookup, so this fixture stays offline and deterministic while still
-// exercising the warn-and-set path (azure-pipelines-terraform#588).
-process.env['ENDPOINT_URL_vsphere'] = 'https://10.10.1.5/';
+// A PUBLIC IP literal. Disabling vCenter certificate verification against a
+// public destination is the on-path interception the option's own warning
+// describes, so the task must refuse rather than warn. Decided without DNS.
+process.env['ENDPOINT_URL_vsphere'] = 'https://93.184.216.34/';
 process.env['ENDPOINT_AUTH_PARAMETER_vsphere_USERNAME'] = 'admin@vsphere.local';
 process.env['ENDPOINT_AUTH_PARAMETER_vsphere_PASSWORD'] = 'pw';
 

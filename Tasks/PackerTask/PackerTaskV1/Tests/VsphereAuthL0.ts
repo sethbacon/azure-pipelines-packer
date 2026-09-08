@@ -8,7 +8,12 @@ async function run() {
         const cmd = new PackerAuthorizationCommandInitializer('build', '', 'vsphere');
         await handler.handleProvider(cmd);
 
-        const ok = process.env['PKR_VAR_vsphere_server'] === 'vcenter.example.com'
+        // Two fixtures share this entry: VsphereAuth uses the public name, and the
+        // insecure-connection ones use a private literal, because disabling vCenter
+        // certificate verification is honoured only against a private destination
+        // (azure-pipelines-terraform#588). Accept either spelling of the server.
+        const server = process.env['PKR_VAR_vsphere_server'];
+        const ok = (server === 'vcenter.example.com' || server === '10.10.1.5')
             && process.env['PKR_VAR_vsphere_user'] === 'admin@vsphere.local'
             && process.env['PKR_VAR_vsphere_password'] === 'pw';
         if (ok) {
