@@ -593,7 +593,9 @@ export abstract class BasePackerCommandHandler {
         tool.arg(this.getTemplatePath());
 
         // Non-interactive: feed the expression on stdin so the console evaluates and exits.
-        const expression = tasks.getInput("consoleExpression", false) || '';
+        // Free-form HCL fed to packer console: read through the silent reader so a
+        // credential in it is registered before task-lib's debug line (#1105).
+        const expression = readUrlInput("consoleExpression", false) || '';
         return tool.execAsync(<IExecOptions>{
             cwd: command.workingDirectory,
             input: Buffer.from(expression ? `${expression}\n` : '')
@@ -715,7 +717,8 @@ export abstract class BasePackerCommandHandler {
     }
 
     public async custom(): Promise<number> {
-        const customCommand = tasks.getInput("customCommand", true)!;
+        // A free-form argument string, like commandOptions (#1105 class sweep).
+        const customCommand = readUrlInput("customCommand", true);
         const command = this.createAuthCommand(customCommand);
         const tool = this.packerToolHandler.createToolRunner(command);
 
