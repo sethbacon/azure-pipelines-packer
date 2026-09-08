@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.2...v1.6.3) (2026-09-08)
+
+
+### Bug Fixes
+
+* clear PKR_VAR_arm_use_interactive_auth with the other Azure identity selectors (WIP, packer sibling of azure-pipelines-terraform[#1107](https://github.com/sethbacon/azure-pipelines-packer/issues/1107) finding 1) ([#439](https://github.com/sethbacon/azure-pipelines-packer/issues/439)) ([b76bd3b](https://github.com/sethbacon/azure-pipelines-packer/commit/b76bd3be2eb7c64b8051f9dcddd6be9173e84dc1))
+* fail the proxy-parity gate when a version floor falls behind the fleet ([#438](https://github.com/sethbacon/azure-pipelines-packer/issues/438)) ([ff4ce3f](https://github.com/sethbacon/azure-pipelines-packer/commit/ff4ce3ffdecb94aa9bb688d3c143d7845228dd3e))
+* read every credential-capable input through the package silent readers ([#440](https://github.com/sethbacon/azure-pipelines-packer/issues/440)) ([d79f499](https://github.com/sethbacon/azure-pipelines-packer/commit/d79f4999bf5d0644869e193bb9776cf72dc38b11))
+
 ## [1.6.2](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.1...v1.6.2) (2026-09-07)
 
 
