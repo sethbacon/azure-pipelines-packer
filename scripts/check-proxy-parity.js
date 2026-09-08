@@ -109,14 +109,14 @@ const PACKAGE_DELEGATED_SINKS = {
         capability: 'the proxy decision',
         provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
-        min: '0.9.1',
+        min: '0.11.0',
         // The package delegates onward to core, so the direct floor above only
         // vouches for the wiring - not for which implementation it wires up.
         // ado@0.2.0 declared core ^0.3.1 while the tasks declared ^0.5.0, and
         // caret on a 0.x version is patch-only, so the ranges were disjoint,
         // npm nested a second copy, and the delegated client ran the older one.
         // Both floors passed throughout. Hence the resolved check below.
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.0' },
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
     },
     // generateIdToken (#46 extraction): the OIDC token exchange's fetch(), and
     // the proxy decision that wraps it (buildAdoFetchOptions), both moved into
@@ -129,8 +129,8 @@ const PACKAGE_DELEGATED_SINKS = {
         capability: 'the proxy decision',
         provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
-        min: '0.9.1',
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.0' },
+        min: '0.11.0',
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
     },
     // exchangeOidcForUpst (#344): the second hop of the OCI WIF flow -- OIDC JWT
     // to an OCI User Principal Session Token. Its fetch() and the
@@ -144,8 +144,8 @@ const PACKAGE_DELEGATED_SINKS = {
         capability: 'the proxy decision',
         provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
-        min: '0.9.1',
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.0' },
+        min: '0.11.0',
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
     },
 };
 
@@ -201,7 +201,7 @@ const PROXY_AGENT_BUILDERS = ['buildProxyAgent', 'createProxyTunnelAgent'];
  * without one is not a weaker proxy — it is no proxy at all.
  */
 const DELEGATED_NODE_HTTP_SINKS = {
-    httpsRequest: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.0' },
+    httpsRequest: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
 };
 
 /**
