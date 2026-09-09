@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.3...v1.6.4) (2026-09-09)
+
+
+### Bug Fixes
+
+* refuse to disable vCenter TLS verification against a public destination ([#442](https://github.com/sethbacon/azure-pipelines-packer/issues/442)) ([edf7ab9](https://github.com/sethbacon/azure-pipelines-packer/commit/edf7ab94bb52086ccaa5df03c989b6a58af29500))
+
+
+### Dependencies
+
+* pin js-yaml to the patched 4.3.2 through the root override ([#446](https://github.com/sethbacon/azure-pipelines-packer/issues/446)) ([9a49850](https://github.com/sethbacon/azure-pipelines-packer/commit/9a498504ac5a175eba693a696881200381e4fdce))
+
 ## [1.6.3](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.2...v1.6.3) (2026-09-08)
 
 
