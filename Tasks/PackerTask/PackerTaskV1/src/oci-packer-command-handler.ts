@@ -248,7 +248,7 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         // file's section header, so requiring a second declared variable would
         // be friction with no fail-closed value.
         this.providerVarArgs.push(`oci_access_cfg_file=${configPath}`);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", configPath);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", configPath, false, true);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file_account", "DEFAULT");
     }
 
@@ -297,11 +297,11 @@ export class PackerCommandHandlerOCI extends BasePackerCommandHandler {
         // a live substitution. The residual -- an ambient ~/.oci/config being read as
         // a second provider when the template declares none of these -- is already
         // stated in the OCI_ACCESS_CFG_FILE_DISABLED comment above and in #391.
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_tenancy_ocid", tenancyOcid, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_user_ocid", userOcid, false, true);
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_region", region);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_fingerprint", fingerprint);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_key_file", keyFilePath);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", OCI_ACCESS_CFG_FILE_DISABLED);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_fingerprint", fingerprint, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_key_file", keyFilePath, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_oci_access_cfg_file", OCI_ACCESS_CFG_FILE_DISABLED, false, true);
     }
 }
