@@ -156,6 +156,44 @@ function isVerifyingTask(task) {
  * the real tests BEFORE downgrading to Node 20 has not tested anything under
  * Node 20.
  */
+function hasRealTestAfterNodeSetup(jobText, major) {
+    const setupRe = /node-version:\s*["']?(\d+)/g;
+    const realTestRe = /^\s*(?:-\s*)?run:\s*npm test\s*$/m;
+    let match;
+    while ((match = setupRe.exec(jobText)) !== null) {
+        if (parseInt(match[1], 10) !== major) continue;
+        if (realTestRe.test(jobText.slice(setupRe.lastIndex))) return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Findings
+// ---------------------------------------------------------------------------
+const findings = [];
+function record(check, site, ok, detail) {
+    findings.push({ check, site, ok, detail });
+}
+
+const tasks = discoverTaskDirs(repoRoot);
+if (tasks.length === 0) {
+    console.error(`FAIL: no task directories found under ${path.join(repoRoot, 'Tasks')} — the signature would trivially pass over an empty universe.`);
+    process.exit(1);
+}
+
+// The workflows that RUN the per-task tests: unit-test.yml in the sibling
+// extensions, ci.yml here. release.yml is deliberately not read -- it sets Node
+// up to BUILD, and a build is not an exercise of the test suite.
+const ciJobs = new Map();
+for (const wf of ['unit-test.yml', 'ci.yml']) {
+    const text = readIfExists(`.github/workflows/${wf}`);
+    if (!text) continue;
+    for (const [id, body] of parseJobs(text)) ciJobs.set(`${wf}:${id}`, body);
+}
+
+// A repo may name one job per task, or fan every task out through a single
+// runner. Under the second shape no job mentions any task directory, so matching
+// only on the path would report a fully-tested repo as untested.
 /**
  * The highest Node major any of the task's PRODUCTION dependencies demands,
  * read from the LOCKFILE rather than from node_modules.
@@ -195,44 +233,6 @@ function dependencyNodeFloor(taskDir) {
     return floor;
 }
 
-function hasRealTestAfterNodeSetup(jobText, major) {
-    const setupRe = /node-version:\s*["']?(\d+)/g;
-    const realTestRe = /^\s*(?:-\s*)?run:\s*npm test\s*$/m;
-    let match;
-    while ((match = setupRe.exec(jobText)) !== null) {
-        if (parseInt(match[1], 10) !== major) continue;
-        if (realTestRe.test(jobText.slice(setupRe.lastIndex))) return true;
-    }
-    return false;
-}
-
-// ---------------------------------------------------------------------------
-// Findings
-// ---------------------------------------------------------------------------
-const findings = [];
-function record(check, site, ok, detail) {
-    findings.push({ check, site, ok, detail });
-}
-
-const tasks = discoverTaskDirs(repoRoot);
-if (tasks.length === 0) {
-    console.error(`FAIL: no task directories found under ${path.join(repoRoot, 'Tasks')} — the signature would trivially pass over an empty universe.`);
-    process.exit(1);
-}
-
-// The workflows that RUN the per-task tests: unit-test.yml in the sibling
-// extensions, ci.yml here. release.yml is deliberately not read -- it sets Node
-// up to BUILD, and a build is not an exercise of the test suite.
-const ciJobs = new Map();
-for (const wf of ['unit-test.yml', 'ci.yml']) {
-    const text = readIfExists(`.github/workflows/${wf}`);
-    if (!text) continue;
-    for (const [id, body] of parseJobs(text)) ciJobs.set(`${wf}:${id}`, body);
-}
-
-// A repo may name one job per task, or fan every task out through a single
-// runner. Under the second shape no job mentions any task directory, so matching
-// only on the path would report a fully-tested repo as untested.
 const fanOutScripts = Object.entries((readJsonIfExists('package.json') || {}).scripts || {})
     .filter(([, cmd]) => /for-each-task(?:\.js)?\s+(?:test|smoke)\b/.test(cmd))
     .map(([name]) => name);
@@ -331,6 +331,7 @@ for (const task of tasks) {
             const fallback = handler.match(/^Node(\d+)_\d+$/);
             if (!fallback) continue;
             const major = parseInt(fallback[1], 10);
+            const ok = jobsForTask.some(([, text]) => hasRealTestAfterNodeSetup(text, major));
             const floor = dependencyNodeFloor(task);
             if (floor && floor.major > major) {
                 record(
@@ -341,7 +342,6 @@ for (const task of tasks) {
                 );
                 continue;
             }
-            const ok = jobsForTask.some(([, text]) => hasRealTestAfterNodeSetup(text, major));
             record(
                 'verification-real-tests-under-node20',
                 `${task} -> ${handler}`,

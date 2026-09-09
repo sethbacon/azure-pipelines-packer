@@ -10,7 +10,9 @@ runtime dependencies bundled into the packaged `.vsix` (see
 ## Task dependencies (shipped via each task's `node_modules`)
 
 Which task ships which package, derived from each task's `package.json` `dependencies`.
-`scripts/check-docs-claims.js` checks this table against those manifests in both directions
+`4cloudguru/shared-workflows`' `check-docs-claims` composite action — called by full commit SHA
+from the `Check Shared Module Provenance` job in `.github/workflows/unit-test.yml`, not kept as a
+script in this repository — checks this table against those manifests in both directions
 on every pull request, so a package added to or dropped from a task without a matching
 edit here fails CI (the sibling `azure-pipelines-terraform` audit #1115 found undici
 under-attributed to 3 of 7 tasks there, with nothing to catch it). The sections below
