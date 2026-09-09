@@ -157,8 +157,13 @@ function isVerifyingTask(task) {
  * Node 20.
  */
 /**
- * The lowest Node major any of the task's PRODUCTION dependencies will accept,
- * read from each installed package's `engines.node`.
+ * The highest Node major any of the task's PRODUCTION dependencies demands,
+ * read from the LOCKFILE rather than from node_modules.
+ *
+ * The lockfile records each package's `engines`, is committed, and is present
+ * before `npm ci` runs -- which the gate's own job does not do for every task.
+ * Reading node_modules made this waiver depend on an install that had not
+ * happened, so it passed locally and failed in continuous integration.
  *
  * A task cannot be asked to run its real suite under a Node version its own
  * dependencies refuse to load on. PackerInstallerV1 is the live case: it
@@ -173,28 +178,19 @@ function isVerifyingTask(task) {
  * this rule.
  */
 function dependencyNodeFloor(taskDir) {
-    const manifestPath = path.join(taskDir, 'package.json');
-    let deps;
-    try {
-        deps = Object.keys(JSON.parse(fs.readFileSync(manifestPath, 'utf8')).dependencies || {});
-    } catch {
-        return null;
-    }
+    const lock = readJsonIfExists(`${taskDir}/package-lock.json`);
+    const manifest = readJsonIfExists(`${taskDir}/package.json`);
+    if (!lock || !lock.packages || !manifest) return null;
+    const direct = new Set(Object.keys(manifest.dependencies || {}));
     let floor = null;
-    for (const dep of deps) {
-        let engines;
-        try {
-            engines = JSON.parse(
-                fs.readFileSync(path.join(taskDir, 'node_modules', dep, 'package.json'), 'utf8'),
-            ).engines;
-        } catch {
-            continue;
-        }
-        const range = engines && engines.node;
+    for (const [key, entry] of Object.entries(lock.packages)) {
+        const name = key.startsWith('node_modules/') ? key.slice('node_modules/'.length) : null;
+        if (!name || !direct.has(name)) continue;
+        const range = entry.engines && entry.engines.node;
         const m = typeof range === 'string' && range.match(/>=?\s*(\d+)/);
         if (!m) continue;
         const major = parseInt(m[1], 10);
-        if (floor === null || major > floor.major) floor = { major, dep, range };
+        if (floor === null || major > floor.major) floor = { major, dep: name, range };
     }
     return floor;
 }
