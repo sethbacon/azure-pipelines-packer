@@ -92,10 +92,15 @@ jobs:
           node-version: "24"
       - name: Validate shared installer modules carry a provenance header
         run: node scripts/check-shared-modules.js
+      # The gate itself now lives in 4cloudguru/shared-workflows as a composite
+      # action, not as a hand-copy under scripts/. A composite is a STEP inside
+      # this job, so `Check Shared Module Provenance` keeps its name and stays
+      # the required status context it already is -- a reusable workflow would
+      # have reported as `<job-id> / <called-job-name>` and renamed the check.
+      # The action's own self-test runs in shared-workflows' CI beside the
+      # script, which is why no `Self-test` step follows this one any more.
       - name: Shared-module pins in lockstep (#1108 class signature)
-        run: node scripts/check-shared-module-pins.js
-      - name: Self-test check-shared-module-pins.js
-        run: node scripts/test-check-shared-module-pins.js
+        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@c4694311531adcddc243fff1894398920f88a1f9 # main c469431, pre-v1.23.0
       - name: Validate egress authorization (SSRF class signature)
         run: node scripts/check-egress-authorization.js
       - name: Validate enforced disciplines (documented-but-unenforced class signature)
@@ -104,10 +109,11 @@ jobs:
         run: node scripts/test-check-enforced-disciplines.js
       - name: Validate outbound proxy parity (#196 class signature)
         run: node scripts/check-proxy-parity.js
-      - name: Self-test check-docs-claims.js
-        run: node scripts/test-check-docs-claims.js
+      # Same move as the pins gate above: the shared composite replaces the
+      # hand-copied gate script this repository used to carry under scripts/,
+      # and its self-test runs in shared-workflows' CI rather than here.
       - name: Validate documented claims against the code
-        run: node scripts/check-docs-claims.js
+        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@c4694311531adcddc243fff1894398920f88a1f9 # main c469431, pre-v1.23.0
       # The root package.json's devDependencies (tfx-cli, @cyclonedx/cyclonedx-npm,
       # rimraf, typescript) are installed here and by release.yml's build/package/
       # sbom-and-sign/publish-marketplace jobs -- unlike a typical devDependency,

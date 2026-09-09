@@ -82,8 +82,11 @@ action's source, not guessed from this repository's own workflow file.
 | Availability consequence | If `4cloudguru/shared-workflows` removes or breaks `release-pr-closing-keywords`, or this workflow file is removed or renamed, the context stops posting entirely and `main` blocks every pull request here — and, because the workflow is byte-identical, in `azure-pipelines-terraform` and `azure-pipelines-release-docs` too. |
 | Preserve on any protection PUT | Yes. `PUT /repos/<owner>/<repo>/branches/main/protection` replaces `required_status_checks.contexts` wholesale, so a payload assembled without reading this table silently drops the context rather than erroring. |
 
-Machine-checked by `scripts/check-docs-claims.js` (CI's `Check Shared Module Provenance` job runs
-it) — a workflow named here that cannot actually post the context fails the build:
+Machine-checked by the shared `check-docs-claims` composite action
+(`4cloudguru/shared-workflows/.github/actions/check-docs-claims`, pinned by SHA on the
+`Validate documented claims against the code` step of CI's `Check Shared Module Provenance` job in
+`.github/workflows/unit-test.yml`) — a workflow named here that cannot actually post the context
+fails the build:
 
 <!-- required-checks:begin -->
 | Context | Workflow |
@@ -113,12 +116,15 @@ azure-pipelines-packer/
 │   │                                         #     (entry point tested + measured, every declared
 │   │                                         #      execution handler exercised, Minor-bump layers,
 │   │                                         #      Marketplace publish retry + token off argv)
-│   ├── check-shared-module-pins.js          # CI: both tasks pin and resolve ONE version of each
-│   │                                         #     @4cloudguru shared package (terraform #1108 class)
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
 │   ├── test-*.js                            # CI self-tests for each of the guards above
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
+│                                            # NOT here: check-docs-claims and check-shared-module-pins.
+│                                            # Both are shared composite actions in
+│                                            # 4cloudguru/shared-workflows, called by SHA from
+│                                            # unit-test.yml's Check Shared Module Provenance job;
+│                                            # their self-tests run in that repository's CI.
 └── .github/workflows/
     ├── unit-test.yml         # CI: version/provenance/discipline checks, build/test (Node 24 + a
     │                         #     Node 20 load-only smoke per task), actionlint, zizmor

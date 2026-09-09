@@ -75,7 +75,10 @@ npm install --include=dev
      `azure-pipelines-terraform` must carry its `@shared-module` provenance header,
      and every outbound HTTP call must honour the agent proxy configuration
      (`scripts/check-shared-modules.js`, `scripts/check-egress-authorization.js`,
-     `scripts/check-proxy-parity.js`, `scripts/check-docs-claims.js`).
+     `scripts/check-proxy-parity.js`), and the documented claims in these files must
+     match what the tree and its workflows actually do — that last one is
+     `4cloudguru/shared-workflows`' `check-docs-claims` composite action, called by SHA
+     from this job rather than kept as a copy here.
    - `Build and Test Packer Task V1` — lint, compile and unit tests, on Ubuntu and Windows × Node 24.
    - `Build and Test Packer Installer V1` — same, for the installer task.
    - `Workflow Security` — actionlint checks the workflow schema and zizmor scans
@@ -87,9 +90,29 @@ npm install --include=dev
      exits 0 whatever it finds, so `Workflow Security` above is what blocks.
    <!-- ci-jobs:end -->
 
-   This list is checked against `.github/workflows/unit-test.yml` by
-   `scripts/check-docs-claims.js`, in both directions, so it cannot drift as jobs
-   are added or renamed.
+   This list is checked against `.github/workflows/unit-test.yml` in both directions, so it
+   cannot drift as jobs are added or renamed. The checker is not a script in this repository:
+   it is `4cloudguru/shared-workflows`' `check-docs-claims` composite action, called by full
+   commit SHA from the `Validate documented claims against the code` step of the
+   `Check Shared Module Provenance` job. Keeping it as a composite (rather than a reusable
+   workflow) is what lets that job keep its name, which is a required status context on `main`.
+   To run it locally against a sibling checkout of that repository:
+
+   ```bash
+   node ../shared-workflows/.github/actions/check-docs-claims/check-docs-claims.js .
+   ```
+
+   The same job runs `4cloudguru/shared-workflows`' `check-shared-module-pins` action, at the
+   same pin, as its `Shared-module pins in lockstep (#1108 class signature)` step — it fails the
+   PR if the two tasks declare or resolve different versions of a shared `@4cloudguru` package.
+   Locally:
+
+   ```bash
+   node ../shared-workflows/.github/actions/check-shared-module-pins/check-shared-module-pins.js .
+   ```
+
+   Neither action has a self-test step here any more: both self-tests run in
+   `4cloudguru/shared-workflows`' own CI, beside the scripts they exercise.
 
    `.github/workflows/pr-checks.yml` gates the PR as well, with the conventional
    title check, dependency review, the Release-PR Minor-bump backstop, and the
