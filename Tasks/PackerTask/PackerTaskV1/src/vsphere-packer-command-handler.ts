@@ -86,9 +86,9 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         // does for packer-plugin-azure's UseMSI() path -- worst case is a confusing
         // error. A `packer inspect` pre-flight here would add an invocation per run
         // for no security gain.
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true, true);
 
         if (insecure) {
             // The destination is the property that decides whether disabling

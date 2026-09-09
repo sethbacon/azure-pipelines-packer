@@ -139,14 +139,14 @@ export class PackerCommandHandlerGCP extends BasePackerCommandHandler {
             const wifServiceName = requireServiceConnection(command.serviceProviderName, 'GCP', 'environmentServiceNameGCP', 'for Workload Identity Federation');
             const credentialsFilePath = await this.writeWifCredentials(wifServiceName);
             neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP Workload Identity Federation");
-            EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsFilePath);
+            EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsFilePath, false, true);
             return;
         }
 
         const serviceName = requireServiceConnection(command.serviceProviderName, 'GCP', 'environmentServiceNameGCP');
         const keyFilePath = this.writeServiceAccountKey(serviceName);
         neutralizeEnvironmentVariables(GOOGLE_COMPETING_CREDENTIAL_ENV, "GCP service account key");
-        EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", keyFilePath);
+        EnvironmentVariableHelper.setEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", keyFilePath, false, true);
         // GOOGLE_PROJECT_ID is intentionally NOT injected: packer-plugin-googlecompute
         // reads the project only from the required HCL `project_id` field, never from
         // the environment, so setting it here was dead and misleading (and on the WIF

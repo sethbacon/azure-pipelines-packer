@@ -157,9 +157,9 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 neutralizeEnvironmentVariables(
                     [ARM_IDENTITY_SELECTORS.secret, ARM_IDENTITY_SELECTORS.certPath],
                     "Azure Workload Identity Federation");
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_jwt", oidcToken, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId, false, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId, false, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_jwt", oidcToken, true, true);
                 break;
             }
 
@@ -190,9 +190,9 @@ export class PackerCommandHandlerAzureRM extends BasePackerCommandHandler {
                 neutralizeEnvironmentVariables(
                     [ARM_IDENTITY_SELECTORS.jwt, ARM_IDENTITY_SELECTORS.certPath],
                     "Azure service principal");
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId);
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId);
-                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_secret", servicePrincipalKey, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_id", servicePrincipalId, false, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_tenant_id", tenantId, false, true);
+                EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_arm_client_secret", servicePrincipalKey, true, true);
                 break;
             }
         }
