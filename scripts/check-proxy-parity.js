@@ -116,7 +116,7 @@ const PACKAGE_DELEGATED_SINKS = {
         // caret on a 0.x version is patch-only, so the ranges were disjoint,
         // npm nested a second copy, and the delegated client ran the older one.
         // Both floors passed throughout. Hence the resolved check below.
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.3' },
     },
     // generateIdToken (#46 extraction): the OIDC token exchange's fetch(), and
     // the proxy decision that wraps it (buildAdoFetchOptions), both moved into
@@ -130,7 +130,7 @@ const PACKAGE_DELEGATED_SINKS = {
         provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
         min: '0.11.0',
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.3' },
     },
     // exchangeOidcForUpst (#344): the second hop of the OCI WIF flow -- OIDC JWT
     // to an OCI User Principal Session Token. Its fetch() and the
@@ -145,7 +145,7 @@ const PACKAGE_DELEGATED_SINKS = {
         provides: 'proxy dispatch and secret registration',
         pkg: '@4cloudguru/pipeline-task-ado',
         min: '0.11.0',
-        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
+        carries: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.3' },
     },
 };
 
@@ -201,7 +201,7 @@ const PROXY_AGENT_BUILDERS = ['buildProxyAgent', 'createProxyTunnelAgent'];
  * without one is not a weaker proxy — it is no proxy at all.
  */
 const DELEGATED_NODE_HTTP_SINKS = {
-    httpsRequest: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.1' },
+    httpsRequest: { pkg: '@4cloudguru/pipeline-task-core', min: '0.9.3' },
 };
 
 /**

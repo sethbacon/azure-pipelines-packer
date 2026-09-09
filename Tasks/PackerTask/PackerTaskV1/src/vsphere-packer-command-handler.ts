@@ -2,6 +2,7 @@ import tasks = require('azure-pipelines-task-lib/task');
 import { PackerAuthorizationCommandInitializer } from './packer-commands';
 import { BasePackerCommandHandler } from './base-packer-command-handler';
 import { EnvironmentVariableHelper, readEndpointUrl, redactUrlCredentialsIn } from '@4cloudguru/pipeline-task-ado';
+import { assertTlsOptOutDestinationIsPrivate, TlsOptOutDestinationError } from '@4cloudguru/pipeline-task-core';
 import { assertIdentityValue, neutralizeEnvironmentVariables, requireSecretField, requireServiceConnection } from './credential-guards';
 
 /**
@@ -40,9 +41,11 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         // that runtime guarantee, matching the password read below.
         const endpointUrl = readEndpointUrl(serviceName);
         let server: string;
+        let serverUrl: string;
         try {
             const withScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(endpointUrl) ? endpointUrl : `https://${endpointUrl}`;
             server = new URL(withScheme).host;
+            serverUrl = withScheme;
         } catch {
             throw new Error(`vSphere service connection '${serviceName}' has an invalid server URL: '${redactUrlCredentialsIn(endpointUrl)}'.`);
         }
@@ -88,6 +91,24 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true, true);
 
         if (insecure) {
+            // The destination is the property that decides whether disabling
+            // vCenter certificate verification is defensible, and it is right
+            // here: `serverUrl` was parsed a few lines above. The packer binary
+            // opens the socket, not this task, but the task is what CONFIGURES
+            // the destination and what turns verification off for it, so the
+            // same rule the terraform extension's skipTlsVerify/rejectUnauthorized
+            // inputs follow applies (azure-pipelines-terraform#588). A lab
+            // vCenter reachable only on an internal address still passes; one on
+            // a public address does not, which is exactly the on-path
+            // interception the warning below merely describes.
+            try {
+                await assertTlsOptOutDestinationIsPrivate('vsphereInsecureConnection', serverUrl);
+            } catch (error) {
+                if (error instanceof TlsOptOutDestinationError) {
+                    throw new Error(`Refusing to disable vCenter TLS certificate verification for '${error.safeDestination}': it is not, and does not resolve only to, a private or link-local address. Disabling verification is appropriate only for an internal vCenter fronted by a CA the agent does not trust; the vSphere credentials would otherwise be exposed to on-path interception.`);
+                }
+                throw error;
+            }
             tasks.warning("Disabling vCenter TLS verification exposes the vSphere credentials to man-in-the-middle interception; use only on trusted networks with self-signed certificates, never in production.");
             EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_insecure_connection", "true");
         }

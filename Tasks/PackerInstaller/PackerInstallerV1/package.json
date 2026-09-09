@@ -19,7 +19,7 @@
   "minimumAgentVersion": "2.144.0",
   "dependencies": {
     "@4cloudguru/pipeline-task-ado": "^0.11.0",
-    "@4cloudguru/pipeline-task-core": "^0.9.1",
+    "@4cloudguru/pipeline-task-core": "^0.9.3",
     "azure-pipelines-task-lib": "^5.279.0",
     "azure-pipelines-tool-lib": "^2.279.1",
     "openpgp": "^6.0.1",

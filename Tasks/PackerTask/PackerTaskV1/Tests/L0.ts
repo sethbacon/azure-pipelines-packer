@@ -320,6 +320,27 @@ describe('PackerTask Test Suite', function () {
         }, tr);
     });
 
+    // azure-pipelines-terraform#588, the class this extension shares: the option
+    // that disables certificate verification is honoured only against a
+    // destination proved private. Both rows decide without DNS (IP literals), so
+    // they are offline and deterministic.
+    it('VsphereInsecurePublicDestinationReject: refuses to disable vCenter TLS verification against a public destination', async () => {
+        const tp = path.join(__dirname, 'VsphereInsecurePublicDestinationReject.js');
+        const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);
+        await tr.runAsync();
+        runValidations(() => {
+            assert.ok(tr.failed, 'task should have failed');
+            assert.ok(
+                tr.errorIssues.some((e) => /does not resolve only to, a private or link-local address/.test(e)),
+                'should refuse naming the destination rule. errors: ' + tr.errorIssues
+            );
+            assert.ok(
+                !tr.warningIssues.some((w) => w.includes('man-in-the-middle')),
+                'the refusal must happen INSTEAD of the warning, not after it'
+            );
+        }, tr);
+    });
+
     it('BuildManifestTraversalSkipped', async () => {
         const tp = path.join(__dirname, 'BuildManifestTraversalSkipped.js');
         const tr: ttm.MockTestRunner = new ttm.MockTestRunner(tp);

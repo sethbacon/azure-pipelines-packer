@@ -361,7 +361,7 @@
       "required": false,
       "groupName": "providerAuth",
       "visibleRule": "provider = vsphere",
-      "helpMarkDown": "Sets PKR_VAR_vsphere_insecure_connection=true, which makes the vsphere-iso/vsphere-clone builders **skip vCenter TLS certificate validation**. The vSphere password is then sent to vCenter over an unverified connection and can be intercepted on-path. Use only on a trusted network with a self-signed lab certificate -- never in production. The task emits a warning whenever this is enabled."
+      "helpMarkDown": "Disable vCenter TLS certificate verification (sets <code>PKR_VAR_vsphere_insecure_connection=true</code>). The vSphere credentials are then sent over a connection whose server certificate is not authenticated, so an on-path attacker can capture them. Honoured ONLY when the service connection's vCenter host is, or resolves only to, a private or link-local address -- a public destination is refused, because disabling verification there is the interception scenario itself. Prefer trusting the vCenter's CA on the agent (NODE_EXTRA_CA_CERTS or the OS trust store) over this option."
     },
     {
       "name": "variableFiles",
@@ -381,7 +381,7 @@
       "required": false,
       "groupName": "variables",
       "visibleRule": "command = build || command = validate || command = custom",
-      "helpMarkDown": "One key=value per line, passed as -var arguments. These values are echoed in cleartext in the build log — do not put secrets here. For sensitive values use secureVarsFile, or a PKR_VAR_* Packer variable sourced from a secret pipeline variable."
+      "helpMarkDown": "One key=value per line, passed as -var arguments. These values are echoed in cleartext in the build log \u2014 do not put secrets here. For sensitive values use secureVarsFile, or a PKR_VAR_* Packer variable sourced from a secret pipeline variable."
     },
     {
       "name": "secureVarsFile",
@@ -400,7 +400,7 @@
       "defaultValue": "",
       "required": false,
       "groupName": "variables",
-      "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings). These values are not masked in the build log — do not put secrets here. Use a secret pipeline variable (which the agent masks) or secureVarsFile instead."
+      "helpMarkDown": "One key=value per line. Set as environment variables for the Packer process (e.g. builder-specific settings). These values are not masked in the build log \u2014 do not put secrets here. Use a secret pipeline variable (which the agent masks) or secureVarsFile instead."
     },
     {
       "name": "upgradePlugins",
@@ -629,7 +629,7 @@
       "defaultValue": "",
       "required": false,
       "groupName": "advanced",
-      "helpMarkDown": "Free-form additional arguments appended to the Packer command. These are echoed in cleartext in the build log — do not put secrets here."
+      "helpMarkDown": "Free-form additional arguments appended to the Packer command. These are echoed in cleartext in the build log \u2014 do not put secrets here."
     }
   ],
   "restrictions": {
