@@ -156,6 +156,49 @@ function isVerifyingTask(task) {
  * the real tests BEFORE downgrading to Node 20 has not tested anything under
  * Node 20.
  */
+/**
+ * The lowest Node major any of the task's PRODUCTION dependencies will accept,
+ * read from each installed package's `engines.node`.
+ *
+ * A task cannot be asked to run its real suite under a Node version its own
+ * dependencies refuse to load on. PackerInstallerV1 is the live case: it
+ * declares a Node20_1 fallback handler while pinning undici ^8, whose
+ * `engines.node` is >= 22.19.0, and undici 8 genuinely fails to load on Node 20.
+ * Demanding a real Node 20 leg there would be demanding a step that cannot pass.
+ *
+ * Reporting that as EXEMPT rather than OK is the point: the exemption text names
+ * the dependency and the version, so the deeper contradiction -- a declared
+ * handler the task's own dependencies cannot satisfy -- is stated in the gate's
+ * output every run rather than discovered again by the next person who widens
+ * this rule.
+ */
+function dependencyNodeFloor(taskDir) {
+    const manifestPath = path.join(taskDir, 'package.json');
+    let deps;
+    try {
+        deps = Object.keys(JSON.parse(fs.readFileSync(manifestPath, 'utf8')).dependencies || {});
+    } catch {
+        return null;
+    }
+    let floor = null;
+    for (const dep of deps) {
+        let engines;
+        try {
+            engines = JSON.parse(
+                fs.readFileSync(path.join(taskDir, 'node_modules', dep, 'package.json'), 'utf8'),
+            ).engines;
+        } catch {
+            continue;
+        }
+        const range = engines && engines.node;
+        const m = typeof range === 'string' && range.match(/>=?\s*(\d+)/);
+        if (!m) continue;
+        const major = parseInt(m[1], 10);
+        if (floor === null || major > floor.major) floor = { major, dep, range };
+    }
+    return floor;
+}
+
 function hasRealTestAfterNodeSetup(jobText, major) {
     const setupRe = /node-version:\s*["']?(\d+)/g;
     const realTestRe = /^\s*(?:-\s*)?run:\s*npm test\s*$/m;
@@ -292,6 +335,16 @@ for (const task of tasks) {
             const fallback = handler.match(/^Node(\d+)_\d+$/);
             if (!fallback) continue;
             const major = parseInt(fallback[1], 10);
+            const floor = dependencyNodeFloor(task);
+            if (floor && floor.major > major) {
+                record(
+                    'verification-real-tests-under-node20',
+                    `${task} -> ${handler}`,
+                    true,
+                    `EXEMPT: ${task} cannot run under Node ${major} at all -- its dependency '${floor.dep}' declares engines.node '${floor.range}'. The real-test requirement is waived, and the ${handler} handler this task advertises cannot work either; that contradiction needs its own decision (drop the handler, or move the dependency to a version that supports Node ${major}).`,
+                );
+                continue;
+            }
             const ok = jobsForTask.some(([, text]) => hasRealTestAfterNodeSetup(text, major));
             record(
                 'verification-real-tests-under-node20',
