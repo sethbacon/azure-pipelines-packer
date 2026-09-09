@@ -463,7 +463,7 @@ export abstract class BasePackerCommandHandler {
         const githubToken = this.resolveGithubToken();
         if (githubToken) {
             // Avoids GitHub API rate limits during plugin download.
-            EnvironmentVariableHelper.setEnvironmentVariable("PACKER_GITHUB_API_TOKEN", githubToken, true);
+            EnvironmentVariableHelper.setEnvironmentVariable("PACKER_GITHUB_API_TOKEN", githubToken, true, true);
         }
 
         this.applyCommandOptions(tool);

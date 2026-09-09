@@ -83,9 +83,9 @@ export class PackerCommandHandlerVSphere extends BasePackerCommandHandler {
         // does for packer-plugin-azure's UseMSI() path -- worst case is a confusing
         // error. A `packer inspect` pre-flight here would add an invocation per run
         // for no security gain.
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username);
-        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_server", server, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_user", username, false, true);
+        EnvironmentVariableHelper.setEnvironmentVariable("PKR_VAR_vsphere_password", password, true, true);
 
         if (insecure) {
             tasks.warning("Disabling vCenter TLS verification exposes the vSphere credentials to man-in-the-middle interception; use only on trusted networks with self-signed certificates, never in production.");
