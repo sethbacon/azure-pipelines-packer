@@ -261,6 +261,17 @@ jobs:
           node-version: "20"
       - name: Verify compiled output runs under Node 20 (Node20_1 handler)
         run: node src/index.js
+      # This task's entire security value is verifying a downloaded binary
+      # (GPG signature over SHA256SUMS via gpg-verifier.ts) -- the load-only
+      # smoke check above only proves the compiled module graph parses under
+      # Node 20, since with no ADO inputs supplied the task's own try/catch
+      # short-circuits into a caught failure before any of that verification
+      # logic runs. Mirroring the sibling azure-pipelines-terraform repo's
+      # identical step for its own verifying installers (#720): run the
+      # real, input-populated mocha suite under Node 20 too, closing the
+      # behavioral-parity gap for a task whose whole job is supply-chain
+      # trust (#654). build-and-test-task-v1 above stays load-only -- it has
+      # no verification module.
 
   # Both linters come from the shared definition rather than being maintained
   # here, which upgrades two things at once. The local actionlint install piped

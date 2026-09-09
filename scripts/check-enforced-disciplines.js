@@ -131,6 +131,81 @@ function nodeMajorsIn(jobText) {
     return majors;
 }
 
+const VERIFICATION_MODULE_FILENAMES = new Set(['gpg-verifier.ts', 'cosign-verifier.ts', 'tool-integrity.ts']);
+
+/**
+ * Does this task's src ship a module whose whole job is verifying a downloaded
+ * artifact (GPG signature, cosign, or sha256 checksum)? Matched by filename for
+ * the three module names this repo's installers use today, plus a content
+ * fallback (a `verifySha256` function) so a differently-named file providing
+ * the same check is still caught (issue #654).
+ */
+function isVerifyingTask(task) {
+    const srcFiles = walkFiles(path.join(repoRoot, task, 'src'), (n) => n.endsWith('.ts'));
+    return srcFiles.some((f) => {
+        if (VERIFICATION_MODULE_FILENAMES.has(path.basename(f))) return true;
+        return /\bverifySha256\b/.test(fs.readFileSync(f, 'utf8'));
+    });
+}
+
+/**
+ * True when `jobText` sets up Node `major` and, SOMEWHERE AFTER that step, runs
+ * the real test suite (`npm test` on its own line -- not the load-only
+ * `node src/index.js` smoke check, and not `npm run test:coverage`, which runs
+ * under Node 24 earlier in the same job). Position-sensitive: a job that runs
+ * the real tests BEFORE downgrading to Node 20 has not tested anything under
+ * Node 20.
+ */
+/**
+ * The highest Node major any of the task's PRODUCTION dependencies demands,
+ * read from the LOCKFILE rather than from node_modules.
+ *
+ * The lockfile records each package's `engines`, is committed, and is present
+ * before `npm ci` runs -- which the gate's own job does not do for every task.
+ * Reading node_modules made this waiver depend on an install that had not
+ * happened, so it passed locally and failed in continuous integration.
+ *
+ * A task cannot be asked to run its real suite under a Node version its own
+ * dependencies refuse to load on. PackerInstallerV1 is the live case: it
+ * declares a Node20_1 fallback handler while pinning undici ^8, whose
+ * `engines.node` is >= 22.19.0, and undici 8 genuinely fails to load on Node 20.
+ * Demanding a real Node 20 leg there would be demanding a step that cannot pass.
+ *
+ * Reporting that as EXEMPT rather than OK is the point: the exemption text names
+ * the dependency and the version, so the deeper contradiction -- a declared
+ * handler the task's own dependencies cannot satisfy -- is stated in the gate's
+ * output every run rather than discovered again by the next person who widens
+ * this rule.
+ */
+function dependencyNodeFloor(taskDir) {
+    const lock = readJsonIfExists(`${taskDir}/package-lock.json`);
+    const manifest = readJsonIfExists(`${taskDir}/package.json`);
+    if (!lock || !lock.packages || !manifest) return null;
+    const direct = new Set(Object.keys(manifest.dependencies || {}));
+    let floor = null;
+    for (const [key, entry] of Object.entries(lock.packages)) {
+        const name = key.startsWith('node_modules/') ? key.slice('node_modules/'.length) : null;
+        if (!name || !direct.has(name)) continue;
+        const range = entry.engines && entry.engines.node;
+        const m = typeof range === 'string' && range.match(/>=?\s*(\d+)/);
+        if (!m) continue;
+        const major = parseInt(m[1], 10);
+        if (floor === null || major > floor.major) floor = { major, dep: name, range };
+    }
+    return floor;
+}
+
+function hasRealTestAfterNodeSetup(jobText, major) {
+    const setupRe = /node-version:\s*["']?(\d+)/g;
+    const realTestRe = /^\s*(?:-\s*)?run:\s*npm test\s*$/m;
+    let match;
+    while ((match = setupRe.exec(jobText)) !== null) {
+        if (parseInt(match[1], 10) !== major) continue;
+        if (realTestRe.test(jobText.slice(setupRe.lastIndex))) return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Findings
 // ---------------------------------------------------------------------------
@@ -233,6 +308,49 @@ for (const task of tasks) {
                 ? `Node ${major} runs in ${jobsForTask.map(([id]) => id).join(', ')}`
                 : `task.json declares the ${handler} handler but no test-workflow job for ${task} sets up Node ${major} (jobs seen: ${jobsForTask.map(([id]) => id).join(', ') || 'none'})`,
         );
+    }
+
+    // --- DISCIPLINE 6: a task whose security value IS artifact verification
+    // (GPG signature, cosign, or sha256 checksum validation of a downloaded
+    // binary) must run its REAL test suite -- not just discipline 3's
+    // load-only smoke check -- under every fallback Node handler it declares.
+    // The smoke check only proves the compiled module graph parses under
+    // Node 20; with no ADO inputs supplied, the task's own try/catch converts
+    // the resulting "input required" error into a caught failure before the
+    // verification logic, HTTP client, or egress-allowlist code ever runs
+    // (#654, reopened twice against exactly this gap). A Node-20-specific
+    // divergence in crypto, TLS, or Buffer handling would ship undetected in
+    // exactly the tasks whose whole job is verifying a downloaded artifact.
+    // Non-verifying tasks are deliberately NOT held to this stricter rule --
+    // see CLAUDE.md's "Node 20 fallback" section -- so this walks only the
+    // verifying subset, and only their fallback (`NodeNN_M`) handlers: the
+    // primary `NodeNN` handler already gets a real run via the
+    // "Run unit tests with coverage" step above.
+    if (isVerifyingTask(task)) {
+        for (const handler of handlers) {
+            const fallback = handler.match(/^Node(\d+)_\d+$/);
+            if (!fallback) continue;
+            const major = parseInt(fallback[1], 10);
+            const floor = dependencyNodeFloor(task);
+            if (floor && floor.major > major) {
+                record(
+                    'verification-real-tests-under-node20',
+                    `${task} -> ${handler}`,
+                    true,
+                    `EXEMPT: ${task} cannot run under Node ${major} at all -- its dependency '${floor.dep}' declares engines.node '${floor.range}'. The real-test requirement is waived, and the ${handler} handler this task advertises cannot work either; that contradiction needs its own decision (drop the handler, or move the dependency to a version that supports Node ${major}).`,
+                );
+                continue;
+            }
+            const ok = jobsForTask.some(([, text]) => hasRealTestAfterNodeSetup(text, major));
+            record(
+                'verification-real-tests-under-node20',
+                `${task} -> ${handler}`,
+                ok,
+                ok
+                    ? `a real 'npm test' step follows a Node ${major} setup in ${jobsForTask.map(([id]) => id).join(', ')}`
+                    : `${task} ships a GPG/cosign/sha256 verification module, but no job runs the real 'npm test' suite after setting up Node ${major} for the ${handler} handler -- only the load-only smoke check (if any) exercises it`,
+            );
+        }
     }
 }
 
