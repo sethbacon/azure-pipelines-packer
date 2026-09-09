@@ -60,6 +60,42 @@ manual step**: it is applied and enforced in three layers (#192), matching the s
 
 "Packer" is a HashiCorp trademark. The name "Pipeline Tasks for Packer" is nominative fair use describing compatibility. Never use "Packer" as a standalone product name. The `LICENSE` retains the upstream Microsoft copyright; the README notes the lineage.
 
+## Branch Protection: Required status check provenance
+
+`main`'s branch protection requires a status check context named `release-guard/link-regrade`,
+whose producer could not be read off `release-pr-guard.yml` by eye (sethbacon/azure-pipelines-terraform#1120)
+— this section is the short doc this repository was missing for it, not a full restatement of every
+required check.
+
+`release-guard/link-regrade`'s `<suite>/<run>` shape looks like a GitHub App check suite. It is not:
+neither of `release-pr-guard.yml`'s two jobs is named `link-regrade`, and the job whose *key* is
+`link-regrade` doesn't run on `pull_request` at all — the provenance below was read from the shared
+action's source, not guessed from this repository's own workflow file.
+
+| Field | Value |
+| --- | --- |
+| Workflow file | `.github/workflows/release-pr-guard.yml` |
+| Jobs that post it | `closing-keywords` (display name `Release PR closes only what it completes`) on every `pull_request` (`opened`, `edited`, `synchronize`, `reopened`); `link-regrade` (display name `Re-grade open release PRs against the live link graph`) on `schedule (*/5 * * * *)` and `workflow_dispatch` |
+| Action | `4cloudguru/shared-workflows/.github/actions/release-pr-closing-keywords@3aae0966a70daa50bcfe741ef07e20e86c814af4` (v1.20.2) |
+| How it posts | Neither job overrides the action's `status-context` input, so both inherit its default — literally `release-guard/link-regrade` in the action's `action.yml` — and post it as a **commit status** (`POST /repos/<repo>/statuses/<head-sha>` with an explicit `context=` field), not a check run. That is why it matches neither job's `name:`: a commit-status context is chosen by the caller at call time, independent of the job that calls it. The two jobs sharing one context is deliberate — it lets the scheduled re-grade overwrite the pull-request-time verdict on the same SHA. |
+| Token | this workflow's own `${{ secrets.GITHUB_TOKEN }}`, scoped `statuses: write` in both jobs' `permissions:` block — not a GitHub App |
+| Availability consequence | If `4cloudguru/shared-workflows` removes or breaks `release-pr-closing-keywords`, or this workflow file is removed or renamed, the context stops posting entirely and `main` blocks every pull request here — and, because the workflow is byte-identical, in `azure-pipelines-terraform` and `azure-pipelines-release-docs` too. |
+| Preserve on any protection PUT | Yes. `PUT /repos/<owner>/<repo>/branches/main/protection` replaces `required_status_checks.contexts` wholesale, so a payload assembled without reading this table silently drops the context rather than erroring. |
+
+Machine-checked by `scripts/check-docs-claims.js` (CI's `Check Shared Module Provenance` job runs
+it) — a workflow named here that cannot actually post the context fails the build:
+
+<!-- required-checks:begin -->
+| Context | Workflow |
+| --- | --- |
+| `release-guard/link-regrade` | `.github/workflows/release-pr-guard.yml` |
+<!-- required-checks:end -->
+
+**Should it remain required? Yes.** It is the only re-grade of the closing-keyword class after the
+PR's last push — an issue linked through the Development panel fires no webhook `connected` event,
+so the scheduled job is the only thing that ever looks again before merge. Removing it from required
+checks would leave that window unguarded rather than shrink it.
+
 ## Repository Structure
 
 ```txt
@@ -199,7 +235,7 @@ copy, rather than reading a local `fetchOptions` spread that no longer exists he
 
 > **Resolved (was: Spike S1).** `packer-plugin-azure` does **not** read `ARM_*` environment variables — auth fields (`client_id`/`client_secret`/`client_jwt`/`tenant_id`/`subscription_id`/`use_azure_cli_auth`) are HCL-only (confirmed against `builder/azure/common/client/config.go`). The Azure handler injects `PKR_VAR_arm_client_id`/`PKR_VAR_arm_subscription_id`/`PKR_VAR_arm_tenant_id` plus either `PKR_VAR_arm_client_jwt` (WIF) or `PKR_VAR_arm_client_secret` (Service Principal); the template's `azure-arm` source block must reference them (see `docs/yaml-examples.md`). For Managed Identity, the handler deliberately injects **only** `subscription_id` — `packer-plugin-azure` falls back to MSI automatically when `tenant_id`/`client_secret`/`client_jwt`/`client_cert_path`/the OIDC fields are all unset, so the template must not set those either. ADO's MSI-scheme service connection does not expose a distinct client ID for a specific user-assigned identity, so only the VM's default identity is supported. The historical `client_jwt` "x5t header" rejection of Azure DevOps-issued OIDC tokens (`hashicorp/packer-plugin-azure#451`) is fixed upstream; use a recent plugin version.
 
-## Node 20 fallback handler — load-only, not a behavioural gate
+## Node 20 fallback handler — load-only, except for the verifying installer (#654)
 
 Both `task.json` files declare a `Node20_1` execution handler alongside `Node24`, so older
 on-prem/air-gapped agents without the Node 24 runner can still invoke these tasks. Each task's CI leg
@@ -207,11 +243,21 @@ has a "Set up Node 20 for Node20_1 handler smoke test" step that runs the alread
 `src/index.js` under Node 20 with no ADO inputs supplied (#208). That proves the compiled module graph
 parses and loads under Node 20 — a Node-20-incompatible dependency or syntax construct fails it — but
 the task's own try/catch converts the resulting "input required" error into a caught failure before
-any real command, credential or verification logic runs. **Node 24 is the sole behavioural gate**;
-Node 20 is deliberately load-only, the same scope decision the sibling `azure-pipelines-terraform`
-repo made: running the full suite twice per task would roughly double CI time, and Node 20 is already
-EOL — the fallback exists for agents that have not upgraded their runner, not as a second
-fully-verified execution path.
+any real command, credential or verification logic runs. For **PackerTaskV1** Node 24 is the sole
+behavioural gate; Node 20 is deliberately load-only, the same scope decision the sibling
+`azure-pipelines-terraform` repo made: running the full suite twice per task would roughly double CI
+time, and Node 20 is already EOL — the fallback exists for agents that have not upgraded their
+runner, not as a second fully-verified execution path.
+
+**PackerInstallerV1 is the exception**, mirroring the same split the sibling
+`azure-pipelines-terraform` repo made for its own verifying installers: its entire security value is
+verifying a downloaded binary (GPG signature over SHA256SUMS via `gpg-verifier.ts`), so the load-only
+smoke check alone would never exercise that verification logic — the try/catch short-circuits before
+it runs. Its job additionally runs the real, input-populated `npm test` suite after the Node 20 setup.
+`scripts/check-enforced-disciplines.js`'s `verification-real-tests-under-node20` check enforces this:
+a task shipping `gpg-verifier.ts`, `cosign-verifier.ts`, `tool-integrity.ts`, or a `verifySha256`
+function must have a real `npm test` step after its Node 20 setup; a non-verifying task (PackerTaskV1)
+stays load-only.
 
 ## Testing
 
