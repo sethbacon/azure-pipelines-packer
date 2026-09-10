@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.4...v1.6.5) (2026-09-10)
+
+
+### Bug Fixes
+
+* **deps:** take qs 6.16.0 via typed-rest-client 3.1.1, suppress unfixable adm-zip ([#448](https://github.com/sethbacon/azure-pipelines-packer/issues/448)) ([20f261a](https://github.com/sethbacon/azure-pipelines-packer/commit/20f261a0987cfddf921299742bee8bbbab43deff))
+
 ## [1.6.4](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.3...v1.6.4) (2026-09-09)
 
 
