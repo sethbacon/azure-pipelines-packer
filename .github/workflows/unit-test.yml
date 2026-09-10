@@ -100,7 +100,7 @@ jobs:
       # The action's own self-test runs in shared-workflows' CI beside the
       # script, which is why no `Self-test` step follows this one any more.
       - name: Shared-module pins in lockstep (#1108 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@c4694311531adcddc243fff1894398920f88a1f9 # main c469431, pre-v1.23.0
+        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@2c099c719d1ec5c0e77c578c701b7119cef6ac09 # v1.23.0
       - name: Validate egress authorization (SSRF class signature)
         run: node scripts/check-egress-authorization.js
       - name: Validate enforced disciplines (documented-but-unenforced class signature)
@@ -113,7 +113,7 @@ jobs:
       # hand-copied gate script this repository used to carry under scripts/,
       # and its self-test runs in shared-workflows' CI rather than here.
       - name: Validate documented claims against the code
-        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@c4694311531adcddc243fff1894398920f88a1f9 # main c469431, pre-v1.23.0
+        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@2c099c719d1ec5c0e77c578c701b7119cef6ac09 # v1.23.0
       # The root package.json's devDependencies (tfx-cli, @cyclonedx/cyclonedx-npm,
       # rimraf, typescript) are installed here and by release.yml's build/package/
       # sbom-and-sign/publish-marketplace jobs -- unlike a typical devDependency,
@@ -291,7 +291,7 @@ jobs:
   # not because there was nothing to report. The shared job scans the repository.
   workflow-security:
     name: Workflow Security
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@3aae0966a70daa50bcfe741ef07e20e86c814af4 # v1.20.2
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@2c099c719d1ec5c0e77c578c701b7119cef6ac09 # v1.23.0
     with:
       # release.yml calls this workflow at the commit it is about to publish;
       # the linters have to read that commit, not the run's default.
@@ -317,5 +317,5 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@3aae0966a70daa50bcfe741ef07e20e86c814af4 # v1.20.2
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@2c099c719d1ec5c0e77c578c701b7119cef6ac09 # v1.23.0
 
