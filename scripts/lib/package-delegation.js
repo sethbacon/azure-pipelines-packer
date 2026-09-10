@@ -12,6 +12,16 @@
 // -- caret on a 0.x version is patch-only, so the ranges were disjoint, npm
 // nested a second copy, and the delegated code ran the older one while BOTH
 // floors passed. Hence installedCopies() and the length !== 1 rejection.
+//
+// THIS COPY IS CANONICAL AND RESOLVES EVERYTHING FROM ROOT, NEVER __dirname.
+// It was taken from azure-pipelines-packer's scripts/lib/package-delegation.js
+// -- the only difference in the logic is the `provides` sentence below, and
+// `highestFloor`, which is new. That discipline is the reason the file can live
+// here at all: a gate resolved from one canonical copy analyses a tree it does
+// not live in, so every walk boundary has to be the ANALYSED root. See the
+// identical note on each walk for what __dirname cost the last time -- 19
+// fabricated sites across three repositories, from a boundary that followed the
+// script instead of the tree.
 
 // `ROOT` is threaded explicitly rather than read from a caller's module scope:
 // these helpers walk UPWARD from a source file looking for the owning
@@ -94,13 +104,27 @@ function installedCopies(file, dep, ROOT) {
         .map(([key, value]) => ({ path: key, version: value && value.version }));
 }
 
+// `capability` and `provides` are what the operator reading a failure has to go
+// on: the first names what was delegated, the second names what the resolved
+// package supplies. An entry that sets NEITHER falls back to the two placeholder
+// strings below and the message stops saying anything -- "delegates this
+// capability to @4cloudguru/pipeline-task-core" is true of every entry in every
+// table. Every production entry should name both; the defaults exist so a new
+// sink is never a crash, not so it can stay anonymous, and there is a self-test
+// case pinning exactly what the anonymous message reads like.
+//
+// The `provides` sentence is phrased `<pkg>@<range> (floor <min>) provides
+// <provides>` rather than `<provides> comes from <pkg>...` because `provides` is
+// a noun phrase that may be plural: "proxy dispatch and secret registration
+// comes from" is a subject/verb slip that the reworded template cannot produce
+// for any entry.
 function packageDelegationVerdict(file, { pkg, min, carries, capability = 'this capability', provides = 'the delegated implementation' }, ROOT) {
     const declared = declaredDependency(file, pkg, ROOT);
     if (declared === null || !satisfiesFloor(declared, min)) {
         return { ok: false, why: `delegates ${capability} to ${pkg}, but the owning task declares ${declared ?? 'no dependency on it'} (floor ${min})` };
     }
     if (!carries) {
-        return { ok: true, why: `${provides} comes from ${pkg}@${declared} (floor ${min})` };
+        return { ok: true, why: `${pkg}@${declared} (floor ${min}) provides ${provides}` };
     }
 
     const copies = installedCopies(file, carries.pkg, ROOT);
@@ -114,7 +138,33 @@ function packageDelegationVerdict(file, { pkg, min, carries, capability = 'this 
     if (!satisfiesFloor(copies[0].version, carries.min)) {
         return { ok: false, why: `${pkg}@${declared} delegates onward to ${carries.pkg}@${copies[0].version}, below the ${carries.min} floor` };
     }
-    return { ok: true, why: `${provides} comes from ${pkg}@${declared} (floor ${min}), resolving a single ${carries.pkg}@${copies[0].version} (floor ${carries.min})` };
+    return { ok: true, why: `${pkg}@${declared} (floor ${min}) provides ${provides}, resolving a single ${carries.pkg}@${copies[0].version} (floor ${carries.min})` };
 }
 
-module.exports = { packageDelegationVerdict, declaredDependency, satisfiesFloor, installedCopies };
+/**
+ * The highest of the floors handed to it, ignoring nulls -- the whole of the
+ * three-source floor rule (a sink's `since`, the estate ratchet, a repository's
+ * own declared floor) as ONE pure function, so each source can be shown to
+ * matter on its own.
+ *
+ * Because the rule is a MAX, a floor added by any source can only ever RAISE
+ * the bar; no source can weaken a verdict another source already reached. That
+ * is the whole safety argument for letting a floor come from somewhere other
+ * than this file, and it is a property worth being able to break in a test
+ * rather than one worth asserting in a comment.
+ *
+ * It is exported and unit-tested rather than inlined because two of the three
+ * sources are, today, never the winner in any production table entry: a rule
+ * only exercised through the tables would have a term nothing can falsify, and
+ * a guard nobody can break is a guard nobody has verified.
+ */
+function highestFloor(...versions) {
+    const parse = (v) => String(v).split('.').map(Number);
+    return versions.filter(Boolean).reduce((hi, v) => {
+        const [a, b] = [parse(v), parse(hi)];
+        for (let i = 0; i < 3; i += 1) { if (a[i] > b[i]) return v; if (a[i] < b[i]) return hi; }
+        return hi;
+    });
+}
+
+module.exports = { highestFloor, packageDelegationVerdict, declaredDependency, satisfiesFloor, installedCopies };
