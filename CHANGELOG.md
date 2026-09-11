@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.5...v1.6.6) (2026-09-11)
+
+
+### Bug Fixes
+
+* **gates:** adopt the union egress gate, the strongest of the three copies ([#458](https://github.com/sethbacon/azure-pipelines-packer/issues/458)) ([c154f68](https://github.com/sethbacon/azure-pipelines-packer/commit/c154f68ba25704cf7f3bd61c89744a58e5292a6d))
+
+
+### Documentation
+
+* **tests:** the resolver's policy header describes the arrangement that now exists ([#461](https://github.com/sethbacon/azure-pipelines-packer/issues/461)) ([e52f667](https://github.com/sethbacon/azure-pipelines-packer/commit/e52f66761f8ca6d2beb5ca59198dd251678a2ddf))
+
 ## [1.6.5](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.4...v1.6.5) (2026-09-10)
 
 
