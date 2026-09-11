@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
+import { sharedGate } from './shared-gate';
 import { assertEgressHostAllowed, isHostAllowed, parseAllowedHosts, EgressHostMessages } from '@4cloudguru/pipeline-task-core';
 import { validateUrlPathSegment } from '@4cloudguru/pipeline-task-core';
 import { downloadToFile } from '../src/http-client';
@@ -20,7 +21,9 @@ import { downloadToFile } from '../src/http-client';
  *   B. REDIRECT_ROWS  — the SAME decision re-applied on a redirect hop, driven
  *                       through the real downloadToFile + a stubbed fetch.
  *   C. SITE_ROWS      — every enumerated egress site in this repo, verdicted by
- *                       the re-runnable signature (scripts/check-egress-authorization.js).
+ *                       the re-runnable signature: the shared `check-egress-authorization`
+ *                       composite action in 4cloudguru/shared-workflows, which this job
+ *                       `uses:` by SHA before the suite runs.
  *
  * Every row is mutation-provable: inverting the guard it exercises turns that
  * row RED (see the file-level note on each table).
@@ -244,22 +247,36 @@ describe('egress authorization (class test #161/#188/#191/#200/#201)', function 
     });
 
     describe('C. every enumerated egress site in this repo', () => {
+        // This repository no longer carries the gate: it is the shared composite
+        // `check-egress-authorization`, and this job `uses:` it by SHA before the suite
+        // runs, which is what makes the bytes asserted here the bytes the pin names.
+        // sharedGate() THROWS when it cannot find them — never skips.
+        //
         // The signature exits non-zero when it finds residuals, and execFileSync
         // throws on a non-zero exit — capture stdout from the error so a residual
         // fails an ASSERTION below rather than aborting the whole suite at load.
-        let stdout: string;
-        try {
-            stdout = execFileSync(
-                process.execPath,
-                [path.join(REPO_ROOT, 'scripts/check-egress-authorization.js'), REPO_ROOT, '--json'],
-                { encoding: 'utf8' },
-            );
-        } catch (err) {
-            stdout = String((err as { stdout?: string }).stdout ?? '');
-            assert.ok(stdout.trim().startsWith('{'), `signature produced no JSON: ${String(err)}`);
-        }
-        const raw = JSON.parse(stdout) as { sites: Array<{ rel: string; fn: string; sink: string; verdict: string }>; suspects: string[]; failures: number };
-        const report = { ...raw, sites: raw.sites.map(s => ({ file: s.rel, fn: s.fn, sink: s.sink, verdict: s.verdict, why: '' })) };
+        // The resolution happens in before() rather than in this describe body: a
+        // throw here would surface as mocha's "uncaught error outside of test
+        // suite" with the message detached from the suite that needs it.
+        let report: {
+            sites: Array<{ file: string; fn: string; sink: string; verdict: string; why: string }>;
+            suspects: string[];
+            failures: number;
+        };
+        before(() => {
+            // No third argument: this gate's only imports are node builtins, so it
+            // requires nothing beside itself.
+            const gate = sharedGate(REPO_ROOT, 'check-egress-authorization', 'check-egress-authorization.js');
+            let stdout: string;
+            try {
+                stdout = execFileSync(process.execPath, [gate, REPO_ROOT, '--json'], { encoding: 'utf8' });
+            } catch (err) {
+                stdout = String((err as { stdout?: string }).stdout ?? '');
+                assert.ok(stdout.trim().startsWith('{'), `signature produced no JSON: ${String(err)}`);
+            }
+            const raw = JSON.parse(stdout) as { sites: Array<{ rel: string; fn: string; sink: string; verdict: string }>; suspects: string[]; failures: number };
+            report = { ...raw, sites: raw.sites.map(s => ({ file: s.rel, fn: s.fn, sink: s.sink, verdict: s.verdict, why: '' })) };
+        });
 
         it('leaves no unauthorized or textual-only site anywhere in src/', () => {
             assert.strictEqual(report.failures, 0,

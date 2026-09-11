@@ -76,7 +76,7 @@ action's source, not guessed from this repository's own workflow file.
 | --- | --- |
 | Workflow file | `.github/workflows/release-pr-guard.yml` |
 | Jobs that post it | `closing-keywords` (display name `Release PR closes only what it completes`) on every `pull_request` (`opened`, `edited`, `synchronize`, `reopened`); `link-regrade` (display name `Re-grade open release PRs against the live link graph`) on `schedule (*/5 * * * *)` and `workflow_dispatch` |
-| Action | `4cloudguru/shared-workflows/.github/actions/release-pr-closing-keywords@adb01429f88e459fcc045598317b5d6c09f95647` (v1.20.2) |
+| Action | `4cloudguru/shared-workflows/.github/actions/release-pr-closing-keywords@c52ee27a03d06eee94e13c7bb56385d4edfb94d4` (v1.28.0) |
 | How it posts | Neither job overrides the action's `status-context` input, so both inherit its default — literally `release-guard/link-regrade` in the action's `action.yml` — and post it as a **commit status** (`POST /repos/<repo>/statuses/<head-sha>` with an explicit `context=` field), not a check run. That is why it matches neither job's `name:`: a commit-status context is chosen by the caller at call time, independent of the job that calls it. The two jobs sharing one context is deliberate — it lets the scheduled re-grade overwrite the pull-request-time verdict on the same SHA. |
 | Token | this workflow's own `${{ secrets.GITHUB_TOKEN }}`, scoped `statuses: write` in both jobs' `permissions:` block — not a GitHub App |
 | Availability consequence | If `4cloudguru/shared-workflows` removes or breaks `release-pr-closing-keywords`, or this workflow file is removed or renamed, the context stops posting entirely and `main` blocks every pull request here — and, because the workflow is byte-identical, in `azure-pipelines-terraform` and `azure-pipelines-release-docs` too. |
@@ -112,7 +112,6 @@ azure-pipelines-packer/
 │   ├── check-versions.js                    # CI: validates version fields exist + are well-formed
 │   ├── check-minor-bumps.js                 # CI: fails if a changed task's Minor was NOT bumped
 │   ├── bump-minor-versions.js               # CI: applies those bumps on the Release PR (idempotent)
-│   ├── check-egress-authorization.js        # CI: SSRF class signature (outbound egress authorization)
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
 │   ├── check-package-composition.js         # CI: would the .vsix compose correctly, without building one
@@ -128,15 +127,16 @@ azure-pipelines-packer/
 │   │                                         #     analysing. Bump it in the change that bumps the
 │   │                                         #     packages; see below.
 │   ├── test-check-minor-bumps.js            # CI self-tests for the two guards that carry one
-│   ├── test-bump-minor-versions.js          #     in this repository; the four class gates'
+│   ├── test-bump-minor-versions.js          #     in this repository; the five class gates'
 │   │                                         #     self-tests run in shared-workflows' own CI
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
 │                                            # NOT here: check-docs-claims, check-shared-module-pins,
 │                                            # check-enforced-disciplines, check-proxy-parity,
-│                                            # check-artifact-trust and auth-parity-matrix. All six are
-│                                            # shared composite actions in 4cloudguru/shared-workflows,
+│                                            # check-artifact-trust, auth-parity-matrix and
+│                                            # check-egress-authorization. All seven are shared
+│                                            # composite actions in 4cloudguru/shared-workflows,
 │                                            # called by full commit SHA from unit-test.yml (the last
-│                                            # three also from the Build and Test jobs, which is how the
+│                                            # four also from the Build and Test jobs, which is how the
 │                                            # L0 suites that spawn them find the pinned bytes);
 │                                            # their self-tests run in that repository's CI.
 └── .github/workflows/
@@ -154,28 +154,31 @@ azure-pipelines-packer/
 
 ### Where the class gates live
 
-`check-enforced-disciplines`, `check-proxy-parity`, `check-artifact-trust` and `auth-parity-matrix`
-are no longer scripts in this repository. Each is a composite action in
+`check-enforced-disciplines`, `check-proxy-parity`, `check-artifact-trust`, `auth-parity-matrix` and
+`check-egress-authorization` are no longer scripts in this repository. Each is a composite action in
 `4cloudguru/shared-workflows/.github/actions/`, pinned by full commit SHA from
 `.github/workflows/unit-test.yml` — the same shape `check-docs-claims` and
 `check-shared-module-pins` already had. A composite runs as a STEP inside the caller's own job, so
 `Check Shared Module Provenance` keeps its name and stays the required status context it already is;
 a reusable workflow would have reported as `<job-id> / <called-job-name>` and renamed the check.
 
-Three of them are also SPAWNED under `npm test`: `ProxyParityL0.ts` and
-`CredentialFailClosedMatrixL0.ts` in PackerTaskV1, `ArtifactTrustL0.ts` in PackerInstallerV1 each run
-the gate and assert its whole enumerated set. On a runner the composite writes its own
-`github.action_path` into `$GITHUB_ENV` (`SHARED_GATE_CHECK_PROXY_PARITY` and siblings) and
+Four of them are also SPAWNED under `npm test`: `ProxyParityL0.ts` and
+`CredentialFailClosedMatrixL0.ts` in PackerTaskV1, `ArtifactTrustL0.ts` and
+`EgressAuthorizationL0.ts` in PackerInstallerV1 each run the gate and assert its whole enumerated
+set. On a runner the composite writes its own `github.action_path` into `$GITHUB_ENV`
+(`SHARED_GATE_CHECK_PROXY_PARITY` and siblings) and
 `Tests/shared-gate.ts` reads it, so the bytes a suite spawns are the bytes the `uses:` pin names.
 That is why the two `Build and Test` jobs carry the composites too, before their test step. Locally
 the resolver falls back to a sibling `../shared-workflows` checkout, and when it finds neither it
 THROWS with the command to fix it — it never skips, because a class assertion that could not run
 must never read like one that ran clean.
 
-Each composite takes MEASURED floor inputs (`min-sites`, `min-scanned`, `min-cells`) because these
-gates exit 0 over a repository they enumerated nothing in; the floor is what tells "looked and found
-none" apart from "looked nowhere". The values live beside the `uses:` line with the date and the
-command that produced them.
+Six of the seven take MEASURED floor inputs (`min-sites`, `min-scanned`, `min-cells`, `min-claims`)
+because these gates exit 0 over a repository they enumerated nothing in; the floor is what tells
+"looked and found none" apart from "looked nowhere". `check-enforced-disciplines` is the exception —
+it enumerates no population to put a floor under. `min-claims` and `min-scanned` became REQUIRED in
+v1.28.0, which is why rolling that pin and declaring those two floors had to be one change. The
+values live beside the `uses:` line with the date and the command that produced them.
 
 `scripts/lib/task-dirs.js` stays in this repository even though `check-enforced-disciplines.js`
 left, because `copy-build.js` and three other non-gate scripts import it — and it does not go
@@ -221,8 +224,9 @@ which this task consumes:
 | the resolution in `proxy-config.ts` / `buildFetchOptions` | `src/proxy/` (`resolveProxy`)    | Turns the agent's proxy settings into a dispatcher-ready URL plus every spelling of the credential that must be masked. A superset of what both copies did: it also masks userinfo embedded directly in `Agent.ProxyUrl`, which both missed because they only masked when `Agent.ProxyUsername` was separately set         |
 
 Change any of those in the package, not here and not in a caller.
-`scripts/check-egress-authorization.js` now treats an address-classification re-implementation
-anywhere in this repo as a suspect, since there is no longer a sanctioned in-repo home for one.
+The `check-egress-authorization` composite action now treats an address-classification
+re-implementation anywhere in this repo as a suspect, since there is no longer a sanctioned in-repo
+home for one.
 `discardArtifactOnFailure` takes its debug sink as a parameter (the package does not import the
 ADO task lib), so call sites pass one — and they must keep calling it by that name, because
 the `check-artifact-trust` gate recognises the discard by call-site name. The same injection

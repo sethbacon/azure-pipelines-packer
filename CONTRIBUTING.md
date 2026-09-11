@@ -73,14 +73,15 @@ npm install --include=dev
    - `Check Version Consistency` — validates the version fields in each `task.json`.
    - `Check Shared Module Provenance` — every module copied from
      `azure-pipelines-terraform` must carry its `@shared-module` provenance header
-     and every outbound egress must be authorized (`scripts/check-shared-modules.js`,
-     `scripts/check-egress-authorization.js`); four class gates run here as composite
-     actions from `4cloudguru/shared-workflows`, called by full commit SHA rather than
-     kept as copies here — `check-enforced-disciplines`, `check-proxy-parity` (every
-     outbound HTTP call must honour the agent proxy configuration), `check-artifact-trust`
-     and `auth-parity-matrix`; and the documented claims in these files must match what
-     the tree and its workflows actually do, which is that repository's `check-docs-claims`
-     action on the same pin.
+     and every outbound egress must be authorized (`scripts/check-shared-modules.js`);
+     five class gates run here as composite actions from `4cloudguru/shared-workflows`,
+     called by full commit SHA rather than kept as copies here —
+     `check-enforced-disciplines`, `check-proxy-parity` (every outbound HTTP call must
+     honour the agent proxy configuration), `check-artifact-trust`, `auth-parity-matrix`
+     and `check-egress-authorization` (every outbound request must be authorized against
+     its resolved destination, on every redirect hop); and the documented claims in these
+     files must match what the tree and its workflows actually do, which is that
+     repository's `check-docs-claims` action on the same pin.
    - `Build and Test Packer Task V1` — lint, compile and unit tests, on Ubuntu and Windows × Node 24.
    - `Build and Test Packer Installer V1` — same, for the installer task.
    - `Workflow Security` — actionlint checks the workflow schema and zizmor scans
@@ -114,11 +115,12 @@ npm install --include=dev
    ```
 
    **`npm test` itself now requires a sibling `shared-workflows` checkout for the tasks that
-   spawn a class gate, and that is deliberate.** The four class gates below are composite
-   actions in the same repository, on the same pin, and three of them are spawned by task L0
+   spawn a class gate, and that is deliberate.** The five class gates below are composite
+   actions in the same repository, on the same pin, and four of them are spawned by task L0
    suites as well as run as CI steps: `PackerTaskV1/Tests/ProxyParityL0.ts` and
    `PackerTaskV1/Tests/CredentialFailClosedMatrixL0.ts`, and
-   `PackerInstallerV1/Tests/ArtifactTrustL0.ts`, each run the gate and assert its whole
+   `PackerInstallerV1/Tests/ArtifactTrustL0.ts` and
+   `PackerInstallerV1/Tests/EgressAuthorizationL0.ts`, each run the gate and assert its whole
    enumerated set. On a runner the composite exports its own path and `Tests/shared-gate.ts`
    reads it; on your machine that resolver looks for `../shared-workflows` beside this
    checkout, and when it finds neither it fails the suite with the `git clone` line to run.
@@ -131,13 +133,14 @@ npm install --include=dev
    git clone https://github.com/4cloudguru/shared-workflows ../shared-workflows
    ```
 
-   The same four run locally against this repository as:
+   The same five run locally against this repository as:
 
    ```bash
    node ../shared-workflows/.github/actions/check-enforced-disciplines/check-enforced-disciplines.js .
    node ../shared-workflows/.github/actions/check-proxy-parity/check-proxy-parity.js .
    node ../shared-workflows/.github/actions/check-artifact-trust/check-artifact-trust.js .
    node ../shared-workflows/.github/actions/auth-parity-matrix/auth-parity-matrix.cjs .
+   node ../shared-workflows/.github/actions/check-egress-authorization/check-egress-authorization.js .
    ```
 
    None of these actions has a self-test step here any more: every self-test runs in
