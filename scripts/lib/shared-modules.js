@@ -11,12 +11,23 @@
 
 const INSTALLER_SRC = 'Tasks/PackerInstaller/PackerInstallerV1/src';
 
-// No module is duplicated WITHIN this repository: each of the modules below
-// exists in exactly one task, so there is no second in-repo copy to diff
-// against. The list is empty and stated rather than absent, so a future
-// duplicate has an obvious place to be registered instead of arriving
-// ungated.
-const FAMILIES = [];
+const COMMAND_TESTS = 'Tasks/PackerTask/PackerTaskV1/Tests';
+const INSTALLER_TESTS = 'Tasks/PackerInstaller/PackerInstallerV1/Tests';
+
+// One module is duplicated WITHIN this repository, and it is duplicated because
+// each task's Tests/ directory is its own compilation unit: `shared-gate.ts`,
+// the resolver every class-gate L0 suite uses to find a gate this repository no
+// longer carries. The four gates it resolves (check-proxy-parity,
+// check-artifact-trust, auth-parity-matrix, check-enforced-disciplines) are
+// composite actions in 4cloudguru/shared-workflows, pinned by full commit SHA;
+// on a runner the composite exports its own github.action_path and this file
+// reads it, so the bytes the suite spawns are the bytes the pin names. A fix to
+// the resolution or to its error text must land in BOTH copies -- an L0 suite
+// that could not find its gate but read like a clean run is the exact failure
+// this estate keeps re-learning, so a drift here is a red required check.
+const FAMILIES = [
+    { dirs: [COMMAND_TESTS, INSTALLER_TESTS], modules: ['shared-gate.ts'] },
+];
 
 // The registry of modules copied from azure-pipelines-terraform. Adding a new
 // copy means adding it here AND giving it the provenance header.
@@ -41,6 +52,11 @@ const UPSTREAM = 'azure-pipelines-terraform';
 const COMMAND_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 const PROVENANCE = [
+    // The shared-gate resolver, whose canonical home is the sibling extension.
+    // Its in-repo twin is byte-compared by the FAMILIES entry above; this entry
+    // is what makes the CROSS-repository copy declare where it came from, since
+    // azure-pipelines-terraform is not checked out in this repository's CI.
+    { dir: COMMAND_TESTS, file: 'shared-gate.ts', upstream: UPSTREAM },
     // Extracted from base-packer-command-handler.ts (#113), where it had been a
     // seventh copy of a module the sibling extensions gate as a byte-identical
     // family -- and invisible to every basename-keyed check because it was inline.
@@ -66,8 +82,8 @@ const PROVENANCE = [
     // the two repos are deliberately no longer symmetrical.
     // proxy-config.ts (the agent-proxy fetch options builder, #196) is GONE too
     // (#337): every outbound call site now proxies via generateIdToken()/
-    // createAdoHttpClient() in @4cloudguru/pipeline-task-ado, confirmed by
-    // check-proxy-parity.js reporting all 4 sites PROXIED-BY-PACKAGE with zero
+    // createAdoHttpClient() in @4cloudguru/pipeline-task-ado, confirmed by the
+    // check-proxy-parity gate reporting all 4 sites PROXIED-BY-PACKAGE with zero
     // local proxy-config.ts callers left -- it was dead code, not a live gate.
 ];
 

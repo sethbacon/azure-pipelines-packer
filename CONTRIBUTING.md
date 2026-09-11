@@ -72,13 +72,15 @@ npm install --include=dev
    <!-- ci-jobs:begin .github/workflows/unit-test.yml -->
    - `Check Version Consistency` — validates the version fields in each `task.json`.
    - `Check Shared Module Provenance` — every module copied from
-     `azure-pipelines-terraform` must carry its `@shared-module` provenance header,
-     and every outbound HTTP call must honour the agent proxy configuration
-     (`scripts/check-shared-modules.js`, `scripts/check-egress-authorization.js`,
-     `scripts/check-proxy-parity.js`), and the documented claims in these files must
-     match what the tree and its workflows actually do — that last one is
-     `4cloudguru/shared-workflows`' `check-docs-claims` composite action, called by SHA
-     from this job rather than kept as a copy here.
+     `azure-pipelines-terraform` must carry its `@shared-module` provenance header
+     and every outbound egress must be authorized (`scripts/check-shared-modules.js`,
+     `scripts/check-egress-authorization.js`); four class gates run here as composite
+     actions from `4cloudguru/shared-workflows`, called by full commit SHA rather than
+     kept as copies here — `check-enforced-disciplines`, `check-proxy-parity` (every
+     outbound HTTP call must honour the agent proxy configuration), `check-artifact-trust`
+     and `auth-parity-matrix`; and the documented claims in these files must match what
+     the tree and its workflows actually do, which is that repository's `check-docs-claims`
+     action on the same pin.
    - `Build and Test Packer Task V1` — lint, compile and unit tests, on Ubuntu and Windows × Node 24.
    - `Build and Test Packer Installer V1` — same, for the installer task.
    - `Workflow Security` — actionlint checks the workflow schema and zizmor scans
@@ -111,8 +113,43 @@ npm install --include=dev
    node ../shared-workflows/.github/actions/check-shared-module-pins/check-shared-module-pins.js .
    ```
 
-   Neither action has a self-test step here any more: both self-tests run in
-   `4cloudguru/shared-workflows`' own CI, beside the scripts they exercise.
+   **`npm test` itself now requires a sibling `shared-workflows` checkout for the tasks that
+   spawn a class gate, and that is deliberate.** The four class gates below are composite
+   actions in the same repository, on the same pin, and three of them are spawned by task L0
+   suites as well as run as CI steps: `PackerTaskV1/Tests/ProxyParityL0.ts` and
+   `PackerTaskV1/Tests/CredentialFailClosedMatrixL0.ts`, and
+   `PackerInstallerV1/Tests/ArtifactTrustL0.ts`, each run the gate and assert its whole
+   enumerated set. On a runner the composite exports its own path and `Tests/shared-gate.ts`
+   reads it; on your machine that resolver looks for `../shared-workflows` beside this
+   checkout, and when it finds neither it fails the suite with the `git clone` line to run.
+   It deliberately does not skip: these assertions are the only thing enumerating their defect
+   class under `npm test`, so a could-not-run that read like a clean run would be worse than a
+   red one. (Every task's mocha invocation also passes `--forbid-pending`, so even a future
+   edit that tried to `this.skip()` around a missing gate would fail the run.)
+
+   ```bash
+   git clone https://github.com/4cloudguru/shared-workflows ../shared-workflows
+   ```
+
+   The same four run locally against this repository as:
+
+   ```bash
+   node ../shared-workflows/.github/actions/check-enforced-disciplines/check-enforced-disciplines.js .
+   node ../shared-workflows/.github/actions/check-proxy-parity/check-proxy-parity.js .
+   node ../shared-workflows/.github/actions/check-artifact-trust/check-artifact-trust.js .
+   node ../shared-workflows/.github/actions/auth-parity-matrix/auth-parity-matrix.cjs .
+   ```
+
+   None of these actions has a self-test step here any more: every self-test runs in
+   `4cloudguru/shared-workflows`' own CI, beside the scripts they exercise. That is a gain
+   rather than a loss for one of them — this repository's deleted copy of the artifact-trust
+   self-test was invoked by nothing at all: not a workflow, not `package.json`, not another
+   script. It existed only to satisfy a replay signature that asks whether the file is there,
+   never whether anything runs it. Its upstream successor actually runs.
+
+   Your sibling checkout is at whatever ref you left it on, which is not necessarily the SHA CI
+   pins. Every suite prints a `[shared-gate] <file> sha256:… <- <path> (via …)` line once per
+   gate for exactly that reason: which bytes ran is answerable from the log, locally and in CI.
 
    `.github/workflows/pr-checks.yml` gates the PR as well, with the conventional
    title check, dependency review, the Release-PR Minor-bump backstop, and the

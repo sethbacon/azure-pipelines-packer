@@ -112,18 +112,26 @@ azure-pipelines-packer/
 │   ├── check-versions.js                    # CI: validates version fields exist + are well-formed
 │   ├── check-minor-bumps.js                 # CI: fails if a changed task's Minor was NOT bumped
 │   ├── bump-minor-versions.js               # CI: applies those bumps on the Release PR (idempotent)
-│   ├── check-enforced-disciplines.js        # CI: signature for documented-but-unenforced rules
-│   │                                         #     (entry point tested + measured, every declared
-│   │                                         #      execution handler exercised, Minor-bump layers,
-│   │                                         #      Marketplace publish retry + token off argv)
+│   ├── check-egress-authorization.js        # CI: SSRF class signature (outbound egress authorization)
 │   ├── check-shared-modules.js              # CI: enforces the @shared-module provenance header
 │   │                                         #     on files copied from azure-pipelines-terraform
+│   ├── check-package-composition.js         # CI: would the .vsix compose correctly, without building one
+│   ├── lib/task-dirs.js                     # Shared task discovery: check-versions.js,
+│   │                                         #     check-minor-bumps.js, check-package-composition.js
+│   │                                         #     and copy-build.js all import it, which is why it
+│   │                                         #     stays here even though check-enforced-disciplines.js
+│   │                                         #     left. It does not go uncompared: the
+│   │                                         #     check-enforced-disciplines action cmp's it against
+│   │                                         #     its own copy at the pinned SHA.
 │   ├── test-*.js                            # CI self-tests for each of the guards above
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
-│                                            # NOT here: check-docs-claims and check-shared-module-pins.
-│                                            # Both are shared composite actions in
-│                                            # 4cloudguru/shared-workflows, called by SHA from
-│                                            # unit-test.yml's Check Shared Module Provenance job;
+│                                            # NOT here: check-docs-claims, check-shared-module-pins,
+│                                            # check-enforced-disciplines, check-proxy-parity,
+│                                            # check-artifact-trust and auth-parity-matrix. All six are
+│                                            # shared composite actions in 4cloudguru/shared-workflows,
+│                                            # called by full commit SHA from unit-test.yml (the last
+│                                            # three also from the Build and Test jobs, which is how the
+│                                            # L0 suites that spawn them find the pinned bytes);
 │                                            # their self-tests run in that repository's CI.
 └── .github/workflows/
     ├── unit-test.yml         # CI: version/provenance/discipline checks, build/test (Node 24 + a
@@ -137,6 +145,35 @@ azure-pipelines-packer/
     ├── codeql.yml            # CodeQL analysis (PR, push to main, weekly)
     └── weekly-security.yml   # OSV scan, GPG key freshness, stale-Dependabot check
 ```
+
+### Where the class gates live
+
+`check-enforced-disciplines`, `check-proxy-parity`, `check-artifact-trust` and `auth-parity-matrix`
+are no longer scripts in this repository. Each is a composite action in
+`4cloudguru/shared-workflows/.github/actions/`, pinned by full commit SHA from
+`.github/workflows/unit-test.yml` — the same shape `check-docs-claims` and
+`check-shared-module-pins` already had. A composite runs as a STEP inside the caller's own job, so
+`Check Shared Module Provenance` keeps its name and stays the required status context it already is;
+a reusable workflow would have reported as `<job-id> / <called-job-name>` and renamed the check.
+
+Three of them are also SPAWNED under `npm test`: `ProxyParityL0.ts` and
+`CredentialFailClosedMatrixL0.ts` in PackerTaskV1, `ArtifactTrustL0.ts` in PackerInstallerV1 each run
+the gate and assert its whole enumerated set. On a runner the composite writes its own
+`github.action_path` into `$GITHUB_ENV` (`SHARED_GATE_CHECK_PROXY_PARITY` and siblings) and
+`Tests/shared-gate.ts` reads it, so the bytes a suite spawns are the bytes the `uses:` pin names.
+That is why the two `Build and Test` jobs carry the composites too, before their test step. Locally
+the resolver falls back to a sibling `../shared-workflows` checkout, and when it finds neither it
+THROWS with the command to fix it — it never skips, because a class assertion that could not run
+must never read like one that ran clean.
+
+Each composite takes MEASURED floor inputs (`min-sites`, `min-scanned`, `min-cells`) because these
+gates exit 0 over a repository they enumerated nothing in; the floor is what tells "looked and found
+none" apart from "looked nowhere". The values live beside the `uses:` line with the date and the
+command that produced them.
+
+`scripts/lib/task-dirs.js` stays in this repository even though `check-enforced-disciplines.js`
+left, because `copy-build.js` and three other non-gate scripts import it — and it does not go
+uncompared: the `check-enforced-disciplines` action `cmp`s it against its own copy at the pinned SHA.
 
 ## PackerInstallerV1
 
@@ -169,7 +206,7 @@ Change any of those in the package, not here and not in a caller.
 anywhere in this repo as a suspect, since there is no longer a sanctioned in-repo home for one.
 `discardArtifactOnFailure` takes its debug sink as a parameter (the package does not import the
 ADO task lib), so call sites pass one — and they must keep calling it by that name, because
-`scripts/check-artifact-trust.js` recognises the discard by call-site name. The same injection
+the `check-artifact-trust` gate recognises the discard by call-site name. The same injection
 rule applies to the HTTP client: the package imports neither `azure-pipelines-task-lib` nor
 `undici`, so `http-client.ts` supplies `fetchOptions` (the undici `ProxyAgent` dispatcher plus
 masking of both the raw and percent-encoded proxy password), `debug`, and the `tasks.loc`
@@ -218,9 +255,9 @@ two (crypto/proxy-shaped) to `@4cloudguru/pipeline-task-core`:
 | `id-token-generator.ts`    | `@4cloudguru/pipeline-task-ado` (`generateIdToken`)           | Requests the ADO OIDC ID token used by every WIF provider. Gained `SYSTEM_OIDCREQUESTURI` hostname allowlisting — this repo's copy only checked the URL scheme — and routes through the package's own proxy-aware fetch. |
 | `endpoint-data-secret.ts`  | `@4cloudguru/pipeline-task-ado` (`readSecretEndpointDataParameter`, `maskSecretLines`) | Reads `ENDPOINT_DATA_*` service-connection parameters without the task-lib read path that logs the value (`ENDPOINT_DATA_*` is not vaulted). Was already byte-for-byte functionally identical to the shared version — this repo's copy already used `registerSecret`, not the buggy `setSecret` (#349 fixed that half locally before the migration).                        |
 | `pem-normalizer.ts`        | `@4cloudguru/pipeline-task-core` (`normalizePem`)             | Normalizes and validates a PEM-encoded private key (GCP service-account, OCI API key) regardless of its on-disk line-wrapping. Was already byte-identical to the terraform copy.                                         |
-| `proxy-config.ts`          | `@4cloudguru/pipeline-task-ado`/`@4cloudguru/pipeline-task-core` (`generateIdToken`, `createAdoHttpClient`) | Built `fetch()` options routing outbound HTTPS through the agent's proxy. Its only remaining callers (the WIF token exchange, the installer's HTTP client) both already delegated their own proxy dispatch to the package -- confirmed dead via `check-proxy-parity.js` reporting zero local callers, deleted rather than migrated (#337). |
+| `proxy-config.ts`          | `@4cloudguru/pipeline-task-ado`/`@4cloudguru/pipeline-task-core` (`generateIdToken`, `createAdoHttpClient`) | Built `fetch()` options routing outbound HTTPS through the agent's proxy. Its only remaining callers (the WIF token exchange, the installer's HTTP client) both already delegated their own proxy dispatch to the package -- confirmed dead via the `check-proxy-parity` gate reporting zero local callers, deleted rather than migrated (#337). |
 
-Change any of those in the package, not here. `scripts/check-proxy-parity.js` treats `generateIdToken`
+Change any of those in the package, not here. The `check-proxy-parity` gate treats `generateIdToken`
 as a package-delegated sink (like `createAdoHttpClient`): it verifies the declared
 `@4cloudguru/pipeline-task-ado` floor and that it resolves a single `@4cloudguru/pipeline-task-core`
 copy, rather than reading a local `fetchOptions` spread that no longer exists here.
@@ -260,7 +297,7 @@ runner, not as a second fully-verified execution path.
 verifying a downloaded binary (GPG signature over SHA256SUMS via `gpg-verifier.ts`), so the load-only
 smoke check alone would never exercise that verification logic — the try/catch short-circuits before
 it runs. Its job additionally runs the real, input-populated `npm test` suite after the Node 20 setup.
-`scripts/check-enforced-disciplines.js`'s `verification-real-tests-under-node20` check enforces this:
+The `check-enforced-disciplines` gate's `verification-real-tests-under-node20` check enforces this:
 a task shipping `gpg-verifier.ts`, `cosign-verifier.ts`, `tool-integrity.ts`, or a `verifySha256`
 function must have a real `npm test` step after its Node 20 setup; a non-verifying task (PackerTaskV1)
 stays load-only.
@@ -273,7 +310,7 @@ The mock-runner entry must be the task's **real** `src/index.ts`, never a re-imp
 `PackerTaskV1/Tests/RunCommand.ts` now just `import '../src/index'`, and the installer's
 `EntryPointInstallSuccess`/`EntryPointVerifyFail` scenarios point `TaskMockRunner` straight at
 `../src/index.js`. `src/index.js` is included in each task's coverage metric (#189), and
-`scripts/check-enforced-disciplines.js` fails CI if either property regresses.
+the `check-enforced-disciplines` gate fails CI if either property regresses.
 
 ## Key Dependencies
 
