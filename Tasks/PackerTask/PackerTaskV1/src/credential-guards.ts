@@ -23,9 +23,11 @@ import { readSecretEndpointDataParameter } from '@4cloudguru/pipeline-task-ado';
  *
  * Every handler therefore reads credential fields through the helpers below
  * rather than calling the task-lib accessors directly, so a new branch inherits
- * the guard instead of having to remember it. `scripts/auth-parity-matrix.cjs`
- * enumerates (handler x auth-branch x required-field) and fails CI on any cell
- * that reads a field without one of these.
+ * the guard instead of having to remember it. The `auth-parity-matrix` gate --
+ * a shared composite action in 4cloudguru/shared-workflows, pinned by full
+ * commit SHA from this repository's workflows -- enumerates
+ * (handler x auth-branch x required-field) and fails CI on any cell that reads
+ * a field without one of these.
  */
 
 /**

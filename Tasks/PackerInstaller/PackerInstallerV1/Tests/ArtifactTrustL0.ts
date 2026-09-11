@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
+import { sharedGate } from './shared-gate';
 import * as ttm from 'azure-pipelines-task-lib/mock-test';
 import {
 
@@ -21,11 +22,14 @@ import { discardArtifactOnFailure, VerificationFailure } from '@4cloudguru/pipel
  * unrecoverable or silently degraded.
  *
  * Three tables, each covering the class rather than one call site:
- *   A. SITE_ROWS  — every trust site the re-runnable signature
- *                   (scripts/check-artifact-trust.js) enumerates in THIS repo, with
- *                   its verdict. A new download strategy or cache path shows up here
- *                   automatically and fails the enumeration assertion until it is
- *                   accounted for.
+ *   A. SITE_ROWS  — every trust site the re-runnable signature enumerates in THIS
+ *                   repo, with its verdict. A new download strategy or cache path
+ *                   shows up here automatically and fails the enumeration assertion
+ *                   until it is accounted for. This repository no longer carries
+ *                   that signature: it is the shared `check-artifact-trust`
+ *                   composite action in 4cloudguru/shared-workflows, which this job
+ *                   `uses:` by SHA before the suite runs, so the bytes asserted
+ *                   below are the bytes the pin names.
  *   B. EDGE_ROWS  — the failure/edge STATES themselves, driven through the real
  *                   exported helpers: a checksum mismatch (artifact must be gone), a
  *                   zero-length / truncated / non-hex cache record, a valid record
@@ -223,24 +227,33 @@ describe('artifact trust (class test #65/#78/#136/#198/#204)', function () {
     this.timeout(30000);
 
     describe('A. every enumerated trust site in this repo', () => {
+        // This repository no longer carries the gate: it is the shared composite
+        // `check-artifact-trust`, and this job `uses:` it by SHA before the suite
+        // runs, which is what makes the bytes asserted here the bytes the pin names.
+        // sharedGate() THROWS when it cannot find them — never skips.
+        //
         // The signature exits non-zero when it finds residuals, and execFileSync
         // throws on a non-zero exit — capture stdout from the error so a residual
         // fails an ASSERTION below rather than aborting the whole suite at load.
-        let stdout: string;
-        try {
-            stdout = execFileSync(
-                process.execPath,
-                [path.join(REPO_ROOT, 'scripts/check-artifact-trust.js'), REPO_ROOT, '--json'],
-                { encoding: 'utf8' },
-            );
-        } catch (err) {
-            stdout = String((err as { stdout?: string }).stdout ?? '');
-            assert.ok(stdout.trim().startsWith('{'), `signature produced no JSON: ${String(err)}`);
-        }
-        const report = JSON.parse(stdout) as {
+        // The resolution happens in before() rather than in this describe body: a
+        // throw here would surface as mocha's "uncaught error outside of test
+        // suite" with the message detached from the suite that needs it.
+        let report: {
             sites: Array<{ rel: string; fn: string; kind: string; verdict: string; why: string; line: number }>;
             failures: number;
         };
+        before(() => {
+            const gate = sharedGate(REPO_ROOT, 'check-artifact-trust',
+                'check-artifact-trust.js', ['lib/package-delegation.js']);
+            let stdout: string;
+            try {
+                stdout = execFileSync(process.execPath, [gate, REPO_ROOT, '--json'], { encoding: 'utf8' });
+            } catch (err) {
+                stdout = String((err as { stdout?: string }).stdout ?? '');
+                assert.ok(stdout.trim().startsWith('{'), `signature produced no JSON: ${String(err)}`);
+            }
+            report = JSON.parse(stdout);
+        });
 
         it('leaves no residual instance of the class anywhere in src/', () => {
             assert.strictEqual(

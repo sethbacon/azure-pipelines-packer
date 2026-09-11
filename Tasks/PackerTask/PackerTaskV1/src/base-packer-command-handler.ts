@@ -435,7 +435,7 @@ export abstract class BasePackerCommandHandler {
         // connection has no `AccessToken` and an OAuth one has no `accessToken` --
         // so an optional=false read would abort a correctly-configured connection.
         // The throw below fires when NEITHER yields a token, which is the real
-        // fail-closed condition; auth-parity-matrix.cjs judges each accessor
+        // fail-closed condition; the auth-parity-matrix gate judges each accessor
         // individually and cannot see a guard spanning two of them.
         for (const parameter of ["accessToken", "AccessToken"]) {
             const token = tasks.getEndpointAuthorizationParameter(connection, parameter, true);

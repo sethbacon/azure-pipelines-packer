@@ -11,12 +11,23 @@
 
 const INSTALLER_SRC = 'Tasks/PackerInstaller/PackerInstallerV1/src';
 
-// No module is duplicated WITHIN this repository: each of the modules below
-// exists in exactly one task, so there is no second in-repo copy to diff
-// against. The list is empty and stated rather than absent, so a future
-// duplicate has an obvious place to be registered instead of arriving
-// ungated.
-const FAMILIES = [];
+const COMMAND_TESTS = 'Tasks/PackerTask/PackerTaskV1/Tests';
+const INSTALLER_TESTS = 'Tasks/PackerInstaller/PackerInstallerV1/Tests';
+
+// One module is duplicated WITHIN this repository, and it is duplicated because
+// each task's Tests/ directory is its own compilation unit: `shared-gate.ts`,
+// the resolver every class-gate L0 suite uses to find a gate this repository no
+// longer carries. The four gates it resolves (check-proxy-parity,
+// check-artifact-trust, auth-parity-matrix, check-enforced-disciplines) are
+// composite actions in 4cloudguru/shared-workflows, pinned by full commit SHA;
+// on a runner the composite exports its own github.action_path and this file
+// reads it, so the bytes the suite spawns are the bytes the pin names. A fix to
+// the resolution or to its error text must land in BOTH copies -- an L0 suite
+// that could not find its gate but read like a clean run is the exact failure
+// this estate keeps re-learning, so a drift here is a red required check.
+const FAMILIES = [
+    { dirs: [COMMAND_TESTS, INSTALLER_TESTS], modules: ['shared-gate.ts'] },
+];
 
 // The registry of modules copied from azure-pipelines-terraform. Adding a new
 // copy means adding it here AND giving it the provenance header.
@@ -41,6 +52,25 @@ const UPSTREAM = 'azure-pipelines-terraform';
 const COMMAND_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 const PROVENANCE = [
+    // Tests/shared-gate.ts is deliberately NOT a row here, and not a deferred
+    // one either: this repository is the UPSTREAM for that module, not a copy of
+    // it. It lands here first, both of its copies declare
+    // `copied from azure-pipelines-packer
+    // (Tasks/PackerTask/PackerTaskV1/Tests/shared-gate.ts)` -- a path that exists
+    // in this tree -- and the FAMILIES entry above byte-compares them on every
+    // pull request. A PROVENANCE row records where a copy CAME FROM, so the
+    // cross-repository row belongs in the DOWNSTREAM
+    // repository's list: azure-pipelines-terraform carries the same resolver and
+    // registering it there (upstream: azure-pipelines-packer) is tracked as
+    // sethbacon/azure-pipelines-terraform#1167. Declaring the direction the other
+    // way round would have put a row HERE naming a file that repository did not
+    // have yet, and the replay's cross-repo-copy-parity signature reads this
+    // array against the upstream's LIVE main -- so it would report a site
+    // ("upstream has no file at ...") on every pull request in every replay host
+    // for the whole window. Measured, not predicted: it turned
+    // sethbacon/azure-pipelines-terraform#1112's matched sites from 1 to 2 and
+    // the replay red.
+    //
     // Extracted from base-packer-command-handler.ts (#113), where it had been a
     // seventh copy of a module the sibling extensions gate as a byte-identical
     // family -- and invisible to every basename-keyed check because it was inline.
@@ -66,8 +96,8 @@ const PROVENANCE = [
     // the two repos are deliberately no longer symmetrical.
     // proxy-config.ts (the agent-proxy fetch options builder, #196) is GONE too
     // (#337): every outbound call site now proxies via generateIdToken()/
-    // createAdoHttpClient() in @4cloudguru/pipeline-task-ado, confirmed by
-    // check-proxy-parity.js reporting all 4 sites PROXIED-BY-PACKAGE with zero
+    // createAdoHttpClient() in @4cloudguru/pipeline-task-ado, confirmed by the
+    // check-proxy-parity gate reporting all 4 sites PROXIED-BY-PACKAGE with zero
     // local proxy-config.ts callers left -- it was dead code, not a live gate.
 ];
 
