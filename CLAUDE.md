@@ -123,6 +123,10 @@ azure-pipelines-packer/
 │   │                                         #     left. It does not go uncompared: the
 │   │                                         #     check-enforced-disciplines action cmp's it against
 │   │                                         #     its own copy at the pinned SHA.
+│   ├── lib/proxy-parity.data.json            # This repository's own shared-package floors, read by
+│   │                                         #     the check-proxy-parity gate from the tree it is
+│   │                                         #     analysing. Bump it in the change that bumps the
+│   │                                         #     packages; see below.
 │   ├── test-check-minor-bumps.js            # CI self-tests for the two guards that carry one
 │   ├── test-bump-minor-versions.js          #     in this repository; the four class gates'
 │   │                                         #     self-tests run in shared-workflows' own CI
@@ -176,6 +180,19 @@ command that produced them.
 `scripts/lib/task-dirs.js` stays in this repository even though `check-enforced-disciplines.js`
 left, because `copy-build.js` and three other non-gate scripts import it — and it does not go
 uncompared: the `check-enforced-disciplines` action `cmp`s it against its own copy at the pinned SHA.
+
+`scripts/lib/proxy-parity.data.json` is the other file that stays behind when a gate leaves, and for
+the opposite reason: it is not gate logic at all, it is **this repository's own fact**. It declares
+the version of each shared `@4cloudguru` package that every task here has passed, and the
+`check-proxy-parity` gate reads it from the tree it is analysing rather than from beside itself, so
+one upstream copy of the gate can hold three repositories to three different fleets. The enforced
+floor is the **highest** of three terms — the release a capability first shipped in, the estate-wide
+ratchet in the gate, and this file — so a repository can only ever raise its own bar, never lower it.
+
+**Bump it in the same change that bumps the packages.** When a task's `@4cloudguru/pipeline-task-ado`
+or `@4cloudguru/pipeline-task-core` range moves and this file does not, the gate's `staleFloors()`
+check fails naming both numbers: the point is that a floor every task passed long ago cannot fire, so
+the bar has to move with the fleet rather than being raised by hand years later.
 
 ## PackerInstallerV1
 
