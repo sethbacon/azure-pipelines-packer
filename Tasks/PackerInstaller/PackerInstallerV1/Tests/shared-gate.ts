@@ -1,6 +1,11 @@
-// @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformTask/TerraformTaskV5/Tests/shared-gate.ts)
-// @shared-module-policy: fixes land in BOTH repositories' copies; within this repository
-//   scripts/check-shared-modules.js byte-compares every copy against the canonical one.
+// @shared-module: copied from azure-pipelines-packer (Tasks/PackerTask/PackerTaskV1/Tests/shared-gate.ts)
+// @shared-module-policy: this repository holds the canonical copy -- it lands here first, and
+//   scripts/check-shared-modules.js byte-compares every copy here against it (FAMILIES).
+//   azure-pipelines-terraform carries the same resolver in two of its own Tests/ directories;
+//   registering it THERE as a cross-repository copy of THIS file -- which is what makes a fix
+//   here checkable against that one -- is tracked as sethbacon/azure-pipelines-terraform#1167.
+//   Until that row lands, a fix to the resolution order or to the error text below has to be
+//   applied in both repositories by hand.
 // @shared-module-status: IN-SYNC
 //
 // Finds a gate this repository no longer carries.

@@ -52,19 +52,25 @@ const UPSTREAM = 'azure-pipelines-terraform';
 const COMMAND_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 const PROVENANCE = [
-    // NOT HERE YET, DELIBERATELY: Tests/shared-gate.ts. Its header declares
-    // azure-pipelines-terraform (TerraformTaskV5/Tests/shared-gate.ts) as its
-    // upstream, and that is where it belongs -- but that file does not exist in
-    // that repository yet; its own PR in this series creates it. The replay's
-    // cross-repo-copy-parity signature reads this array and then reads the
-    // upstream repository's LIVE main, so registering the entry one PR early
-    // reports a site -- "upstream has no file at ..." -- on every pull request
-    // in every replay host, for a file that is simply not there yet. Measured,
-    // not predicted: it turned #1112 from 1 matched site to 2 and the replay
-    // red. The entry belongs in the SAME pull request that lands the upstream
-    // copy in azure-pipelines-terraform. Until then the two copies here are
-    // still gated -- byte-identically, by the FAMILIES entry above, which is a
-    // red required check in this repository's own CI.
+    // Tests/shared-gate.ts is deliberately NOT a row here, and not a deferred
+    // one either: this repository is the UPSTREAM for that module, not a copy of
+    // it. It lands here first, both of its copies declare
+    // `copied from azure-pipelines-packer
+    // (Tasks/PackerTask/PackerTaskV1/Tests/shared-gate.ts)` -- a path that exists
+    // in this tree -- and the FAMILIES entry above byte-compares them on every
+    // pull request. A PROVENANCE row records where a copy CAME FROM, so the
+    // cross-repository row belongs in the DOWNSTREAM
+    // repository's list: azure-pipelines-terraform carries the same resolver and
+    // registering it there (upstream: azure-pipelines-packer) is tracked as
+    // sethbacon/azure-pipelines-terraform#1167. Declaring the direction the other
+    // way round would have put a row HERE naming a file that repository did not
+    // have yet, and the replay's cross-repo-copy-parity signature reads this
+    // array against the upstream's LIVE main -- so it would report a site
+    // ("upstream has no file at ...") on every pull request in every replay host
+    // for the whole window. Measured, not predicted: it turned
+    // sethbacon/azure-pipelines-terraform#1112's matched sites from 1 to 2 and
+    // the replay red.
+    //
     // Extracted from base-packer-command-handler.ts (#113), where it had been a
     // seventh copy of a module the sibling extensions gate as a byte-identical
     // family -- and invisible to every basename-keyed check because it was inline.

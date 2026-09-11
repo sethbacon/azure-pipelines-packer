@@ -123,7 +123,9 @@ azure-pipelines-packer/
 │   │                                         #     left. It does not go uncompared: the
 │   │                                         #     check-enforced-disciplines action cmp's it against
 │   │                                         #     its own copy at the pinned SHA.
-│   ├── test-*.js                            # CI self-tests for each of the guards above
+│   ├── test-check-minor-bumps.js            # CI self-tests for the two guards that carry one
+│   ├── test-bump-minor-versions.js          #     in this repository; the four class gates'
+│   │                                         #     self-tests run in shared-workflows' own CI
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
 │                                            # NOT here: check-docs-claims, check-shared-module-pins,
 │                                            # check-enforced-disciplines, check-proxy-parity,
