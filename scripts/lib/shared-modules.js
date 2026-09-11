@@ -17,8 +17,8 @@ const INSTALLER_TESTS = 'Tasks/PackerInstaller/PackerInstallerV1/Tests';
 // One module is duplicated WITHIN this repository, and it is duplicated because
 // each task's Tests/ directory is its own compilation unit: `shared-gate.ts`,
 // the resolver every class-gate L0 suite uses to find a gate this repository no
-// longer carries. The four gates it resolves (check-proxy-parity,
-// check-artifact-trust, auth-parity-matrix, check-enforced-disciplines) are
+// longer carries. The gates it resolves (check-proxy-parity,
+// check-artifact-trust, auth-parity-matrix, check-egress-authorization) are
 // composite actions in 4cloudguru/shared-workflows, pinned by full commit SHA;
 // on a runner the composite exports its own github.action_path and this file
 // reads it, so the bytes the suite spawns are the bytes the pin names. A fix to

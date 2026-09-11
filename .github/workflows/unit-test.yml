@@ -104,10 +104,12 @@ jobs:
       # The action's own self-test runs in shared-workflows' CI beside the
       # script, which is why no `Self-test` step follows this one any more.
       - name: Shared-module pins in lockstep (#1108 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
-      - name: Validate egress authorization (SSRF class signature)
-        run: node scripts/check-egress-authorization.js
-      # The four class gates below are the same move as the pins gate above: the
+        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        with:
+          # 2026-09-11: node .github/actions/check-shared-module-pins/check-shared-module-pins.js . --json
+          #             -> scanned 2
+          min-scanned: 2
+      # The five class gates below are the same move as the pins gate above: the
       # shared composite replaces the hand-copied gate script this repository
       # used to carry under scripts/, and each one's self-test now runs in
       # shared-workflows' CI rather than here. The composites also export their
@@ -115,33 +117,50 @@ jobs:
       # these gates find the exact bytes the pin names -- see the two Build and
       # Test jobs below.
       #
-      # Every floor below is a MEASURED value, not a guess: the gate exits 0
-      # over a repository it enumerated nothing in, so a floor is what tells
+      # check-egress-authorization is the last of them to move (it was
+      # `scripts/check-egress-authorization.js` here until v1.28.0) and the
+      # only one whose three hand-copies disagreed: what ships in the composite
+      # is the UNION that landed in all three extensions first, so this
+      # repository's verdicts are unchanged -- the script deleted here was
+      # byte-identical to the action's (sha256 e1a8d4fe...).
+      #
+      # Every floor in this job is a MEASURED value, not a guess: the gate exits
+      # 0 over a repository it enumerated nothing in, so a floor is what tells
       # "looked and found none" apart from "looked nowhere". A legitimate move
       # in the count is a one-line edit in the same PR that moved it.
+      - name: Validate egress authorization (#161/#188/#191/#200/#201 class signature)
+        uses: 4cloudguru/shared-workflows/.github/actions/check-egress-authorization@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        with:
+          # 2026-09-11: node .github/actions/check-egress-authorization/check-egress-authorization.js . --json
+          #             -> sites 8
+          min-sites: 8
       - name: Validate enforced disciplines (documented-but-unenforced class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-enforced-disciplines@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-enforced-disciplines@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
       - name: Validate outbound proxy parity (#196 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-proxy-parity@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-proxy-parity@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           # 2026-09-10: node .github/actions/check-proxy-parity/check-proxy-parity.js . --json -> sites 6
           min-sites: 6
       - name: Validate artifact trust (#65/#78/#136/#198/#204 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-artifact-trust@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-artifact-trust@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           # 2026-09-10: node .github/actions/check-artifact-trust/check-artifact-trust.js . --json
           #             -> sites 19, scanned 23
           min-scanned: 23
           min-sites: 19
       - name: Validate provider auth parity (#97/#187/#194/#199/#44/#197 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           # 2026-09-10: node .github/actions/auth-parity-matrix/auth-parity-matrix.cjs . --json
           #             -> cells 70, scanned 23
           min-scanned: 23
           min-cells: 70
       - name: Validate documented claims against the code
-        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        with:
+          # 2026-09-11: node .github/actions/check-docs-claims/check-docs-claims.js . --json
+          #             -> claims 59 (the sum of the `enumerated` counters)
+          min-claims: 59
       # The root package.json's devDependencies (tfx-cli, @cyclonedx/cyclonedx-npm,
       # rimraf, typescript) are installed here and by release.yml's build/package/
       # sbom-and-sign/publish-marketplace jobs -- unlike a typical devDependency,
@@ -227,13 +246,13 @@ jobs:
       # NOT inherit it -- without it each gate would analyse the task directory
       # instead of the repository.
       - name: Provide the outbound proxy parity gate to the L0 suite
-        uses: 4cloudguru/shared-workflows/.github/actions/check-proxy-parity@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-proxy-parity@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           root: ${{ github.workspace }}
           # 2026-09-10: node .github/actions/check-proxy-parity/check-proxy-parity.js . --json -> sites 6
           min-sites: 6
       - name: Provide the provider auth parity gate to the L0 suite
-        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           root: ${{ github.workspace }}
           # 2026-09-10: node .github/actions/auth-parity-matrix/auth-parity-matrix.cjs . --json
@@ -321,13 +340,27 @@ jobs:
       # bytes this pin names. `root:` is explicit because a composite action's
       # steps do not inherit this job's `defaults.run.working-directory`.
       - name: Provide the artifact trust gate to the L0 suite
-        uses: 4cloudguru/shared-workflows/.github/actions/check-artifact-trust@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+        uses: 4cloudguru/shared-workflows/.github/actions/check-artifact-trust@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
         with:
           root: ${{ github.workspace }}
           # 2026-09-10: node .github/actions/check-artifact-trust/check-artifact-trust.js . --json
           #             -> sites 19, scanned 23
           min-scanned: 23
           min-sites: 19
+      # Same again for Tests/EgressAuthorizationL0.ts, whose table C SPAWNS the
+      # egress gate and asserts its whole enumerated set. Until v1.28.0 that
+      # suite ran `scripts/check-egress-authorization.js` from the checkout;
+      # now the composite writes SHARED_GATE_CHECK_EGRESS_AUTHORIZATION into
+      # $GITHUB_ENV and Tests/shared-gate.ts reads it, so the bytes the suite
+      # spawns are the bytes this pin names. `root:` is explicit for the same
+      # reason as above.
+      - name: Provide the egress authorization gate to the L0 suite
+        uses: 4cloudguru/shared-workflows/.github/actions/check-egress-authorization@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        with:
+          root: ${{ github.workspace }}
+          # 2026-09-11: node .github/actions/check-egress-authorization/check-egress-authorization.js . --json
+          #             -> sites 8
+          min-sites: 8
       - name: Compile TypeScript
         run: npm run compile
       - name: Run unit tests with coverage
@@ -364,7 +397,7 @@ jobs:
   # not because there was nothing to report. The shared job scans the repository.
   workflow-security:
     name: Workflow Security
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
     with:
       # release.yml calls this workflow at the commit it is about to publish;
       # the linters have to read that commit, not the run's default.
@@ -390,5 +423,5 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@adb01429f88e459fcc045598317b5d6c09f95647 # v1.26.1
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
 
