@@ -52,11 +52,19 @@ const UPSTREAM = 'azure-pipelines-terraform';
 const COMMAND_SRC = 'Tasks/PackerTask/PackerTaskV1/src';
 
 const PROVENANCE = [
-    // The shared-gate resolver, whose canonical home is the sibling extension.
-    // Its in-repo twin is byte-compared by the FAMILIES entry above; this entry
-    // is what makes the CROSS-repository copy declare where it came from, since
-    // azure-pipelines-terraform is not checked out in this repository's CI.
-    { dir: COMMAND_TESTS, file: 'shared-gate.ts', upstream: UPSTREAM },
+    // NOT HERE YET, DELIBERATELY: Tests/shared-gate.ts. Its header declares
+    // azure-pipelines-terraform (TerraformTaskV5/Tests/shared-gate.ts) as its
+    // upstream, and that is where it belongs -- but that file does not exist in
+    // that repository yet; its own PR in this series creates it. The replay's
+    // cross-repo-copy-parity signature reads this array and then reads the
+    // upstream repository's LIVE main, so registering the entry one PR early
+    // reports a site -- "upstream has no file at ..." -- on every pull request
+    // in every replay host, for a file that is simply not there yet. Measured,
+    // not predicted: it turned #1112 from 1 matched site to 2 and the replay
+    // red. The entry belongs in the SAME pull request that lands the upstream
+    // copy in azure-pipelines-terraform. Until then the two copies here are
+    // still gated -- byte-identically, by the FAMILIES entry above, which is a
+    // red required check in this repository's own CI.
     // Extracted from base-packer-command-handler.ts (#113), where it had been a
     // seventh copy of a module the sibling extensions gate as a byte-identical
     // family -- and invisible to every basename-keyed check because it was inline.
