@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.6...v1.6.7) (2026-09-23)
+
+
+### Bug Fixes
+
+* **deps:** pin adm-zip past 0.6.0 and js-yaml past 4.3.1 in both tasks ([#471](https://github.com/sethbacon/azure-pipelines-packer/issues/471)) ([adc8251](https://github.com/sethbacon/azure-pipelines-packer/commit/adc8251dda769127cef037c518d35897aa10851b)), closes [#469](https://github.com/sethbacon/azure-pipelines-packer/issues/469) [#470](https://github.com/sethbacon/azure-pipelines-packer/issues/470)
+
 ## [1.6.6](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.5...v1.6.6) (2026-09-11)
 
 
