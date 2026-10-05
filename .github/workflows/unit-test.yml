@@ -104,7 +104,7 @@ jobs:
       # The action's own self-test runs in shared-workflows' CI beside the
       # script, which is why no `Self-test` step follows this one any more.
       - name: Shared-module pins in lockstep (#1108 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/check-shared-module-pins@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           # 2026-09-11: node .github/actions/check-shared-module-pins/check-shared-module-pins.js . --json
           #             -> scanned 2
@@ -135,7 +135,7 @@ jobs:
           #             -> sites 8
           min-sites: 8
       - name: Validate enforced disciplines (documented-but-unenforced class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/check-enforced-disciplines@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/check-enforced-disciplines@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
       - name: Validate outbound proxy parity (#196 class signature)
         uses: 4cloudguru/shared-workflows/.github/actions/check-proxy-parity@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
@@ -149,14 +149,14 @@ jobs:
           min-scanned: 23
           min-sites: 19
       - name: Validate provider auth parity (#97/#187/#194/#199/#44/#197 class signature)
-        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           # 2026-09-10: node .github/actions/auth-parity-matrix/auth-parity-matrix.cjs . --json
           #             -> cells 70, scanned 23
           min-scanned: 23
           min-cells: 70
       - name: Validate documented claims against the code
-        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/check-docs-claims@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           # 2026-09-11: node .github/actions/check-docs-claims/check-docs-claims.js . --json
           #             -> claims 59 (the sum of the `enumerated` counters)
@@ -252,7 +252,7 @@ jobs:
           # 2026-09-10: node .github/actions/check-proxy-parity/check-proxy-parity.js . --json -> sites 6
           min-sites: 6
       - name: Provide the provider auth parity gate to the L0 suite
-        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/auth-parity-matrix@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           root: ${{ github.workspace }}
           # 2026-09-10: node .github/actions/auth-parity-matrix/auth-parity-matrix.cjs . --json
@@ -397,7 +397,7 @@ jobs:
   # not because there was nothing to report. The shared job scans the repository.
   workflow-security:
     name: Workflow Security
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security.yml@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
     with:
       # release.yml calls this workflow at the commit it is about to publish;
       # the linters have to read that commit, not the run's default.
@@ -423,5 +423,5 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+    uses: 4cloudguru/shared-workflows/.github/workflows/workflow-security-record.yml@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
 
