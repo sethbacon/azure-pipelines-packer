@@ -240,7 +240,7 @@ jobs:
       # as "Breaking-change footers survive the squash", so no branch protection
       # moves.
       - name: Count breaking-change declarations across this PR's commits
-        uses: 4cloudguru/shared-workflows/.github/actions/breaking-change-footers@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/breaking-change-footers@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
           pr-number: ${{ github.event.pull_request.number }}
@@ -268,7 +268,7 @@ jobs:
           persist-credentials: false
 
       - name: Parse the commit this PR would squash into main
-        uses: 4cloudguru/shared-workflows/.github/actions/commit-message-check@c52ee27a03d06eee94e13c7bb56385d4edfb94d4 # v1.28.0
+        uses: 4cloudguru/shared-workflows/.github/actions/commit-message-check@2c1ffdbaab2a55eb273b9a9e7cb4864e4e0a02c8 # v1.29.1
         with:
           gh-token: ${{ secrets.GITHUB_TOKEN }}
           pr-number: ${{ github.event.pull_request.number }}
