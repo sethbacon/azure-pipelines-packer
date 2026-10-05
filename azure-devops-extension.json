@@ -49,6 +49,9 @@
         },
         {
             "path": "Tasks/PackerInstaller"
+        },
+        {
+            "path": "THIRD_PARTY_NOTICES.md"
         }
     ],
     "repository": {
