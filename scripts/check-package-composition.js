@@ -27,6 +27,9 @@
 //                           every files[] entry must EXIST and must actually be
 //                           copied into build/                     (#42, #46)
 //   5. files/contributions— bidirectional against the Tasks/ tree    (#47, #29)
+//   6. root assets        — every root asset copied into build/ is named by
+//                           the manifest, so it is packaged and not merely
+//                           composed
 //
 // Version agreement between azure-devops-extension.json and
 // .release-please-manifest.json lives in check-versions.js, next to the other
@@ -306,6 +309,23 @@ if (manifest) {
           `be declared by a contribution and absent from the .vsix`,
       )
     }
+  }
+
+  // Root assets have the hole the loop above closes for task directories. tfx
+  // packages what content.*, icons.* and files[] name and nothing else, so a
+  // root asset that copy-build.js composes and the manifest never names is in
+  // build/ and not in the .vsix. THIRD_PARTY_NOTICES.md was exactly that:
+  // required by this gate, copied by the packager, absent from every release.
+  const named = new Set(filePaths)
+  for (const value of [content.details && content.details.path, content.license && content.license.path, ...Object.values(icons)]) {
+    if (typeof value === 'string') named.add(toPosix(path.normalize(value)))
+  }
+  for (const asset of contents.ROOT_ASSETS) {
+    if (asset.name === manifestName || !exists(asset.name) || named.has(asset.name)) continue
+    fail(
+      `${asset.name}: copied into build/ but nothing in ${manifestName} packages it — tfx packages what content, icons ` +
+        `and files[] name, so it would be composed and then left out of the .vsix. Add { "path": "${asset.name}" } to files[]`,
+    )
   }
 }
 
