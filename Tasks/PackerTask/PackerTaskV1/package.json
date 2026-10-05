@@ -21,8 +21,8 @@
     "@4cloudguru/pipeline-task-ado": "^0.11.1",
     "@4cloudguru/pipeline-task-core": "^0.9.3",
     "azure-pipelines-task-lib": "^5.280.3",
-    "azure-pipelines-tasks-securefiles-common": "^2.280.0",
-    "undici": "^8.10.2"
+    "azure-pipelines-tasks-securefiles-common": "^2.281.0",
+    "undici": "^8.11.2"
   },
   "overrides": {
     "serialize-javascript": "^7.0.0",
@@ -46,6 +46,6 @@
     "nyc": "^18.0.0",
     "ts-node": "^10.9.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.70.0"
+    "typescript-eslint": "^8.70.1"
   }
 }
