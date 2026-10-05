@@ -1,9 +1,8 @@
 // @shared-module: copied from azure-pipelines-terraform (Tasks/TerraformInstaller/TerraformInstallerV1/src/hashicorp-gpg-key.ts)
 // @shared-module-policy: This embedded HashiCorp release-signing key must match upstream.
 //   Apply key rotations to both copies. Enforced by scripts/check-shared-modules.js.
-// @shared-module-status: DIVERGED — temporarily AHEAD of upstream. This copy carries both
-//   generations of the key's self-signature (see below); upstream still embeds the 2026
-//   publication alone. Restore IN-SYNC as soon as azure-pipelines-terraform embeds this block.
+// @shared-module-status: IN-SYNC — key material is byte-identical with upstream (only the
+//   terraform-internal parity header, which references that repo's own task families, differs).
 /**
  * HashiCorp's GPG public key for verifying SHA256SUMS.sig signatures.
  * Key ID: 72D7468F (full: 34365D9472D7468F)
