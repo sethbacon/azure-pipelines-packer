@@ -1,0 +1,5 @@
+# Real HashiCorp release checksum files and their detached OpenPGP signatures,
+# replayed by Tests/GpgTrustRootL0.ts. A signature covers the exact bytes of
+# SHA256SUMS (LF line endings) and a .sig is binary, so Git's CRLF conversion on a
+# Windows checkout would break verification of a correctly committed file.
+Tasks/PackerInstaller/PackerInstallerV1/Tests/fixtures/** -text

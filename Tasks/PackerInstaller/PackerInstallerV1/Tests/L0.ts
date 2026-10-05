@@ -20,6 +20,9 @@ import './EgressAuthorizationL0';
 // tables stay readable; imported for its side effect of registering the suite.
 import './ArtifactTrustL0';
 import './GpgKeyExpiryL0';
+// The real embedded key against real releases from before and after HashiCorp
+// re-certified it: both generations of its self-signature must stay embedded.
+import './GpgTrustRootL0';
 // This extension's half of azure-pipelines-terraform#879: downloadToFile was the
 // one network op in this module its siblings' withRetry did not cover.
 import './NetworkRetryClassL0';
