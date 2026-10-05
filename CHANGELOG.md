@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.8](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.7...v1.6.8) (2026-10-05)
+
+
+### Bug Fixes
+
+* **deps:** drop unpatched braces via a shelljs 0.8.5 override ([#489](https://github.com/sethbacon/azure-pipelines-packer/issues/489)) ([4c2e888](https://github.com/sethbacon/azure-pipelines-packer/commit/4c2e88877d6a1c576abcabb76625622aba035bcc))
+* **installer:** verify releases signed before the key was re-certified ([#496](https://github.com/sethbacon/azure-pipelines-packer/issues/496)) ([f74bf18](https://github.com/sethbacon/azure-pipelines-packer/commit/f74bf18179cfa7d477cc6ab6e96470dd3c984de8))
+* **package:** ship THIRD_PARTY_NOTICES.md in the .vsix ([#499](https://github.com/sethbacon/azure-pipelines-packer/issues/499)) ([ad80776](https://github.com/sethbacon/azure-pipelines-packer/commit/ad807767b7aab19f4cf4ce7777b7fdd3827794ed))
+
 ## [1.6.7](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.6...v1.6.7) (2026-09-23)
 
 
