@@ -20,7 +20,7 @@
   "dependencies": {
     "@4cloudguru/pipeline-task-ado": "^0.11.1",
     "@4cloudguru/pipeline-task-core": "^0.9.3",
-    "azure-pipelines-task-lib": "^5.281.0",
+    "azure-pipelines-task-lib": "^5.281.1",
     "azure-pipelines-tool-lib": "^2.281.0",
     "openpgp": "^6.3.2",
     "undici": "^8.11.2"
