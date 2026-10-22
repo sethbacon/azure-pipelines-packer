@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.9](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.8...v1.6.9) (2026-10-22)
+
+
+### Bug Fixes
+
+* **deps:** move follow-redirects to 1.16.1 and drop sprintf-js from both tasks ([#510](https://github.com/sethbacon/azure-pipelines-packer/issues/510)) ([798b201](https://github.com/sethbacon/azure-pipelines-packer/commit/798b2017dc5604ce59ddf872756c4804da1a3ea0))
+
 ## [1.6.8](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.7...v1.6.8) (2026-10-05)
 
 
