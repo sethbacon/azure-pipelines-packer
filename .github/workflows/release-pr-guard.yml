@@ -116,7 +116,7 @@ jobs:
       #   has no recorded endpoint baseline yet for this workflow and a block policy
       #   written without one fails closed on its first run
       - name: Harden the runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -152,7 +152,7 @@ jobs:
       #   api.github.com only, no long-lived credential, and no endpoint baseline
       #   exists yet for this workflow to write a block policy from
       - name: Harden the runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -183,7 +183,7 @@ jobs:
       #   api.github.com only, no long-lived credential, and no endpoint baseline
       #   exists yet for this workflow to write a block policy from
       - name: Harden the runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
