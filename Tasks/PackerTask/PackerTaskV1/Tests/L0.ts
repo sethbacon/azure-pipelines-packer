@@ -22,6 +22,10 @@ import './CredentialInputTypeClassL0';
 // This extension's half of azure-pipelines-terraform#884/#897: command dispatch
 // keyed by a task input through a plain object literal.
 import './PrototypeSafeLookupClassL0';
+// The real undici ProxyAgent against the real global fetch through a loopback
+// CONNECT proxy: every mock-runner scenario stubs undici, so this is the only row
+// that would notice a dispatcher Node's fetch cannot use (undici 8 under Node 24).
+import './ProxyDispatcherL0';
 
 describe('PackerTask Test Suite', function () {
 

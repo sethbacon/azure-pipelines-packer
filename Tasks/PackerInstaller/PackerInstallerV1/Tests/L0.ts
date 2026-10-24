@@ -29,6 +29,10 @@ import './NetworkRetryClassL0';
 // End-to-end coverage for index.ts's SIGTERM/SIGINT/uncaughtException/
 // unhandledRejection registration (azure-pipelines-terraform#1113, suite-scope residual).
 import './SignalHandlerL0';
+// The real undici ProxyAgent against the real global fetch through a loopback
+// CONNECT proxy: every mock-runner scenario stubs undici, so this is the only row
+// that would notice a dispatcher Node's fetch cannot use (undici 8 under Node 24).
+import './ProxyDispatcherL0';
 
 describe('PackerInstaller Test Suite', function () {
 

@@ -126,9 +126,12 @@ azure-pipelines-packer/
 │   │                                         #     the check-proxy-parity gate from the tree it is
 │   │                                         #     analysing. Bump it in the change that bumps the
 │   │                                         #     packages; see below.
-│   ├── test-check-minor-bumps.js            # CI self-tests for the two guards that carry one
+│   ├── smoke-compiled-task.js               # CI: the Node20_1 smoke step -- runs a task's compiled
+│   │                                         #     entry point and fails a run that ended outside
+│   │                                         #     the task's own error handling, even at exit 0
+│   ├── test-check-minor-bumps.js            # CI self-tests for the three guards that carry one
 │   ├── test-bump-minor-versions.js          #     in this repository; the five class gates'
-│   │                                         #     self-tests run in shared-workflows' own CI
+│   ├── test-smoke-compiled-task.js          #     self-tests run in shared-workflows' own CI
 │   └── copy-build.js                        # Build: copies compiled tasks + assets into build/
 │                                            # NOT here: check-docs-claims, check-shared-module-pins,
 │                                            # check-enforced-disciplines, check-proxy-parity,
@@ -306,14 +309,19 @@ copy, rather than reading a local `fetchOptions` spread that no longer exists he
 Both `task.json` files declare a `Node20_1` execution handler alongside `Node24`, so older
 on-prem/air-gapped agents without the Node 24 runner can still invoke these tasks. Each task's CI leg
 has a "Set up Node 20 for Node20_1 handler smoke test" step that runs the already-compiled
-`src/index.js` under Node 20 with no ADO inputs supplied (#208). That proves the compiled module graph
-parses and loads under Node 20 — a Node-20-incompatible dependency or syntax construct fails it — but
-the task's own try/catch converts the resulting "input required" error into a caught failure before
-any real command, credential or verification logic runs. For **PackerTaskV1** Node 24 is the sole
-behavioural gate; Node 20 is deliberately load-only, the same scope decision the sibling
-`azure-pipelines-terraform` repo made: running the full suite twice per task would roughly double CI
-time, and Node 20 is already EOL — the fallback exists for agents that have not upgraded their
-runner, not as a second fully-verified execution path.
+`src/index.js` under Node 20 with no ADO inputs supplied (#208), through
+`scripts/smoke-compiled-task.js`. That proves the compiled module graph parses and loads under Node 20
+— a Node-20-incompatible dependency or syntax construct fails it — but the task's own try/catch
+converts the resulting "input required" error into a caught failure before any real command,
+credential or verification logic runs. The exit code alone cannot carry that proof:
+`azure-pipelines-task-lib`'s process-wide `uncaughtException` listener records a load failure as
+`Unhandled: <message>` and lets the process exit 0, which is how undici 8 passed a bare
+`node src/index.js` in both tasks while neither could load on Node 20. The script also fails when a
+recorded result came from an uncaught path; `scripts/test-smoke-compiled-task.js` proves it does.
+For **PackerTaskV1** Node 24 is the sole behavioural gate; Node 20 is deliberately load-only, the
+same scope decision the sibling `azure-pipelines-terraform` repo made: running the full suite twice
+per task would roughly double CI time, and Node 20 is already EOL — the fallback exists for agents
+that have not upgraded their runner, not as a second fully-verified execution path.
 
 **PackerInstallerV1 is the exception**, mirroring the same split the sibling
 `azure-pipelines-terraform` repo made for its own verifying installers: its entire security value is
@@ -345,7 +353,7 @@ the `check-enforced-disciplines` gate fails CI if either property regresses.
 | `@4cloudguru/pipeline-task-ado`            | Shared ADO task primitives — env var tracking, secure temp files, OIDC token generation    |
 | `@4cloudguru/pipeline-task-core`           | Shared crypto/HTTP/egress primitives — HTTP client, PEM normalization, verification typing |
 | `openpgp`                                  | GPG signature verification (installer)                                                     |
-| `undici`                                   | Proxy-aware fetch (installer)                                                              |
+| `undici`                                   | The `ProxyAgent` that `@4cloudguru/pipeline-task-ado` hands Node's built-in `fetch` as its dispatcher, in both tasks. Stays on **6.x**: 8.x does not load on Node 20, and Node 24's `fetch` rejects its `ProxyAgent` (`invalid onRequestStart method`). `Tests/ProxyDispatcherL0.ts` runs the real pair through a loopback proxy |
 | `mocha` + `ts-node`                        | Test framework                                                                             |
 
 ## Initiatives

@@ -63,6 +63,8 @@ jobs:
         run: node scripts/test-check-minor-bumps.js
       - name: Self-test bump-minor-versions.js
         run: node scripts/test-bump-minor-versions.js
+      - name: Self-test smoke-compiled-task.js
+        run: node scripts/test-smoke-compiled-task.js
       # NO `Self-test check-proxy-parity.js` STEP HERE ANY MORE, and the absence
       # is deliberate rather than an omission. That gate has been wrong twice --
       # once reporting no call sites for a task that makes them, once
@@ -277,19 +279,27 @@ jobs:
       # same one adopted here, not a silent downgrade of it: with no ADO input
       # environment variables present, index.ts's own try/catch converts the
       # resulting "input required" error into a caught
-      # tasks.setResult(Failed, ...) and the process exits 0. So the exit code
-      # alone is the signal: zero means Node 20 parsed and loaded the whole
-      # compiled module graph, non-zero means a real incompatibility surfaced
-      # before that catch could run. The full mocha/L0 assertion suite stays
-      # Node-24-only; running it twice per task would roughly double CI time,
-      # and Node 20 is already EOL -- the handler exists for agents that have
-      # not upgraded their runner, not as a second fully-verified path.
+      # tasks.setResult(Failed, ...) and the process exits 0.
+      #
+      # The exit code ALONE is not the signal, though, and this step used to
+      # assume it was. azure-pipelines-task-lib registers a process-wide
+      # uncaughtException listener when index.ts imports it, records the error
+      # as `Unhandled: <message>` and lets the process exit 0 -- so a
+      # dependency that cannot load on Node 20 passed here. undici 8 did, in
+      # both tasks, from #231 until it moved back to 6.x.
+      # scripts/smoke-compiled-task.js runs the same entry point and also fails
+      # when any recorded result came from an uncaught path rather than the
+      # task's own catch; scripts/test-smoke-compiled-task.js proves it does.
+      # The full mocha/L0 assertion suite stays Node-24-only for this task;
+      # running it twice per task would roughly double CI time, and Node 20 is
+      # already EOL -- the handler exists for agents that have not upgraded
+      # their runner, not as a second fully-verified path.
       - name: Set up Node 20 for Node20_1 handler smoke test
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "20"
       - name: Verify compiled output runs under Node 20 (Node20_1 handler)
-        run: node src/index.js
+        run: node ../../../scripts/smoke-compiled-task.js
 
   build-and-test-installer-v1:
     name: Build and Test Packer Installer V1 (${{ matrix.os }})
@@ -372,7 +382,7 @@ jobs:
         with:
           node-version: "20"
       - name: Verify compiled output runs under Node 20 (Node20_1 handler)
-        run: node src/index.js
+        run: node ../../../scripts/smoke-compiled-task.js
       # This task's entire security value is verifying a downloaded binary
       # (GPG signature over SHA256SUMS via gpg-verifier.ts) -- the load-only
       # smoke check above only proves the compiled module graph parses under
@@ -384,6 +394,14 @@ jobs:
       # behavioral-parity gap for a task whose whole job is supply-chain
       # trust (#654). build-and-test-task-v1 above stays load-only -- it has
       # no verification module.
+      #
+      # #444 had to remove this step: the task then pinned undici 8, which does
+      # not load on Node 20, and check-enforced-disciplines waived the
+      # requirement for as long as a production dependency's engines excluded
+      # the handler. With undici on 6.x the waiver no longer applies, so the
+      # step is back.
+      - name: Run real unit tests under Node 20 (#720)
+        run: npm test
 
   # Both linters come from the shared definition rather than being maintained
   # here, which upgrades two things at once. The local actionlint install piped
