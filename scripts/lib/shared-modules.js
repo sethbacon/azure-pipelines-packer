@@ -25,8 +25,12 @@ const INSTALLER_TESTS = 'Tasks/PackerInstaller/PackerInstallerV1/Tests';
 // the resolution or to its error text must land in BOTH copies -- an L0 suite
 // that could not find its gate but read like a clean run is the exact failure
 // this estate keeps re-learning, so a drift here is a red required check.
+//
+// `ProxyDispatcherL0.ts` is duplicated for the same compilation-unit reason:
+// both tasks ship the undici that @4cloudguru/pipeline-task-ado hands Node's
+// fetch as a proxy dispatcher, so each suite has to prove its own copy works.
 const FAMILIES = [
-    { dirs: [COMMAND_TESTS, INSTALLER_TESTS], modules: ['shared-gate.ts'] },
+    { dirs: [COMMAND_TESTS, INSTALLER_TESTS], modules: ['shared-gate.ts', 'ProxyDispatcherL0.ts'] },
 ];
 
 // The registry of modules copied from azure-pipelines-terraform. Adding a new
