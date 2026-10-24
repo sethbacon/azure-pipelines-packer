@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.10](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.9...v1.6.10) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** move undici back to 6.x so both tasks work behind a proxy and on Node 20 ([#517](https://github.com/sethbacon/azure-pipelines-packer/issues/517)) ([58231d4](https://github.com/sethbacon/azure-pipelines-packer/commit/58231d4098bfd713cc303986e628f5a18feb7549))
+* **deps:** move undici to 8.12.2 in both tasks ([#515](https://github.com/sethbacon/azure-pipelines-packer/issues/515)) ([47b5b63](https://github.com/sethbacon/azure-pipelines-packer/commit/47b5b633280bdaa07fcb5a521d6bbcb1340714a4))
+
 ## [1.6.9](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.8...v1.6.9) (2026-10-22)
 
 
