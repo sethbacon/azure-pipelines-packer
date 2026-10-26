@@ -20,7 +20,7 @@
   "dependencies": {
     "@4cloudguru/pipeline-task-ado": "^0.11.1",
     "@4cloudguru/pipeline-task-core": "^0.9.3",
-    "azure-pipelines-task-lib": "^5.281.1",
+    "azure-pipelines-task-lib": "^5.281.2",
     "azure-pipelines-tasks-securefiles-common": "^2.281.0",
     "undici": "^6.29.1"
   },
@@ -42,7 +42,7 @@
     "@types/mocha": "^10.0.0",
     "@types/node": "^24",
     "@types/uuid": "^11.0.0",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "mocha": "^11.8.0",
     "nyc": "^18.0.0",
     "ts-node": "^10.9.1",
