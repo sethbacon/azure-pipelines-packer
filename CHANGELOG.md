@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.11](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.10...v1.6.11) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** patch follow-redirects and qs, and move glob and minimatch past their advisories ([#529](https://github.com/sethbacon/azure-pipelines-packer/issues/529)) ([a70baa0](https://github.com/sethbacon/azure-pipelines-packer/commit/a70baa0bdecf63fbb24f468a809209486c685ce3))
+
 ## [1.6.10](https://github.com/sethbacon/azure-pipelines-packer/compare/v1.6.9...v1.6.10) (2026-10-24)
 
 
