@@ -27,7 +27,7 @@ jobs:
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       # Preventive, release-time mirror of weekly-security.yml's
@@ -156,7 +156,7 @@ jobs:
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -193,7 +193,7 @@ jobs:
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -253,7 +253,7 @@ jobs:
       #     the sampled runs) — a fixed list of past shard names would fail closed on the very
       #     next release that lands on an unseen one.
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -295,7 +295,7 @@ jobs:
         with:
           name: vsix
       - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: Sign VSIX with cosign keyless
         run: |
           VSIX_FILE=$(find . -maxdepth 1 -name "*.vsix" -print -quit)
@@ -340,7 +340,7 @@ jobs:
       #   repository, so no endpoint baseline exists and a block policy written
       #   without one fails closed on its first run; audit is what produces that list
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -363,12 +363,12 @@ jobs:
       # azure-pipelines-terraform's and azure-pipelines-release-docs's publish
       # jobs, which both already ran this (2026-09-04). Shared with both.
       - name: Verify VSIX signature before release
-        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@a1fdc796956444af6c184c0784e1b033637888e9 # v1.29.3
+        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@51b396a2f7035e9358ebbd942425cc31bb9b81c9 # v1.30.0
         with:
           certificate-identity-regexp: '^https://github\.com/sethbacon/azure-pipelines-packer/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
       - name: Create draft GitHub Release
         id: create_release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             *.vsix
@@ -420,7 +420,7 @@ jobs:
       #     ("-01", "-02") across runs. Both wildcarded for the same per-run/per-shard
       #     reason as the blob-storage entry above.
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -472,7 +472,7 @@ jobs:
       # azure-pipelines-release-docs's publish jobs (2026-09-04). Shared with
       # both, including in their own equivalent of this step.
       - name: Verify VSIX signature before publish
-        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@a1fdc796956444af6c184c0784e1b033637888e9 # v1.29.3
+        uses: 4cloudguru/shared-workflows/.github/actions/verify-vsix-signature@51b396a2f7035e9358ebbd942425cc31bb9b81c9 # v1.30.0
         with:
           certificate-identity-regexp: '^https://github\.com/sethbacon/azure-pipelines-packer/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
       # Authenticate to Microsoft Entra via GitHub OIDC (federated credential) —
@@ -514,7 +514,7 @@ jobs:
         # azure-pipelines-terraform and azure-pipelines-release-docs so a fix
         # lands in all three the next time each bumps this pin, rather than
         # needing three separate PRs the way v1.15.2's fix did.
-        uses: 4cloudguru/shared-workflows/.github/actions/publish-marketplace@a1fdc796956444af6c184c0784e1b033637888e9 # v1.29.3
+        uses: 4cloudguru/shared-workflows/.github/actions/publish-marketplace@51b396a2f7035e9358ebbd942425cc31bb9b81c9 # v1.30.0
         with:
           vsix-path: ${{ steps.mint-token.outputs.vsix-file }}
           marketplace-token: ${{ steps.mint-token.outputs.token }}
@@ -532,7 +532,7 @@ jobs:
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
       - name: Harden the runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
         with:
           egress-policy: audit
       - name: Undraft the release
